@@ -11,7 +11,7 @@ Building the core framework components in `com.theyawns.framework.*`
 - Define interfaces before implementations
 - Test coverage >80% required
 - No service-specific logic in framework code
-- Use only Hazelcast 5.6.0 Community Edition features
+- Default to Hazelcast Community Edition features; Enterprise features are optional enhancements
 
 ## Checklist for Every Component
 Before marking work complete, verify:
@@ -51,6 +51,17 @@ public interface ComponentInterface<T> {
 }
 ```
 
-## Hazelcast Constraints
-- ✅ USE: FlakeIdGenerator, IMap, ITopic, Jet Pipeline
-- ❌ NEVER: CP Subsystem, IAtomicLong with CP, Enterprise features
+## Hazelcast Edition Strategy
+**Default (Community Edition)** - Must always work:
+- ✅ FlakeIdGenerator, IMap, ITopic, Jet Pipeline, Event Journal
+
+**Optional (Enterprise Edition)** - Enhanced capabilities:
+- ✅ CP Subsystem (stronger consistency)
+- ✅ Hot Restart, Rolling Upgrades (resilience)
+- ✅ TLS, Auth (security)
+- ✅ Vector Store (AI/ML: similarity search, recommendations)
+
+**Rules**:
+- Enterprise features must be optional (feature flags)
+- Always provide Community Edition fallback
+- Document Enterprise-only features clearly

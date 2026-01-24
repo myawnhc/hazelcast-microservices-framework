@@ -13,20 +13,60 @@ This is a **Hazelcast-based event sourcing microservices framework** with a clea
 
 ---
 
-## Technology Stack (STRICT)
+## Technology Stack
 
 ### Required Versions
 - **Java**: 17 or higher
 - **Spring Boot**: 3.2.x (latest stable)
-- **Hazelcast**: 5.6.0 Community Edition ONLY
+- **Hazelcast**: 5.6.0 (Community Edition default, Enterprise Edition optional)
 - **Maven**: 3.8+
 
-### Critical: Hazelcast Community Edition Only
-- ✅ USE: FlakeIdGenerator (for sequence generation)
-- ✅ USE: IMap, ITopic, Jet Pipeline
-- ❌ NEVER USE: CP Subsystem features (Enterprise only)
-- ❌ NEVER USE: IAtomicLong with CP (use FlakeIdGenerator instead)
-- ❌ NEVER USE: Any Enterprise-only features
+### Hazelcast Edition Strategy
+
+**Core Principle**: Community Edition is the default. Enterprise features are optional enhancements.
+
+#### Default Configuration (Community Edition)
+The framework MUST work fully with Community Edition only. This is:
+- The default configuration
+- Required for demos and tutorials
+- The expected setup for most users
+
+**Community Edition Features** (always available):
+- ✅ FlakeIdGenerator (for sequence generation)
+- ✅ IMap, ITopic, Jet Pipeline
+- ✅ Event Journal
+- ✅ Entry Processors
+- ✅ Near Cache
+
+#### Optional Enhancements (Enterprise Edition)
+Enterprise features MAY be used for optional capabilities that enhance:
+- **High Availability**: CP Subsystem for stronger consistency guarantees
+- **Resilience**: Hot Restart, Rolling Upgrades
+- **Security**: TLS, Authentication, Authorization
+- **Performance**: HD Memory
+- **AI/ML**: Vector Store (similarity search, recommendations)
+
+**Implementation Rules for Enterprise Features**:
+1. **Always Optional**: Code must detect and gracefully handle absence of Enterprise
+2. **Feature Flags**: Use configuration to enable/disable Enterprise features
+3. **Fallback Required**: Every Enterprise feature must have a Community fallback
+4. **Clear Documentation**: Mark Enterprise-only features in JavaDoc
+
+**Example Pattern**:
+```java
+@Value("${hazelcast.enterprise.cp-subsystem.enabled:false}")
+private boolean cpSubsystemEnabled;
+
+public long getNextSequence() {
+    if (cpSubsystemEnabled) {
+        // Enterprise: Use CP AtomicLong for strong consistency
+        return cpSubsystem.getAtomicLong("sequence").incrementAndGet();
+    } else {
+        // Community: Use FlakeIdGenerator (default)
+        return flakeIdGenerator.newId();
+    }
+}
+```
 
 ### Dependencies
 ```xml
@@ -553,7 +593,8 @@ Before committing, verify:
 - [ ] Proper exception handling
 
 ### Hazelcast Specific
-- [ ] Only Community Edition features used
+- [ ] Works with Community Edition (default config)
+- [ ] Enterprise features are optional with graceful fallback
 - [ ] Partition keys used correctly
 - [ ] Event journal enabled for pending maps
 - [ ] No blocking in pipeline stages
@@ -677,4 +718,4 @@ If uncertain about:
 ---
 
 Last updated: 2026-01-24
-Version: 1.0
+Version: 1.1

@@ -73,4 +73,4 @@ All agents should ensure:
 - [ ] Code compiles without warnings
 - [ ] Tests pass (>80% coverage)
 - [ ] JavaDoc complete
-- [ ] Only Hazelcast Community Edition features used
+- [ ] Works with Community Edition (default); Enterprise features optional with fallback

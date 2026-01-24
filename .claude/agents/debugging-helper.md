@@ -118,13 +118,16 @@ Diagnosing and resolving problems in the framework and services.
 **Symptoms**: `HazelcastSerializationException`, `HazelcastInstanceNotActiveException`
 
 **Check**:
-1. Using Community Edition features only?
+1. Check Enterprise feature availability?
    ```java
-   // ❌ This requires Enterprise
-   // hazelcast.getCPSubsystem().getAtomicLong("counter");
-
-   // ✅ Use this instead
-   hazelcast.getFlakeIdGenerator("sequence");
+   // If using Enterprise features, verify they're enabled
+   if (cpSubsystemEnabled) {
+       // Enterprise: CP Subsystem available
+       hazelcast.getCPSubsystem().getAtomicLong("counter");
+   } else {
+       // Community fallback (default)
+       hazelcast.getFlakeIdGenerator("sequence");
+   }
    ```
 
 2. Cluster members can discover each other?
