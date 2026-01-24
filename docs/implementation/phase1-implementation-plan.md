@@ -26,17 +26,17 @@
 </parent>
 ```
 
-### Hazelcast 5.4.x Community Edition (Latest Stable)
+### Hazelcast 5.6.x Community Edition (Latest Stable)
 ```xml
 <dependency>
     <groupId>com.hazelcast</groupId>
     <artifactId>hazelcast</artifactId>
-    <version>5.4.0</version>
+    <version>5.6.0</version>
 </dependency>
 <dependency>
     <groupId>com.hazelcast</groupId>
     <artifactId>hazelcast-spring</artifactId>
-    <version>5.4.0</version>
+    <version>5.6.0</version>
 </dependency>
 ```
 
@@ -45,7 +45,7 @@
 - ✅ Use FlakeIdGenerator (distributed, no coordination needed)
 - ❌ Don't use IAtomicLong (requires CP Subsystem - Enterprise only)
 
-Verification: https://docs.hazelcast.com/hazelcast/5.4/data-structures/flake-id-generator
+Verification: https://docs.hazelcast.com/hazelcast/5.6/data-structures/flake-id-generator
 
 ### Other Dependencies
 ```xml
@@ -866,7 +866,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class AccountServiceIntegrationTest {
     
     @Container
-    static GenericContainer<?> hazelcast = new GenericContainer<>("hazelcast/hazelcast:5.4.0")
+    static GenericContainer<?> hazelcast = new GenericContainer<>("hazelcast/hazelcast:5.6.0")
         .withExposedPorts(5701);
     
     @Autowired
