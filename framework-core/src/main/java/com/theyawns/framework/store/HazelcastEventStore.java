@@ -42,13 +42,14 @@ import java.util.stream.Collectors;
  * @since 1.0
  */
 public class HazelcastEventStore<D extends DomainObject<K>, K, E extends DomainEvent<D, K>>
-        implements EventStore<D, K, E> {
+        implements EventStore<D, K, E>, java.io.Serializable {
 
+    private static final long serialVersionUID = 1L;
     private static final Logger logger = LoggerFactory.getLogger(HazelcastEventStore.class);
 
-    private final HazelcastInstance hazelcast;
+    private final transient HazelcastInstance hazelcast;
     private final String storeName;
-    private final IMap<PartitionedSequenceKey<K>, GenericRecord> eventMap;
+    private transient IMap<PartitionedSequenceKey<K>, GenericRecord> eventMap;
 
     /**
      * Creates a new HazelcastEventStore.

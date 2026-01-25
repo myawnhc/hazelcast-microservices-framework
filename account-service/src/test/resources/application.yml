@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: account-service-test
+
+server:
+  port: 0
+
+# Hazelcast configuration for tests
+hazelcast:
+  cluster:
+    name: test-cluster
+  event-journal:
+    capacity: 1000
+
+# Disable actuator metrics for tests
+management:
+  metrics:
+    export:
+      prometheus:
+        enabled: false
+
+# Logging configuration for tests
+logging:
+  level:
+    root: WARN
+    com.theyawns: DEBUG

@@ -59,24 +59,25 @@ import java.util.function.Consumer;
  * @since 1.0
  */
 public class HazelcastEventBus<D extends DomainObject<K>, K>
-        implements EventPublisher<D, K>, EventSubscriber<D, K> {
+        implements EventPublisher<D, K>, EventSubscriber<D, K>, java.io.Serializable {
 
+    private static final long serialVersionUID = 1L;
     private static final Logger logger = LoggerFactory.getLogger(HazelcastEventBus.class);
     private static final String TOPIC_SUFFIX = "_EVENTS";
 
-    private final HazelcastInstance hazelcast;
+    private final transient HazelcastInstance hazelcast;
     private final String topicName;
-    private final ITopic<DomainEvent<D, K>> topic;
+    private transient ITopic<DomainEvent<D, K>> topic;
 
     /**
      * Maps subscription IDs to their registration IDs for unsubscription.
      */
-    private final Map<String, UUID> subscriptionMap;
+    private final transient Map<String, UUID> subscriptionMap;
 
     /**
      * Maps subscription IDs to type filters for filtered subscriptions.
      */
-    private final Map<String, String> typeFilters;
+    private final transient Map<String, String> typeFilters;
 
     /**
      * Creates a HazelcastEventBus for the given domain.
