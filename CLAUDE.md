@@ -706,6 +706,101 @@ This provides day-by-day breakdown, code templates, and detailed requirements.
 
 ---
 
+## Available Agents
+
+Claude Code can spawn specialized subagents for different tasks. Use these to improve efficiency and maintain focus.
+
+### Explore Agent
+**Purpose**: Fast codebase exploration and search
+
+**Use when**:
+- Finding files by pattern (e.g., "find all *Controller.java files")
+- Searching code for keywords or patterns
+- Understanding codebase structure
+- Answering questions like "how does X work?" or "where is Y implemented?"
+
+**Thoroughness levels**: `quick`, `medium`, `very thorough`
+
+**Example tasks**:
+- "Find all event handler implementations"
+- "How are materialized views updated?"
+- "What files handle customer creation?"
+
+### Plan Agent
+**Purpose**: Software architecture and implementation planning
+
+**Use when**:
+- Designing implementation strategy for new features
+- Planning multi-file changes
+- Evaluating architectural trade-offs
+- Creating step-by-step implementation plans
+
+**Example tasks**:
+- "Plan how to add saga support to the framework"
+- "Design the inventory service module structure"
+- "Plan the migration from sync to async APIs"
+
+### Bash Agent
+**Purpose**: Command execution specialist
+
+**Use when**:
+- Running git operations (commit, branch, merge)
+- Executing build commands (mvn, gradle)
+- Running Docker commands
+- Any terminal/shell operations
+
+**Example tasks**:
+- "Run all tests and report results"
+- "Create a new git branch for feature X"
+- "Build and package the application"
+
+### General-Purpose Agent
+**Purpose**: Complex, multi-step research tasks
+
+**Use when**:
+- Tasks requiring multiple tool calls in sequence
+- Open-ended exploration that may need iteration
+- Research that spans multiple files or concerns
+- When unsure which specific agent to use
+
+**Example tasks**:
+- "Investigate why tests are failing in module X"
+- "Research how other services handle error recovery"
+- "Find all usages of deprecated API and suggest replacements"
+
+### Claude-Code-Guide Agent
+**Purpose**: Help with Claude Code itself
+
+**Use when**:
+- Questions about Claude Code features
+- Setting up hooks or MCP servers
+- IDE integration questions
+- Understanding Claude Code capabilities
+
+**Example tasks**:
+- "How do I configure a pre-commit hook?"
+- "What keyboard shortcuts are available?"
+- "How do I set up an MCP server?"
+
+---
+
+### Agent Usage Guidelines
+
+1. **Prefer specific agents** over general-purpose when the task clearly fits
+2. **Use Explore** for any "find" or "search" or "where is" questions
+3. **Use Plan** before implementing complex features
+4. **Combine agents** - e.g., Explore to understand, then Plan to design
+5. **Background agents** can run while you continue other work
+
+### When NOT to Use Agents
+
+- **Simple file reads**: Use Read tool directly
+- **Known file paths**: Read the file directly instead of searching
+- **Single grep/find**: Use Grep/Glob tools directly
+- **Quick questions**: Answer directly from context
+
+---
+
 ## Getting Help
 
 If uncertain about:
@@ -717,5 +812,5 @@ If uncertain about:
 
 ---
 
-Last updated: 2026-01-24
-Version: 1.1
+Last updated: 2026-01-25
+Version: 1.2
