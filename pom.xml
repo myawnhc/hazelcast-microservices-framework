@@ -21,6 +21,7 @@
 
     <modules>
         <module>framework-core</module>
+        <module>ecommerce-common</module>
     </modules>
 
     <properties>
@@ -48,6 +49,11 @@
             <dependency>
                 <groupId>com.theyawns</groupId>
                 <artifactId>framework-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.theyawns</groupId>
+                <artifactId>ecommerce-common</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
