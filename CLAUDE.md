@@ -801,6 +801,69 @@ Claude Code can spawn specialized subagents for different tasks. Use these to im
 
 ---
 
+## Project-Specific Agents
+
+Custom agents defined in `.claude/agents/` for this project's domain-specific tasks.
+
+| Agent | File | Use When |
+|-------|------|----------|
+| **Framework Developer** | `framework-developer.md` | Building core framework components (EventStore, ViewUpdater, Pipeline) |
+| **Service Developer** | `service-developer.md` | Building Account, Inventory, Order microservices |
+| **Test Writer** | `test-writer.md` | Writing unit and integration tests |
+| **Documentation Writer** | `documentation-writer.md` | Writing JavaDoc, README, API guides |
+| **Pipeline Specialist** | `pipeline-specialist.md` | Working with Hazelcast Jet pipelines |
+| **Config Manager** | `config-manager.md` | Managing Spring/Hazelcast configuration |
+| **Performance Optimizer** | `performance-optimizer.md` | Optimizing for performance targets |
+| **Debugging Helper** | `debugging-helper.md` | Troubleshooting issues and flaky tests |
+
+### Task Routing
+
+| Task Type | Recommended Agent |
+|-----------|-------------------|
+| Implement EventStore, ViewStore | Framework Developer |
+| Create AccountService, InventoryService | Service Developer |
+| Write pipeline tests | Test Writer |
+| Update README, add JavaDoc | Documentation Writer |
+| Build/modify Jet pipeline | Pipeline Specialist |
+| Setup Hazelcast config | Config Manager |
+| Improve query performance | Performance Optimizer |
+| Fix flaky test, debug issue | Debugging Helper |
+
+### Multi-Agent Workflows
+
+**New Framework Component:**
+1. Framework Developer → Define interface + implementation
+2. Test Writer → Write comprehensive tests
+3. Documentation Writer → JavaDoc + usage guide
+4. Performance Optimizer → Verify performance
+
+**New Microservice:**
+1. Service Developer → Implement service + controllers
+2. Test Writer → Unit + integration tests
+3. Config Manager → Service configuration
+4. Documentation Writer → API docs + README
+
+**New Feature:**
+1. Service Developer → Implement feature
+2. Pipeline Specialist → Update pipeline if needed
+3. Test Writer → Add tests
+4. Performance Optimizer → Verify performance
+5. Documentation Writer → Update docs
+
+### Invoking Project Agents
+
+Reference the agent context file when starting a task:
+
+```
+Using the service-developer agent (.claude/agents/service-developer.md),
+implement the InventoryService with:
+- Product domain object
+- StockReservedEvent, StockReleasedEvent
+- REST endpoints for stock management
+```
+
+---
+
 ## Getting Help
 
 If uncertain about:
