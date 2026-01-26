@@ -1,0 +1,57 @@
+# Prometheus Configuration for Hazelcast Microservices Framework
+# Scrapes metrics from all services and Hazelcast nodes
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  # Attach these labels to any time series or alerts when communicating with
+  # external systems (federation, remote storage, Alertmanager).
+  external_labels:
+    monitor: 'ecommerce-demo'
+
+# Scrape configuration
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Account Service
+  - job_name: 'account-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['account-service:8081']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'account-service'
+
+  # Inventory Service
+  - job_name: 'inventory-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['inventory-service:8082']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'inventory-service'
+
+  # Order Service
+  - job_name: 'order-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['order-service:8083']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'order-service'
+
+  # Hazelcast Nodes (via REST API metrics)
+  - job_name: 'hazelcast'
+    metrics_path: '/hazelcast/rest/cluster'
+    static_configs:
+      - targets:
+          - 'hazelcast-1:5701'
+          - 'hazelcast-2:5701'
+          - 'hazelcast-3:5701'

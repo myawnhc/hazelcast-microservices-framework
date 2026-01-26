@@ -1,0 +1,77 @@
+# Hazelcast Cluster Configuration for Docker Environment
+# Used by standalone Hazelcast nodes in docker-compose
+
+hazelcast:
+  cluster-name: ecommerce-cluster
+
+  network:
+    port:
+      auto-increment: true
+      port: 5701
+
+    # Disable multicast (doesn't work in Docker)
+    join:
+      multicast:
+        enabled: false
+      tcp-ip:
+        enabled: true
+        member-list:
+          - hazelcast-1
+          - hazelcast-2
+          - hazelcast-3
+
+    # REST API for management
+    rest-api:
+      enabled: true
+      endpoint-groups:
+        CLUSTER_READ:
+          enabled: true
+        CLUSTER_WRITE:
+          enabled: true
+        HEALTH_CHECK:
+          enabled: true
+
+  # Map configurations
+  map:
+    # Pending events map with event journal
+    "*_PENDING":
+      backup-count: 1
+      in-memory-format: BINARY
+      event-journal:
+        enabled: true
+        capacity: 10000
+        time-to-live-seconds: 0
+
+    # Event store (append-only)
+    "*_ES":
+      backup-count: 1
+      in-memory-format: BINARY
+      eviction:
+        eviction-policy: NONE
+        max-size-policy: FREE_HEAP_PERCENTAGE
+        size: 25
+
+    # Materialized views
+    "*_VIEW":
+      backup-count: 1
+      in-memory-format: BINARY
+      read-backup-data: true
+
+    # Completion tracking
+    "*_COMPLETIONS":
+      backup-count: 1
+      in-memory-format: BINARY
+      time-to-live-seconds: 3600
+
+  # Jet configuration for stream processing
+  jet:
+    enabled: true
+    resource-upload-enabled: true
+
+  # Metrics for Prometheus
+  metrics:
+    enabled: true
+    management-center:
+      enabled: true
+    jmx:
+      enabled: true

@@ -8,7 +8,8 @@ server:
 # Hazelcast configuration
 hazelcast:
   cluster:
-    name: ecommerce-cluster
+    name: ${HAZELCAST_CLUSTER_NAME:ecommerce-cluster}
+    members: ${HAZELCAST_CLUSTER_MEMBERS:}
   event-journal:
     capacity: 10000
 

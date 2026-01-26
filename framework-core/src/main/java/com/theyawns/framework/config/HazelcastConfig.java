@@ -2,7 +2,9 @@ package com.theyawns.framework.config;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
+import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
+import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import org.slf4j.Logger;
@@ -11,6 +13,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Spring configuration for Hazelcast Community Edition.
@@ -62,6 +67,14 @@ public class HazelcastConfig {
     private boolean portAutoIncrement;
 
     /**
+     * Comma-separated list of cluster member addresses for TCP/IP discovery.
+     * If set, TCP/IP join is used instead of multicast (required for Docker).
+     * Example: "hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701"
+     */
+    @Value("${hazelcast.cluster.members:#{null}}")
+    private String clusterMembers;
+
+    /**
      * Creates a Hazelcast instance configured for event sourcing.
      * Only created if no other HazelcastInstance bean is defined.
      *
@@ -78,9 +91,8 @@ public class HazelcastConfig {
                 .setPort(networkPort)
                 .setPortAutoIncrement(portAutoIncrement);
 
-        // Enable multicast for development (auto-discovery)
-        config.getNetworkConfig().getJoin().getMulticastConfig()
-                .setEnabled(true);
+        // Configure cluster discovery
+        configureClusterDiscovery(config);
 
         // Configure pending events maps with Event Journal
         configurePendingMaps(config);
@@ -163,5 +175,35 @@ public class HazelcastConfig {
 
         config.addMapConfig(completionsMapConfig);
         logger.debug("Configured completions maps with 1 hour TTL");
+    }
+
+    /**
+     * Configures cluster discovery mechanism.
+     * Uses TCP/IP join if cluster members are specified (Docker/production),
+     * otherwise falls back to multicast for local development.
+     */
+    private void configureClusterDiscovery(Config config) {
+        JoinConfig joinConfig = config.getNetworkConfig().getJoin();
+
+        if (clusterMembers != null && !clusterMembers.trim().isEmpty()) {
+            // Docker/Production mode: Use TCP/IP discovery
+            joinConfig.getMulticastConfig().setEnabled(false);
+
+            TcpIpConfig tcpIpConfig = joinConfig.getTcpIpConfig();
+            tcpIpConfig.setEnabled(true);
+
+            List<String> members = Arrays.asList(clusterMembers.split(","));
+            for (String member : members) {
+                tcpIpConfig.addMember(member.trim());
+            }
+
+            logger.info("Configured TCP/IP cluster discovery with members: {}", clusterMembers);
+        } else {
+            // Development mode: Use multicast for auto-discovery
+            joinConfig.getMulticastConfig().setEnabled(true);
+            joinConfig.getTcpIpConfig().setEnabled(false);
+
+            logger.info("Configured multicast cluster discovery for local development");
+        }
     }
 }

@@ -57,12 +57,17 @@ public class AccountServiceConfig {
     @Bean
     public HazelcastInstance hazelcastInstance() {
         Config config = new Config();
-        config.setClusterName(clusterName);
+        String effectiveClusterName = (clusterName != null && !clusterName.isEmpty())
+                ? clusterName
+                : "ecommerce-cluster";
+        logger.info("Cluster name from config: '{}', effective: '{}'", clusterName, effectiveClusterName);
+        config.setClusterName(effectiveClusterName);
 
         // Enable event journal for pending events map (required for Jet streaming)
+        int effectiveCapacity = eventJournalCapacity > 0 ? eventJournalCapacity : 10000;
         EventJournalConfig journalConfig = new EventJournalConfig()
                 .setEnabled(true)
-                .setCapacity(eventJournalCapacity);
+                .setCapacity(effectiveCapacity);
 
         MapConfig pendingMapConfig = new MapConfig(DOMAIN_NAME + "_PENDING")
                 .setEventJournalConfig(journalConfig);

@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+*.iml
+.vscode
+*.swp
+
+# Build artifacts (except target JARs)
+target/classes
+target/test-classes
+target/maven-*
+target/surefire-*
+target/generated-*
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Tests (not needed in runtime image)
+src/test
+
+# Maven wrapper (not needed if using pre-built JARs)
+.mvn
+mvnw
+mvnw.cmd
+
+# Docker (avoid recursive issues)
+docker
+Dockerfile*
+
+# Logs
+*.log
+logs
+
+# Environment files
+.env
+.env.*
+
+# Claude/AI
+.claude
+CLAUDE.md
