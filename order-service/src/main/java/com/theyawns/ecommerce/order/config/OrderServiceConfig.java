@@ -6,7 +6,11 @@ import com.hazelcast.config.MapConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.ecommerce.common.domain.Order;
+import com.theyawns.ecommerce.order.domain.CustomerCacheViewUpdater;
+import com.theyawns.ecommerce.order.domain.CustomerOrderSummaryViewUpdater;
+import com.theyawns.ecommerce.order.domain.EnrichedOrderViewUpdater;
 import com.theyawns.ecommerce.order.domain.OrderViewUpdater;
+import com.theyawns.ecommerce.order.domain.ProductAvailabilityViewUpdater;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.store.HazelcastEventStore;
@@ -28,6 +32,10 @@ import org.springframework.context.annotation.Configuration;
  *   <li>Hazelcast instance with event journal</li>
  *   <li>Event store for order events</li>
  *   <li>View store and updater for order materialized view</li>
+ *   <li>Customer cache view store (denormalized customer data)</li>
+ *   <li>Product availability view store (denormalized product data)</li>
+ *   <li>Enriched order view store (orders with customer/product data)</li>
+ *   <li>Customer order summary view store (aggregated order stats)</li>
  *   <li>Event sourcing controller</li>
  * </ul>
  *
@@ -40,6 +48,10 @@ public class OrderServiceConfig {
     private static final Logger logger = LoggerFactory.getLogger(OrderServiceConfig.class);
 
     private static final String DOMAIN_NAME = "Order";
+    private static final String CUSTOMER_CACHE_NAME = "CustomerCache";
+    private static final String PRODUCT_AVAILABILITY_NAME = "ProductAvailability";
+    private static final String ENRICHED_ORDER_NAME = "EnrichedOrder";
+    private static final String CUSTOMER_ORDER_SUMMARY_NAME = "CustomerOrderSummary";
 
     @Value("${hazelcast.cluster.name:ecommerce-cluster}")
     private String clusterName;
@@ -80,6 +92,22 @@ public class OrderServiceConfig {
         MapConfig customerOrdersMapConfig = new MapConfig("CustomerOrders");
         config.addMapConfig(customerOrdersMapConfig);
 
+        // Configure customer cache view map (denormalized customer data)
+        MapConfig customerCacheMapConfig = new MapConfig(CUSTOMER_CACHE_NAME + "_VIEW");
+        config.addMapConfig(customerCacheMapConfig);
+
+        // Configure product availability view map (denormalized product data)
+        MapConfig productAvailabilityMapConfig = new MapConfig(PRODUCT_AVAILABILITY_NAME + "_VIEW");
+        config.addMapConfig(productAvailabilityMapConfig);
+
+        // Configure enriched order view map (orders with customer/product data)
+        MapConfig enrichedOrderMapConfig = new MapConfig(ENRICHED_ORDER_NAME + "_VIEW");
+        config.addMapConfig(enrichedOrderMapConfig);
+
+        // Configure customer order summary view map (aggregated order stats)
+        MapConfig customerOrderSummaryMapConfig = new MapConfig(CUSTOMER_ORDER_SUMMARY_NAME + "_VIEW");
+        config.addMapConfig(customerOrderSummaryMapConfig);
+
         logger.info("Creating Hazelcast instance for cluster: {}", clusterName);
         return Hazelcast.newHazelcastInstance(config);
     }
@@ -114,8 +142,111 @@ public class OrderServiceConfig {
      * @return the view updater
      */
     @Bean
-    public OrderViewUpdater orderViewUpdater(HazelcastViewStore<String> viewStore) {
-        return new OrderViewUpdater(viewStore);
+    public OrderViewUpdater orderViewUpdater(HazelcastViewStore<String> orderViewStore) {
+        return new OrderViewUpdater(orderViewStore);
+    }
+
+    // ============================================================
+    // Cross-Service Materialized Views
+    // ============================================================
+
+    /**
+     * Creates the customer cache view store (denormalized customer data).
+     *
+     * @param hazelcast the Hazelcast instance
+     * @return the customer cache view store
+     */
+    @Bean
+    public HazelcastViewStore<String> customerCacheViewStore(HazelcastInstance hazelcast) {
+        return new HazelcastViewStore<>(hazelcast, CUSTOMER_CACHE_NAME);
+    }
+
+    /**
+     * Creates the customer cache view updater.
+     *
+     * @param customerCacheViewStore the customer cache view store
+     * @return the customer cache view updater
+     */
+    @Bean
+    public CustomerCacheViewUpdater customerCacheViewUpdater(
+            HazelcastViewStore<String> customerCacheViewStore) {
+        return new CustomerCacheViewUpdater(customerCacheViewStore);
+    }
+
+    /**
+     * Creates the product availability view store (denormalized product data).
+     *
+     * @param hazelcast the Hazelcast instance
+     * @return the product availability view store
+     */
+    @Bean
+    public HazelcastViewStore<String> productAvailabilityViewStore(HazelcastInstance hazelcast) {
+        return new HazelcastViewStore<>(hazelcast, PRODUCT_AVAILABILITY_NAME);
+    }
+
+    /**
+     * Creates the product availability view updater.
+     *
+     * @param productAvailabilityViewStore the product availability view store
+     * @return the product availability view updater
+     */
+    @Bean
+    public ProductAvailabilityViewUpdater productAvailabilityViewUpdater(
+            HazelcastViewStore<String> productAvailabilityViewStore) {
+        return new ProductAvailabilityViewUpdater(productAvailabilityViewStore);
+    }
+
+    /**
+     * Creates the enriched order view store (orders with customer/product data).
+     *
+     * @param hazelcast the Hazelcast instance
+     * @return the enriched order view store
+     */
+    @Bean
+    public HazelcastViewStore<String> enrichedOrderViewStore(HazelcastInstance hazelcast) {
+        return new HazelcastViewStore<>(hazelcast, ENRICHED_ORDER_NAME);
+    }
+
+    /**
+     * Creates the enriched order view updater.
+     *
+     * @param enrichedOrderViewStore the enriched order view store
+     * @param customerCacheViewStore the customer cache view store
+     * @param productAvailabilityViewStore the product availability view store
+     * @return the enriched order view updater
+     */
+    @Bean
+    public EnrichedOrderViewUpdater enrichedOrderViewUpdater(
+            HazelcastViewStore<String> enrichedOrderViewStore,
+            HazelcastViewStore<String> customerCacheViewStore,
+            HazelcastViewStore<String> productAvailabilityViewStore) {
+        return new EnrichedOrderViewUpdater(
+                enrichedOrderViewStore,
+                customerCacheViewStore,
+                productAvailabilityViewStore);
+    }
+
+    /**
+     * Creates the customer order summary view store (aggregated order stats).
+     *
+     * @param hazelcast the Hazelcast instance
+     * @return the customer order summary view store
+     */
+    @Bean
+    public HazelcastViewStore<String> customerOrderSummaryViewStore(HazelcastInstance hazelcast) {
+        return new HazelcastViewStore<>(hazelcast, CUSTOMER_ORDER_SUMMARY_NAME);
+    }
+
+    /**
+     * Creates the customer order summary view updater.
+     *
+     * @param customerOrderSummaryViewStore the customer order summary view store
+     * @return the customer order summary view updater
+     */
+    @Bean
+    public CustomerOrderSummaryViewUpdater customerOrderSummaryViewUpdater(
+            HazelcastViewStore<String> customerOrderSummaryViewStore) {
+        return new CustomerOrderSummaryViewUpdater(customerOrderSummaryViewStore);
     }
 
     /**

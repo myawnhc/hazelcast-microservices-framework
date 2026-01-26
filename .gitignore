@@ -1,2 +1,5 @@
+/account-service/target/
 /ecommerce-common/target/
 /framework-core/target/
+/inventory-service/target/
+/order-service/target/
