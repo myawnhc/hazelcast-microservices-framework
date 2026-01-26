@@ -23,6 +23,7 @@
         <module>framework-core</module>
         <module>ecommerce-common</module>
         <module>account-service</module>
+        <module>inventory-service</module>
     </modules>
 
     <properties>
@@ -60,6 +61,11 @@
             <dependency>
                 <groupId>com.theyawns</groupId>
                 <artifactId>account-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.theyawns</groupId>
+                <artifactId>inventory-service</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
