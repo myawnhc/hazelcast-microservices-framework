@@ -71,6 +71,32 @@ docker-compose logs -f
 docker-compose down
 ```
 
+## Demo & Sample Data
+
+After starting the services, you can load sample data and run interactive demo scenarios:
+
+```bash
+# Load sample customers and products
+./scripts/load-sample-data.sh
+
+# Run interactive demo scenarios
+./scripts/demo-scenarios.sh
+
+# Run a specific scenario (1, 2, 3, or all)
+./scripts/demo-scenarios.sh 1      # Happy path order flow
+./scripts/demo-scenarios.sh 2      # Order cancellation
+./scripts/demo-scenarios.sh 3      # View rebuilding concepts
+./scripts/demo-scenarios.sh all    # All scenarios
+```
+
+### Demo Scenarios
+
+1. **Happy Path** - Complete order lifecycle: create customer, create products, place order, reserve stock, confirm order, query enriched views
+2. **Order Cancellation** - Create order, reserve stock, cancel order, release stock, verify inventory restored
+3. **View Rebuilding** - Conceptual demonstration of event sourcing and view reconstruction
+
+For detailed walkthrough instructions, see [docs/demo/demo-walkthrough.md](../docs/demo/demo-walkthrough.md).
+
 ## Services
 
 | Service | Port | Description | Health Check |
@@ -89,21 +115,60 @@ docker-compose down
 ```bash
 curl -X POST http://localhost:8081/api/customers \
   -H "Content-Type: application/json" \
-  -d '{"email":"john@example.com","name":"John Doe","address":"123 Main St"}'
+  -d '{
+    "email": "john@example.com",
+    "name": "John Doe",
+    "address": "123 Main St",
+    "phone": "555-1234"
+  }'
 ```
 
 ### Create a Product
 ```bash
 curl -X POST http://localhost:8082/api/products \
   -H "Content-Type: application/json" \
-  -d '{"sku":"LAPTOP-001","name":"Gaming Laptop","price":999.99,"stockQuantity":100}'
+  -d '{
+    "sku": "LAPTOP-001",
+    "name": "Gaming Laptop",
+    "description": "High-performance gaming laptop",
+    "price": 999.99,
+    "quantityOnHand": 100,
+    "category": "Electronics"
+  }'
 ```
 
 ### Create an Order
 ```bash
 curl -X POST http://localhost:8083/api/orders \
   -H "Content-Type: application/json" \
-  -d '{"customerId":"<customer-id>","items":[{"productId":"<product-id>","quantity":1}]}'
+  -d '{
+    "customerId": "<customer-id>",
+    "lineItems": [
+      {
+        "productId": "<product-id>",
+        "quantity": 1,
+        "unitPrice": 999.99
+      }
+    ],
+    "shippingAddress": "123 Main St"
+  }'
+```
+
+### Reserve Stock
+```bash
+curl -X POST http://localhost:8082/api/products/<product-id>/stock/reserve \
+  -H "Content-Type: application/json" \
+  -d '{"quantity": 1, "orderId": "<order-id>"}'
+```
+
+### Confirm Order
+```bash
+curl -X PATCH http://localhost:8083/api/orders/<order-id>/confirm
+```
+
+### Query Enriched Order
+```bash
+curl http://localhost:8083/api/orders/<order-id>
 ```
 
 ## Memory Usage

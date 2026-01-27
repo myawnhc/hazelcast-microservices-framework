@@ -5,14 +5,13 @@ import com.hazelcast.config.EventJournalConfig;
 import com.hazelcast.config.MapConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import com.theyawns.ecommerce.account.domain.CustomerViewUpdater;
+import com.theyawns.ecommerce.common.view.CustomerViewUpdater;
 import com.theyawns.ecommerce.common.domain.Customer;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.store.HazelcastEventStore;
 import com.theyawns.framework.view.HazelcastViewStore;
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,9 +68,14 @@ public class AccountServiceConfig {
                 .setEnabled(true)
                 .setCapacity(effectiveCapacity);
 
-        MapConfig pendingMapConfig = new MapConfig(DOMAIN_NAME + "_PENDING")
-                .setEventJournalConfig(journalConfig);
-        config.addMapConfig(pendingMapConfig);
+        // Configure pending maps for ALL domains with event journal (required for cluster-wide consistency)
+        for (String domain : new String[]{"Customer", "Product", "Order"}) {
+            MapConfig pendingMapConfig = new MapConfig(domain + "_PENDING")
+                    .setEventJournalConfig(new EventJournalConfig()
+                            .setEnabled(true)
+                            .setCapacity(effectiveCapacity));
+            config.addMapConfig(pendingMapConfig);
+        }
 
         // Configure view map
         MapConfig viewMapConfig = new MapConfig(DOMAIN_NAME + "_VIEW");
@@ -81,7 +85,11 @@ public class AccountServiceConfig {
         MapConfig eventStoreMapConfig = new MapConfig(DOMAIN_NAME + "_ES");
         config.addMapConfig(eventStoreMapConfig);
 
-        logger.info("Creating Hazelcast instance for cluster: {}", clusterName);
+        // Enable Jet for stream processing pipeline
+        config.getJetConfig().setEnabled(true);
+        config.getJetConfig().setResourceUploadEnabled(true);
+
+        logger.info("Creating Hazelcast instance for cluster: {} with Jet enabled", clusterName);
         return Hazelcast.newHazelcastInstance(config);
     }
 
@@ -140,21 +148,15 @@ public class AccountServiceConfig {
                 .domainName(DOMAIN_NAME)
                 .eventStore(eventStore)
                 .viewUpdater(viewUpdater)
+                .viewUpdaterClass(CustomerViewUpdater.class)
                 .meterRegistry(meterRegistry)
                 .build();
 
-        return controller;
-    }
+        // Start the pipeline immediately after building the controller
+        logger.info("Starting Customer event sourcing pipeline");
+        controller.start();
 
-    /**
-     * Starts the event sourcing pipeline after the controller is created.
-     */
-    @PostConstruct
-    public void startPipeline() {
-        if (controller != null) {
-            logger.info("Starting Customer event sourcing pipeline");
-            controller.start();
-        }
+        return controller;
     }
 
     /**

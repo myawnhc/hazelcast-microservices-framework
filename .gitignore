@@ -3,3 +3,7 @@
 /framework-core/target/
 /inventory-service/target/
 /order-service/target/
+
+# Demo data (generated IDs from sample data loader)
+/demo-data/*.sh
+!/demo-data/.gitkeep

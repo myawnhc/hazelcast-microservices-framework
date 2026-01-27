@@ -81,6 +81,7 @@ public class EventSourcingController<D extends DomainObject<K>,
     private final FlakeIdGenerator sequenceGenerator;
     private final EventStore<D, K, E> eventStore;
     private final ViewUpdater<K> viewUpdater;
+    private final Class<? extends ViewUpdater<K>> viewUpdaterClass;
     private final IMap<PartitionedSequenceKey<K>, GenericRecord> pendingEventsMap;
     private final MeterRegistry meterRegistry;
     private final EventSourcingPipeline<D, K, E> pipeline;
@@ -98,6 +99,7 @@ public class EventSourcingController<D extends DomainObject<K>,
         this.domainName = builder.domainName;
         this.eventStore = builder.eventStore;
         this.viewUpdater = builder.viewUpdater;
+        this.viewUpdaterClass = builder.viewUpdaterClass;
         this.meterRegistry = builder.meterRegistry;
 
         // Initialize Hazelcast structures
@@ -112,6 +114,7 @@ public class EventSourcingController<D extends DomainObject<K>,
                         .domainName(domainName)
                         .eventStore(eventStore)
                         .viewUpdater(viewUpdater)
+                        .viewUpdaterClass(viewUpdaterClass)
                         .meterRegistry(meterRegistry);
 
         if (builder.eventBus != null) {
@@ -375,6 +378,7 @@ public class EventSourcingController<D extends DomainObject<K>,
         private String domainName;
         private EventStore<D, K, E> eventStore;
         private ViewUpdater<K> viewUpdater;
+        private Class<? extends ViewUpdater<K>> viewUpdaterClass;
         private HazelcastEventBus<D, K> eventBus;
         private MeterRegistry meterRegistry;
 
@@ -423,6 +427,18 @@ public class EventSourcingController<D extends DomainObject<K>,
         }
 
         /**
+         * Sets the view updater class for creating ViewUpdaters within the distributed pipeline.
+         * This class is used via reflection to create ViewUpdater instances on each cluster node.
+         *
+         * @param viewUpdaterClass the ViewUpdater class to instantiate
+         * @return this builder
+         */
+        public Builder<D, K, E> viewUpdaterClass(Class<? extends ViewUpdater<K>> viewUpdaterClass) {
+            this.viewUpdaterClass = viewUpdaterClass;
+            return this;
+        }
+
+        /**
          * Sets the event bus (optional - will be created if not provided).
          *
          * @param eventBus the event bus
@@ -455,6 +471,7 @@ public class EventSourcingController<D extends DomainObject<K>,
             Objects.requireNonNull(domainName, "domainName is required");
             Objects.requireNonNull(eventStore, "eventStore is required");
             Objects.requireNonNull(viewUpdater, "viewUpdater is required");
+            Objects.requireNonNull(viewUpdaterClass, "viewUpdaterClass is required");
             Objects.requireNonNull(meterRegistry, "meterRegistry is required");
 
             return new EventSourcingController<>(this);

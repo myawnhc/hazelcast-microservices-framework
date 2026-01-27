@@ -15,8 +15,12 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.framework.domain.DomainObject;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.store.EventStore;
+import com.theyawns.framework.store.EventStoreServiceCreator;
+import com.theyawns.framework.store.HazelcastEventStore;
 import com.theyawns.framework.store.PartitionedSequenceKey;
+import com.theyawns.framework.view.HazelcastViewStore;
 import com.theyawns.framework.view.ViewUpdater;
+import com.theyawns.framework.view.ViewUpdaterServiceCreator;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,6 +86,7 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
     private final String completionsMapName;
     private final EventStore<D, K, E> eventStore;
     private final ViewUpdater<K> viewUpdater;
+    private final Class<? extends ViewUpdater<K>> viewUpdaterClass;
     private final HazelcastEventBus<D, K> eventBus;
     private final PipelineMetrics metrics;
     private final MeterRegistry meterRegistry;
@@ -98,6 +103,7 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
         this.completionsMapName = builder.domainName + COMPLETIONS_SUFFIX;
         this.eventStore = builder.eventStore;
         this.viewUpdater = builder.viewUpdater;
+        this.viewUpdaterClass = builder.viewUpdaterClass;
         this.meterRegistry = builder.meterRegistry;
 
         // Create event bus if not provided
@@ -207,40 +213,39 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
 
     /**
      * Builds the Jet pipeline with all 6 stages.
+     * IMPORTANT: All lambdas must avoid capturing 'this' or non-serializable fields.
+     * We use local final variables to capture only the values needed.
      */
     private Pipeline buildPipeline() {
         Pipeline pipeline = Pipeline.create();
 
+        // Capture required values in local final variables to avoid capturing 'this'
+        final String localPendingMapName = this.pendingMapName;
+        final String localCompletionsMapName = this.completionsMapName;
+        final String localDomainName = this.domainName;
+        final Class<? extends ViewUpdater<K>> localViewUpdaterClass = this.viewUpdaterClass;
+
         // Stage 1: SOURCE - Read from pending events map via Event Journal
         StreamStage<Map.Entry<PartitionedSequenceKey<K>, GenericRecord>> source = pipeline
                 .readFrom(Sources.<PartitionedSequenceKey<K>, GenericRecord>mapJournal(
-                        pendingMapName,
+                        localPendingMapName,
                         JournalInitialPosition.START_FROM_OLDEST
                 ))
                 .withIngestionTimestamps()
                 .setName("1-source-pending-events");
 
         // Stage 2: ENRICH - Add pipeline entry timestamp and validate
+        // Note: Lambda must not capture non-serializable instance fields
         StreamStage<EventContext<K>> enriched = source
-                .map(entry -> {
-                    Instant pipelineEntryTime = Instant.now();
-                    PartitionedSequenceKey<K> key = entry.getKey();
-                    GenericRecord eventRecord = entry.getValue();
-
-                    // Extract event metadata
-                    String eventType = extractEventType(eventRecord);
-                    String eventId = extractEventId(eventRecord);
-
-                    logger.debug("Pipeline received event: {} (id: {})", eventType, eventId);
-
-                    return new EventContext<>(key, eventRecord, eventType, eventId, pipelineEntryTime);
-                })
+                .map(EventSourcingPipeline::enrichEvent)
                 .setName("2-enrich-metadata");
 
         // Stage 3: PERSIST - Store event in Event Store
-        // Using a service factory to access the event store
-        ServiceFactory<?, EventStore<D, K, E>> eventStoreFactory = ServiceFactories
-                .sharedService(ctx -> eventStore)
+        // Using a service factory that creates the store from ProcessorContext
+        // Using concrete class EventStoreServiceCreator to avoid lambda serialization issues
+        EventStoreServiceCreator<D, K, E> eventStoreCreator = new EventStoreServiceCreator<>(localDomainName);
+        ServiceFactory<?, HazelcastEventStore<D, K, E>> eventStoreFactory = ServiceFactories
+                .<HazelcastEventStore<D, K, E>>sharedService(eventStoreCreator)
                 .toNonCooperative();
 
         StreamStage<EventContext<K>> persisted = enriched
@@ -248,94 +253,81 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
                     try {
                         Instant start = Instant.now();
                         store.append(ctx.key, ctx.eventRecord);
-                        logger.debug("Persisted event {} to event store", ctx.eventId);
                         return ctx.withPersisted(true, start);
                     } catch (Exception e) {
-                        logger.error("Failed to persist event {}: {}", ctx.eventId, e.getMessage(), e);
                         return ctx.withPersisted(false, Instant.now());
                     }
                 })
                 .setName("3-persist-event-store");
 
-        // Stage 4: UPDATE VIEW - Apply event to materialized view
-        ServiceFactory<?, ViewUpdater<K>> viewUpdaterFactory = ServiceFactories
-                .sharedService(ctx -> viewUpdater)
+        // Stage 4: UPDATE VIEW - Apply event to materialized view using ViewUpdater
+        // Create a ServiceFactory that produces a ViewUpdater with a fresh ViewStore
+        // Using concrete class ViewUpdaterServiceCreator with class name to avoid lambda serialization issues
+        ViewUpdaterServiceCreator<K> serviceCreator = new ViewUpdaterServiceCreator<>(
+                localDomainName, localViewUpdaterClass);
+        ServiceFactory<?, ViewUpdater<K>> viewUpdaterServiceFactory = ServiceFactories
+                .<ViewUpdater<K>>sharedService(serviceCreator)
                 .toNonCooperative();
 
         StreamStage<EventContext<K>> viewUpdated = persisted
-                .mapUsingService(viewUpdaterFactory, (updater, ctx) -> {
+                .mapUsingService(viewUpdaterServiceFactory, (viewUpdater, ctx) -> {
                     if (!ctx.persisted) {
                         return ctx; // Skip if persist failed
                     }
                     try {
                         Instant start = Instant.now();
-                        updater.update(ctx.eventRecord);
-                        logger.debug("Updated view for event {}", ctx.eventId);
+                        // Apply event to view using the ViewUpdater's updateDirect method
+                        // This properly transforms the event into domain state
+                        viewUpdater.updateDirect(ctx.eventRecord);
                         return ctx.withViewUpdated(true, start);
                     } catch (Exception e) {
-                        logger.error("Failed to update view for event {}: {}",
-                                ctx.eventId, e.getMessage(), e);
+                        logger.warn("Failed to update view for event: {}", ctx.eventId, e);
                         return ctx.withViewUpdated(false, Instant.now());
                     }
                 })
                 .setName("4-update-materialized-view");
 
-        // Stage 5: PUBLISH - Notify subscribers via event bus
-        // Note: We need to get a reference to the event bus - using IMap lookup
+        // Stage 5: PUBLISH - Mark as published (actual event bus not used in pipeline)
         StreamStage<EventContext<K>> published = viewUpdated
-                .mapUsingService(
-                        ServiceFactories.sharedService(ctx -> eventBus),
-                        (bus, ctx) -> {
-                            if (!ctx.viewUpdated) {
-                                return ctx; // Skip if view update failed
-                            }
-                            try {
-                                Instant start = Instant.now();
-                                // Publish using the GenericRecord directly
-                                // The event bus expects DomainEvent, so we skip actual publish
-                                // and just mark as published. Actual publish happens via completion.
-                                logger.debug("Published event {} to event bus", ctx.eventId);
-                                return ctx.withPublished(true, start);
-                            } catch (Exception e) {
-                                logger.error("Failed to publish event {}: {}",
-                                        ctx.eventId, e.getMessage(), e);
-                                return ctx.withPublished(false, Instant.now());
-                            }
-                        })
+                .map(ctx -> {
+                    if (!ctx.viewUpdated) {
+                        return ctx;
+                    }
+                    return ctx.withPublished(true, Instant.now());
+                })
                 .setName("5-publish-to-subscribers");
 
         // Stage 6: COMPLETE - Signal completion by updating completions map
-        published.writeTo(Sinks.mapWithUpdating(
-                completionsMapName,
-                ctx -> ctx.key,
-                (existing, ctx) -> {
-                    try {
-                        // Create completion record
-                        Instant completedAt = Instant.now();
-                        boolean success = ctx.persisted && ctx.viewUpdated;
-
-                        logger.debug("Completed processing event {} (success: {})",
-                                ctx.eventId, success);
-
-                        // Return updated completion record (or create new one)
-                        // In a full implementation, we would create a proper GenericRecord
-                        // For now, we return the event record with completion status
-                        return ctx.eventRecord;
-                    } catch (Exception e) {
-                        logger.error("Failed to signal completion for event {}: {}",
-                                ctx.eventId, e.getMessage(), e);
-                        return existing;
-                    }
-                }
-        )).setName("6-signal-completion");
+        // Use map() to transform to entry, then write to map sink
+        // This avoids serialization issues with EventContext
+        published.map(ctx -> Map.entry(ctx.key, ctx.eventRecord))
+                .writeTo(Sinks.map(localCompletionsMapName))
+                .setName("6-signal-completion");
 
         return pipeline;
     }
 
     /**
-     * Helper to extract event type from GenericRecord.
+     * Static method for Stage 2 enrichment - can be used as method reference.
+     * Must be static to avoid capturing non-serializable instance fields.
      */
-    private String extractEventType(GenericRecord record) {
+    @SuppressWarnings("unchecked")
+    private static <K> EventContext<K> enrichEvent(Map.Entry<PartitionedSequenceKey<K>, GenericRecord> entry) {
+        Instant pipelineEntryTime = Instant.now();
+        PartitionedSequenceKey<K> key = entry.getKey();
+        GenericRecord eventRecord = entry.getValue();
+
+        String eventType = extractEventType(eventRecord);
+        String eventId = extractEventId(eventRecord);
+
+        return new EventContext<>(key, eventRecord, eventType, eventId, pipelineEntryTime);
+    }
+
+    /**
+     * Helper to extract event type from GenericRecord.
+     * Static to avoid capturing non-serializable references in lambdas.
+     */
+    private static String extractEventType(GenericRecord record) {
         try {
             return record.getString("eventType");
         } catch (Exception e) {
@@ -345,8 +337,9 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
 
     /**
      * Helper to extract event ID from GenericRecord.
+     * Static to avoid capturing non-serializable references in lambdas.
      */
-    private String extractEventId(GenericRecord record) {
+    private static String extractEventId(GenericRecord record) {
         try {
             return record.getString("eventId");
         } catch (Exception e) {
@@ -383,6 +376,7 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
         private String domainName;
         private EventStore<D, K, E> eventStore;
         private ViewUpdater<K> viewUpdater;
+        private Class<? extends ViewUpdater<K>> viewUpdaterClass;
         private HazelcastEventBus<D, K> eventBus;
         private MeterRegistry meterRegistry;
 
@@ -431,6 +425,20 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
         }
 
         /**
+         * Sets the view updater class for creating ViewUpdaters within the distributed pipeline.
+         * This is required because ViewUpdater's transient viewStore field is lost during
+         * serialization, so we need a class reference to recreate it with a fresh ViewStore
+         * using reflection.
+         *
+         * @param viewUpdaterClass the ViewUpdater class to instantiate
+         * @return this builder
+         */
+        public Builder<D, K, E> viewUpdaterClass(Class<? extends ViewUpdater<K>> viewUpdaterClass) {
+            this.viewUpdaterClass = viewUpdaterClass;
+            return this;
+        }
+
+        /**
          * Sets the event bus (optional - will be created if not provided).
          *
          * @param eventBus the event bus
@@ -463,6 +471,7 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
             Objects.requireNonNull(domainName, "domainName is required");
             Objects.requireNonNull(eventStore, "eventStore is required");
             Objects.requireNonNull(viewUpdater, "viewUpdater is required");
+            Objects.requireNonNull(viewUpdaterClass, "viewUpdaterClass is required");
             Objects.requireNonNull(meterRegistry, "meterRegistry is required");
 
             return new EventSourcingPipeline<>(this);
