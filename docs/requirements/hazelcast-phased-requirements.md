@@ -3,6 +3,16 @@
 
 ---
 
+> **DEPRECATED**: This document is superseded by [phased-requirements-v2.md](phased-requirements-v2.md).
+>
+> This historical document contains multiple iterations and some contradictory information.
+> It is retained for reference only. All active planning should use v2.
+>
+> - **Phase 1**: Completed 2026-01-27
+> - **Phase 2**: See v2 document for current scope
+
+---
+
 ## Overview
 
 This document captures the complete vision for the Hazelcast microservices demonstration framework, organized into phases for incremental development. Phase 1 focuses on core functionality, while subsequent phases add observability, tooling, and advanced features.
