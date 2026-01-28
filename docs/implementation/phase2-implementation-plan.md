@@ -5,9 +5,11 @@
 
 ## Overview
 
-**Phase 2 Focus**: Distributed transaction patterns, AI-powered features, visual observability
+**Phase 2 Focus**: Distributed transaction patterns, AI-powered features, visual observability, MCP integration
 
 **Prerequisites**: Phase 1 complete (verified 2026-01-27)
+
+**Duration**: 24 days (5 weeks)
 
 **Key Deliverables**:
 1. Payment Service (4th microservice)
@@ -16,6 +18,7 @@
 4. Product Recommendations via Vector Store (optional, Enterprise)
 5. Grafana Dashboards for observability
 6. Distributed Tracing with Jaeger
+7. MCP Server with 7 tools for AI assistant integration
 
 ---
 
@@ -141,6 +144,23 @@ hazelcast-microservices-framework/
 │   │
 │   └── jaeger/                           # NEW
 │       └── jaeger-config.yml
+│
+├── mcp-server/                           # NEW - Phase 2 (Week 5)
+│   ├── src/main/java/com/theyawns/ecommerce/mcp/
+│   │   ├── McpServerApplication.java
+│   │   ├── config/
+│   │   │   └── McpConfig.java
+│   │   ├── tools/
+│   │   │   ├── QueryViewTool.java
+│   │   │   ├── SubmitEventTool.java
+│   │   │   ├── GetEventHistoryTool.java
+│   │   │   ├── InspectSagaTool.java
+│   │   │   ├── ListSagasTool.java
+│   │   │   ├── GetMetricsTool.java
+│   │   │   └── RunDemoTool.java
+│   │   └── service/
+│   │       └── McpToolService.java
+│   └── pom.xml
 │
 └── docs/
     └── blog/
@@ -1140,12 +1160,516 @@ hazelcast:
 
 ---
 
-#### Day 20: Phase 2 Review & Handoff
+#### Day 20: Integration & Polish
+
+**Tasks**:
+1. Run full test suite
+2. Fix any remaining issues
+3. Verify dashboard functionality
+4. Prepare for MCP integration
+
+**Deliverables**:
+- [ ] All tests pass
+- [ ] Dashboards verified
+- [ ] Ready for MCP week
+
+---
+
+### Week 5: MCP Server Integration (Days 21-23)
+
+#### Day 21: MCP Server Setup & Core Tools
+
+**Goal**: Create MCP server with view query and event submission tools
+
+**Tasks**:
+1. Create `mcp-server` module
+2. Implement MCP server using Spring Boot
+3. Implement `query_view` tool
+4. Implement `submit_event` tool
+5. Implement `get_event_history` tool
+6. Write tests
+
+**Project Structure**:
+```
+mcp-server/
+├── src/main/java/com/theyawns/ecommerce/mcp/
+│   ├── McpServerApplication.java
+│   ├── config/
+│   │   └── McpConfig.java
+│   ├── tools/
+│   │   ├── QueryViewTool.java
+│   │   ├── SubmitEventTool.java
+│   │   ├── GetEventHistoryTool.java
+│   │   ├── InspectSagaTool.java
+│   │   ├── ListSagasTool.java
+│   │   ├── GetMetricsTool.java
+│   │   └── RunDemoTool.java
+│   └── service/
+│       └── McpToolService.java
+└── pom.xml
+```
+
+**MCP Tool Definitions**:
+```json
+{
+  "tools": [
+    {
+      "name": "query_view",
+      "description": "Query a materialized view. Views: customer-view, product-view, order-view, enriched-order-view, product-availability-view, customer-order-summary-view, payment-view",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "view_name": {
+            "type": "string",
+            "description": "Name of the materialized view to query"
+          },
+          "key": {
+            "type": "string",
+            "description": "Optional: specific key to retrieve"
+          },
+          "filter": {
+            "type": "object",
+            "description": "Optional: filter criteria (field: value)"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum results to return (default: 10)"
+          }
+        },
+        "required": ["view_name"]
+      }
+    },
+    {
+      "name": "submit_event",
+      "description": "Submit a domain event to the system",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "enum": ["CreateCustomer", "CreateProduct", "CreateOrder", "CancelOrder", "ReserveStock", "ProcessPayment"]
+          },
+          "payload": {
+            "type": "object",
+            "description": "Event-specific payload"
+          }
+        },
+        "required": ["event_type", "payload"]
+      }
+    },
+    {
+      "name": "get_event_history",
+      "description": "Query the event store for event history",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "aggregate_id": {
+            "type": "string",
+            "description": "ID of the aggregate (customer, order, product)"
+          },
+          "aggregate_type": {
+            "type": "string",
+            "enum": ["Customer", "Product", "Order", "Payment"]
+          },
+          "event_type": {
+            "type": "string",
+            "description": "Optional: filter by event type"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum events to return (default: 20)"
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+**QueryViewTool.java**:
+```java
+@Component
+public class QueryViewTool implements McpTool {
+
+    private final HazelcastInstance hazelcast;
+
+    @Override
+    public String getName() {
+        return "query_view";
+    }
+
+    @Override
+    public McpToolResult execute(Map<String, Object> params) {
+        String viewName = (String) params.get("view_name");
+        String key = (String) params.get("key");
+        Integer limit = (Integer) params.getOrDefault("limit", 10);
+
+        IMap<String, GenericRecord> view = hazelcast.getMap(viewName);
+
+        if (key != null) {
+            GenericRecord record = view.get(key);
+            return McpToolResult.success(formatRecord(record));
+        }
+
+        // Return multiple entries
+        List<Map<String, Object>> results = view.entrySet().stream()
+            .limit(limit)
+            .map(e -> formatEntry(e))
+            .collect(Collectors.toList());
+
+        return McpToolResult.success(Map.of(
+            "view", viewName,
+            "count", results.size(),
+            "entries", results
+        ));
+    }
+}
+```
+
+**Deliverables**:
+- [ ] MCP server module created
+- [ ] `query_view` tool implemented
+- [ ] `submit_event` tool implemented
+- [ ] `get_event_history` tool implemented
+- [ ] Unit tests
+
+---
+
+#### Day 22: Saga & Metrics Tools
+
+**Goal**: Add saga inspection and metrics tools
+
+**Tasks**:
+1. Implement `inspect_saga` tool
+2. Implement `list_sagas` tool
+3. Implement `get_metrics` tool
+4. Implement `run_demo` tool
+5. Write tests
+
+**InspectSagaTool.java**:
+```java
+@Component
+public class InspectSagaTool implements McpTool {
+
+    private final SagaStateStore sagaStateStore;
+
+    @Override
+    public String getName() {
+        return "inspect_saga";
+    }
+
+    @Override
+    public McpToolResult execute(Map<String, Object> params) {
+        String sagaId = (String) params.get("saga_id");
+
+        Optional<SagaState> state = sagaStateStore.getSagaState(sagaId);
+
+        if (state.isEmpty()) {
+            return McpToolResult.error("Saga not found: " + sagaId);
+        }
+
+        SagaState saga = state.get();
+        return McpToolResult.success(Map.of(
+            "sagaId", saga.getSagaId(),
+            "type", saga.getSagaType(),
+            "status", saga.getStatus().name(),
+            "currentStep", saga.getCurrentStep(),
+            "totalSteps", saga.getTotalSteps(),
+            "startedAt", saga.getStartedAt().toString(),
+            "duration", Duration.between(saga.getStartedAt(), Instant.now()).toMillis() + "ms",
+            "steps", formatSteps(saga.getSteps())
+        ));
+    }
+}
+```
+
+**ListSagasTool.java**:
+```java
+@Component
+public class ListSagasTool implements McpTool {
+
+    @Override
+    public String getName() {
+        return "list_sagas";
+    }
+
+    @Override
+    public McpToolResult execute(Map<String, Object> params) {
+        String statusFilter = (String) params.get("status");
+        Integer limit = (Integer) params.getOrDefault("limit", 10);
+
+        List<SagaState> sagas;
+        if (statusFilter != null) {
+            SagaState.SagaStatus status = SagaState.SagaStatus.valueOf(statusFilter);
+            sagas = sagaStateStore.findSagasByStatus(status);
+        } else {
+            sagas = sagaStateStore.findSagasByStatus(SagaState.SagaStatus.IN_PROGRESS);
+        }
+
+        return McpToolResult.success(Map.of(
+            "count", sagas.size(),
+            "sagas", sagas.stream()
+                .limit(limit)
+                .map(this::formatSagaSummary)
+                .collect(Collectors.toList())
+        ));
+    }
+}
+```
+
+**GetMetricsTool.java**:
+```java
+@Component
+public class GetMetricsTool implements McpTool {
+
+    private final MeterRegistry meterRegistry;
+
+    @Override
+    public String getName() {
+        return "get_metrics";
+    }
+
+    @Override
+    public McpToolResult execute(Map<String, Object> params) {
+        String metricType = (String) params.get("metric_type");
+
+        Map<String, Object> metrics = new HashMap<>();
+
+        // Events metrics
+        metrics.put("events", Map.of(
+            "submitted", getCounterValue("events.submitted"),
+            "processed", getCounterValue("events.processed"),
+            "failed", getCounterValue("events.failed")
+        ));
+
+        // Saga metrics
+        metrics.put("sagas", Map.of(
+            "started", getCounterValue("sagas.started"),
+            "completed", getCounterValue("sagas.completed"),
+            "compensated", getCounterValue("sagas.compensated"),
+            "inProgress", getGaugeValue("sagas.in_progress")
+        ));
+
+        // Performance metrics
+        metrics.put("performance", Map.of(
+            "eventLatencyP50", getTimerPercentile("event.processing.duration", 0.5),
+            "eventLatencyP99", getTimerPercentile("event.processing.duration", 0.99),
+            "eventsPerSecond", calculateTPS()
+        ));
+
+        return McpToolResult.success(metrics);
+    }
+}
+```
+
+**RunDemoTool.java**:
+```java
+@Component
+public class RunDemoTool implements McpTool {
+
+    @Override
+    public String getName() {
+        return "run_demo";
+    }
+
+    @Override
+    public McpToolResult execute(Map<String, Object> params) {
+        String scenario = (String) params.get("scenario");
+
+        return switch (scenario) {
+            case "happy_path" -> runHappyPathDemo();
+            case "payment_failure" -> runPaymentFailureDemo();
+            case "saga_timeout" -> runSagaTimeoutDemo();
+            case "load_sample_data" -> loadSampleData();
+            default -> McpToolResult.error("Unknown scenario: " + scenario +
+                ". Available: happy_path, payment_failure, saga_timeout, load_sample_data");
+        };
+    }
+
+    private McpToolResult runHappyPathDemo() {
+        // Create customer
+        String customerId = createCustomer("Demo Customer", "demo@example.com");
+
+        // Create product
+        String productId = createProduct("Demo Product", 99.99, 100);
+
+        // Create order (triggers saga)
+        String orderId = createOrder(customerId, productId, 2);
+
+        // Wait for saga completion
+        SagaState saga = waitForSagaCompletion(orderId, Duration.ofSeconds(10));
+
+        return McpToolResult.success(Map.of(
+            "scenario", "happy_path",
+            "customerId", customerId,
+            "productId", productId,
+            "orderId", orderId,
+            "sagaStatus", saga.getStatus().name(),
+            "message", "Order fulfilled successfully!"
+        ));
+    }
+}
+```
+
+**Tool Summary**:
+```json
+{
+  "name": "inspect_saga",
+  "description": "View detailed state of a saga instance including all steps and their status"
+},
+{
+  "name": "list_sagas",
+  "description": "List saga instances, optionally filtered by status (IN_PROGRESS, COMPLETED, COMPENSATING, FAILED)",
+  "inputSchema": {
+    "properties": {
+      "status": { "type": "string", "enum": ["IN_PROGRESS", "COMPLETED", "COMPENSATING", "COMPENSATED", "FAILED", "TIMED_OUT"] },
+      "limit": { "type": "integer" }
+    }
+  }
+},
+{
+  "name": "get_metrics",
+  "description": "Get system metrics including event throughput, saga statistics, and performance data"
+},
+{
+  "name": "run_demo",
+  "description": "Run a predefined demo scenario",
+  "inputSchema": {
+    "properties": {
+      "scenario": { "type": "string", "enum": ["happy_path", "payment_failure", "saga_timeout", "load_sample_data"] }
+    },
+    "required": ["scenario"]
+  }
+}
+```
+
+**Deliverables**:
+- [ ] `inspect_saga` tool implemented
+- [ ] `list_sagas` tool implemented
+- [ ] `get_metrics` tool implemented
+- [ ] `run_demo` tool implemented
+- [ ] Unit tests
+
+---
+
+#### Day 23: MCP Integration Testing & Documentation
+
+**Goal**: Complete MCP integration with testing and docs
+
+**Tasks**:
+1. Integration tests for all MCP tools
+2. Docker Compose configuration for MCP server
+3. MCP server documentation
+4. Example conversations showing tool usage
+5. Update main README
+
+**Docker Compose Addition**:
+```yaml
+services:
+  mcp-server:
+    build: ./mcp-server
+    ports:
+      - "8085:8085"
+    environment:
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast1:5701,hazelcast2:5701,hazelcast3:5701
+    depends_on:
+      - hazelcast1
+      - account-service
+      - inventory-service
+      - order-service
+      - payment-service
+```
+
+**Example MCP Conversation**:
+```
+User: "Show me all pending orders"
+
+Claude: [calls query_view with view_name="enriched-order-view"]
+
+Claude: "You have 3 pending orders:
+- ORD-001: John Doe, 2x Widget ($199.98) - PENDING
+- ORD-002: Jane Smith, 1x Gadget ($49.99) - PENDING
+- ORD-003: Bob Wilson, 5x Gizmo ($249.95) - PENDING"
+
+---
+
+User: "What's happening with order ORD-002's saga?"
+
+Claude: [calls list_sagas with status="IN_PROGRESS"]
+Claude: [calls inspect_saga with saga_id from results]
+
+Claude: "Order ORD-002 is in an active saga:
+- Saga ID: saga-a7f3e2
+- Status: IN_PROGRESS
+- Step 2/4: Stock Reserved ✓
+- Waiting for: Payment processing
+- Duration: 1.2 seconds"
+
+---
+
+User: "Run the happy path demo"
+
+Claude: [calls run_demo with scenario="happy_path"]
+
+Claude: "Demo completed successfully!
+- Created customer: CUST-demo-123
+- Created product: PROD-demo-456
+- Created order: ORD-demo-789
+- Saga completed in 234ms
+- Order status: CONFIRMED"
+```
+
+**MCP Server README**:
+```markdown
+# MCP Server for Hazelcast Microservices Framework
+
+Enables AI assistants to interact with the event-sourced microservices.
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `query_view` | Query materialized views |
+| `submit_event` | Submit domain events |
+| `get_event_history` | Query event store |
+| `inspect_saga` | View saga details |
+| `list_sagas` | List saga instances |
+| `get_metrics` | Get system metrics |
+| `run_demo` | Execute demo scenarios |
+
+## Configuration
+
+```json
+{
+  "mcpServers": {
+    "hazelcast-microservices": {
+      "url": "http://localhost:8085/mcp"
+    }
+  }
+}
+```
+
+## Example Usage
+
+See [MCP Examples](./docs/mcp-examples.md) for conversation examples.
+```
+
+**Deliverables**:
+- [ ] Integration tests for MCP tools
+- [ ] MCP server in Docker Compose
+- [ ] MCP documentation
+- [ ] Example conversations
+- [ ] README updated
+- [ ] Week 5 DONE: MCP complete
+
+---
+
+#### Day 24: Phase 2 Review & Handoff
 
 **Tasks**:
 1. Run full test suite
 2. Verify all deliverables
-3. Update PHASE2-COMPLETE.md
+3. Create PHASE2-COMPLETE.md
 4. Plan Phase 3 scope
 5. Celebrate! 🎉
 
@@ -1175,13 +1699,19 @@ hazelcast:
 - [ ] Traces visible in Jaeger
 - [ ] Grafana dashboards functional
 - [ ] Vector Store available (if Enterprise enabled)
-- [ ] All Phase 2 features integrated
+- [ ] All observability features integrated
 
 ### Week 4 Complete When:
 - [ ] All tests pass
 - [ ] Documentation complete
 - [ ] Demo scenarios work
 - [ ] Blog posts drafted
+
+### Week 5 Complete When:
+- [ ] MCP server running
+- [ ] All 7 MCP tools functional
+- [ ] MCP integration tests pass
+- [ ] Example conversations documented
 - [ ] Phase 2 COMPLETE
 
 ---
@@ -1204,8 +1734,9 @@ With Phase 2 complete, Phase 3 could focus on:
 - Orchestrated sagas (using SagaStateStore foundation)
 - Resilience patterns (circuit breaker, retry, outbox)
 - API Gateway
-- MCP Server integration
 - Kubernetes deployment
+- Additional MCP tools (if needed)
+- PostgreSQL event store persistence
 
 ---
 

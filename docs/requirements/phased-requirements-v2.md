@@ -358,7 +358,34 @@ Build a custom interactive UI with real-time updates.
 
 ---
 
-## 2.4 Additional Phase 2 Features
+## 2.4 MCP Server Integration
+
+### Goal
+
+Enable AI assistants to interact with the framework for demos and learning.
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `query_view` | Query any materialized view |
+| `submit_event` | Submit domain events |
+| `get_event_history` | Query event store |
+| `inspect_saga` | View saga state and progress |
+| `list_sagas` | List saga instances by status |
+| `get_metrics` | Get system metrics (TPS, latency) |
+| `run_demo` | Execute predefined demo scenarios |
+
+### Use Cases
+
+- Interactive demos with AI assistants
+- Educational tutorials
+- Automated testing via conversation
+- Customer demonstrations
+
+---
+
+## 2.5 Additional Phase 2 Features
 
 ### Distributed Tracing
 
@@ -390,6 +417,8 @@ Build a custom interactive UI with real-time updates.
 | Grafana dashboards show real-time data | Visual verification |
 | Saga progress visible in dashboard | Visual verification |
 | Vector Store recommendations work (if enabled) | Similar products returned |
+| MCP server responds to all 7 tools | Integration tests pass |
+| AI assistant can run demo via MCP | Manual verification |
 | All existing tests pass | CI/CD verification |
 | New tests for Phase 2 features | >80% coverage |
 
@@ -423,11 +452,11 @@ With Phase 2's `SagaStateStore` and infrastructure in place, add:
 - **Comparison Demo**: Same order fulfillment, orchestrated vs choreographed
 - **Visual Saga Flow Editor**: Define sagas via UI (stretch goal)
 
-### MCP Server Integration
+### Additional MCP Tools (If Needed)
 
-- Expose framework capabilities via MCP
-- Allow AI assistants to interact with demo
-- Tools: query views, submit events, inspect sagas
+- Extend MCP server from Phase 2
+- Add specialized tools based on usage feedback
+- Integration with external AI platforms
 
 ### Kubernetes Deployment
 
@@ -504,6 +533,8 @@ The following items from the previous requirements document have been removed or
 | 2026-01-28 | Grafana over custom UI for Phase 2 | Faster to implement |
 | 2026-01-28 | Add Payment Service for saga demo | Makes saga realistic |
 | 2026-01-28 | Vector Store optional (Enterprise) | Maintain open source default |
+| 2026-01-28 | Add MCP to Phase 2 (moved from Phase 3) | Wider appeal, enables AI demos |
+| 2026-01-28 | Choreography with orchestration foundation | Simple now, extensible later |
 
 ---
 
