@@ -1,0 +1,249 @@
+openapi: 3.0.3
+info:
+  title: Account Service API
+  description: |
+    Customer account management service for the Hazelcast Event Sourcing Framework.
+
+    This service manages customer accounts using event sourcing patterns:
+    - Customer creation triggers a `CustomerCreatedEvent`
+    - Updates trigger `CustomerUpdatedEvent`
+    - Status changes trigger `CustomerStatusChangedEvent`
+
+    All reads come from materialized views for sub-millisecond latency.
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:8081
+    description: Local development server
+  - url: http://account-service:8081
+    description: Docker Compose internal
+
+tags:
+  - name: Customer Management
+    description: APIs for managing customer accounts
+
+paths:
+  /api/customers:
+    post:
+      tags:
+        - Customer Management
+      summary: Create a new customer
+      description: |
+        Registers a new customer account in the system.
+        Creates a `CustomerCreatedEvent` which flows through the event pipeline.
+      operationId: createCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerRequest'
+            example:
+              email: alice@example.com
+              name: Alice Smith
+              address: 123 Main Street, Anytown, USA
+              phone: '555-1234'
+      responses:
+        '201':
+          description: Customer created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+              example:
+                customerId: cust-12345-uuid
+                email: alice@example.com
+                name: Alice Smith
+                address: 123 Main Street, Anytown, USA
+                phone: '555-1234'
+                status: ACTIVE
+        '400':
+          description: Invalid customer data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/customers/{customerId}:
+    get:
+      tags:
+        - Customer Management
+      summary: Get customer by ID
+      description: |
+        Retrieves customer details from the materialized view.
+        Returns the current state derived from all customer events.
+      operationId: getCustomer
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          description: Unique customer identifier
+          schema:
+            type: string
+          example: cust-12345-uuid
+      responses:
+        '200':
+          description: Customer found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '404':
+          description: Customer not found
+
+    put:
+      tags:
+        - Customer Management
+      summary: Update customer
+      description: |
+        Updates customer profile information.
+        Creates a `CustomerUpdatedEvent` with the changed fields.
+      operationId: updateCustomer
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          description: Unique customer identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerRequest'
+      responses:
+        '200':
+          description: Customer updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400':
+          description: Invalid customer data
+        '404':
+          description: Customer not found
+
+  /api/customers/{customerId}/status:
+    patch:
+      tags:
+        - Customer Management
+      summary: Change customer status
+      description: |
+        Changes account status (ACTIVE, SUSPENDED, CLOSED).
+        Creates a `CustomerStatusChangedEvent`.
+      operationId: changeStatus
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          description: Unique customer identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusChangeRequest'
+            example:
+              status: SUSPENDED
+              reason: Payment overdue
+      responses:
+        '200':
+          description: Status changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400':
+          description: Invalid status
+        '404':
+          description: Customer not found
+
+components:
+  schemas:
+    CustomerRequest:
+      type: object
+      required:
+        - email
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+          description: Customer email address
+          example: alice@example.com
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          description: Customer full name
+          example: Alice Smith
+        address:
+          type: string
+          description: Customer mailing address
+          example: 123 Main Street, Anytown, USA
+        phone:
+          type: string
+          description: Customer phone number
+          example: '555-1234'
+
+    Customer:
+      type: object
+      properties:
+        customerId:
+          type: string
+          description: Unique customer identifier
+          example: cust-12345-uuid
+        email:
+          type: string
+          format: email
+          description: Customer email address
+          example: alice@example.com
+        name:
+          type: string
+          description: Customer full name
+          example: Alice Smith
+        address:
+          type: string
+          description: Customer mailing address
+          example: 123 Main Street, Anytown, USA
+        phone:
+          type: string
+          description: Customer phone number
+          example: '555-1234'
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, CLOSED]
+          description: Account status
+          example: ACTIVE
+
+    StatusChangeRequest:
+      type: object
+      required:
+        - status
+        - reason
+      properties:
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, CLOSED]
+          description: New account status
+        reason:
+          type: string
+          description: Reason for status change
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code

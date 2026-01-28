@@ -1,0 +1,398 @@
+openapi: 3.0.3
+info:
+  title: Order Service API
+  description: |
+    Order management service for the Hazelcast Event Sourcing Framework.
+
+    This service manages the order lifecycle using event sourcing patterns:
+    - Order creation triggers an `OrderCreatedEvent`
+    - Confirmation triggers `OrderConfirmedEvent`
+    - Cancellation triggers `OrderCancelledEvent`
+    - Shipping triggers `OrderShippedEvent`
+
+    **Key Features:**
+    - Orders are enriched with customer and product data from materialized views
+    - No synchronous service calls required for data enrichment
+    - Customer order summaries maintained via cross-service views
+
+    **Order Status Flow:**
+    ```
+    PENDING -> CONFIRMED -> SHIPPED -> DELIVERED
+                  |
+                  v
+              CANCELLED
+    ```
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:8083
+    description: Local development server
+  - url: http://order-service:8083
+    description: Docker Compose internal
+
+tags:
+  - name: Order Management
+    description: APIs for managing customer orders
+
+paths:
+  /api/orders:
+    post:
+      tags:
+        - Order Management
+      summary: Create a new order
+      description: |
+        Places a new order for a customer.
+        Creates an `OrderCreatedEvent` which:
+        1. Stores the order in the event store
+        2. Creates an enriched order view with customer and product names
+        3. Updates customer order summary
+
+        **Note:** Stock reservation should be done separately via Inventory Service.
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+            example:
+              customerId: cust-12345-uuid
+              lineItems:
+                - productId: prod-12345-uuid
+                  quantity: 2
+                  unitPrice: 1299.99
+              shippingAddress: 123 Main Street, Anytown, USA
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                orderId: order-12345-uuid
+                customerId: cust-12345-uuid
+                customerName: Alice Smith
+                customerEmail: alice@example.com
+                lineItems:
+                  - productId: prod-12345-uuid
+                    productName: Gaming Laptop
+                    sku: LAPTOP-001
+                    quantity: 2
+                    unitPrice: 1299.99
+                    lineTotal: 2599.98
+                subtotal: 2599.98
+                tax: 259.998
+                total: 2859.978
+                shippingAddress: 123 Main Street, Anytown, USA
+                status: PENDING
+        '400':
+          description: Invalid order data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/orders/{orderId}:
+    get:
+      tags:
+        - Order Management
+      summary: Get order by ID
+      description: |
+        Retrieves order details including enriched customer and product data.
+        Returns data from the enriched order materialized view.
+      operationId: getOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: Unique order identifier
+          schema:
+            type: string
+          example: order-12345-uuid
+      responses:
+        '200':
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: Order not found
+
+  /api/orders/customer/{customerId}:
+    get:
+      tags:
+        - Order Management
+      summary: Get orders by customer
+      description: |
+        Retrieves all orders for a specific customer.
+        Uses the customer order summary materialized view for efficient lookup.
+      operationId: getOrdersByCustomer
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          description: Customer identifier
+          schema:
+            type: string
+          example: cust-12345-uuid
+      responses:
+        '200':
+          description: Orders retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+
+  /api/orders/{orderId}/confirm:
+    patch:
+      tags:
+        - Order Management
+      summary: Confirm order
+      description: |
+        Confirms an order for fulfillment.
+        Creates an `OrderConfirmedEvent` which:
+        - Updates order status to CONFIRMED
+        - Generates a confirmation number
+
+        **Prerequisites:**
+        - Order must be in PENDING status
+        - Stock should already be reserved
+      operationId: confirmOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: Unique order identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Order cannot be confirmed (wrong status)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: 'Order cannot be confirmed: current status is CANCELLED'
+                code: INVALID_STATE_TRANSITION
+        '404':
+          description: Order not found
+
+  /api/orders/{orderId}/cancel:
+    patch:
+      tags:
+        - Order Management
+      summary: Cancel order
+      description: |
+        Cancels an order and releases reserved stock.
+        Creates an `OrderCancelledEvent` which:
+        - Updates order status to CANCELLED
+        - Records cancellation reason and actor
+
+        **Note:** Stock release should be done separately via Inventory Service.
+
+        **Allowed from statuses:** PENDING, CONFIRMED
+      operationId: cancelOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: Unique order identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelOrderRequest'
+            example:
+              reason: Customer changed their mind
+              cancelledBy: customer
+      responses:
+        '200':
+          description: Order cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Order cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Order not found
+
+components:
+  schemas:
+    OrderRequest:
+      type: object
+      required:
+        - customerId
+        - lineItems
+      properties:
+        customerId:
+          type: string
+          description: Customer placing the order
+          example: cust-12345-uuid
+        lineItems:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderLineItemRequest'
+        shippingAddress:
+          type: string
+          description: Shipping address for the order
+          example: 123 Main Street, Anytown, USA
+
+    OrderLineItemRequest:
+      type: object
+      required:
+        - productId
+        - quantity
+        - unitPrice
+      properties:
+        productId:
+          type: string
+          description: Product identifier
+          example: prod-12345-uuid
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantity ordered
+          example: 2
+        unitPrice:
+          type: number
+          format: decimal
+          minimum: 0.01
+          description: Price per unit at time of order
+          example: 1299.99
+
+    Order:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: Unique order identifier
+          example: order-12345-uuid
+        customerId:
+          type: string
+          description: Customer identifier
+          example: cust-12345-uuid
+        customerName:
+          type: string
+          description: Customer name (enriched from customer view)
+          example: Alice Smith
+        customerEmail:
+          type: string
+          description: Customer email (enriched from customer view)
+          example: alice@example.com
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLineItem'
+        subtotal:
+          type: number
+          format: decimal
+          description: Sum of line item totals
+          example: 2599.98
+        tax:
+          type: number
+          format: decimal
+          description: Tax amount (10% of subtotal)
+          example: 259.998
+        total:
+          type: number
+          format: decimal
+          description: Total order amount (subtotal + tax)
+          example: 2859.978
+        shippingAddress:
+          type: string
+          description: Shipping address
+          example: 123 Main Street, Anytown, USA
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED]
+          description: Order status
+          example: PENDING
+        createdAt:
+          type: string
+          format: date-time
+          description: Order creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+
+    OrderLineItem:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: Product identifier
+          example: prod-12345-uuid
+        productName:
+          type: string
+          description: Product name (enriched from product view)
+          example: Gaming Laptop
+        sku:
+          type: string
+          description: Product SKU (enriched from product view)
+          example: LAPTOP-001
+        quantity:
+          type: integer
+          description: Quantity ordered
+          example: 2
+        unitPrice:
+          type: number
+          format: decimal
+          description: Price per unit
+          example: 1299.99
+        lineTotal:
+          type: number
+          format: decimal
+          description: Line total (quantity * unitPrice)
+          example: 2599.98
+
+    CancelOrderRequest:
+      type: object
+      required:
+        - reason
+        - cancelledBy
+      properties:
+        reason:
+          type: string
+          description: Reason for cancellation
+          example: Customer changed their mind
+        cancelledBy:
+          type: string
+          description: Who cancelled (customer, system, admin)
+          example: customer
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+          enum: [INVALID_STATE_TRANSITION, ORDER_NOT_FOUND, INVALID_REQUEST]

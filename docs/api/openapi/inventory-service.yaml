@@ -1,0 +1,332 @@
+openapi: 3.0.3
+info:
+  title: Inventory Service API
+  description: |
+    Product inventory management service for the Hazelcast Event Sourcing Framework.
+
+    This service manages products and stock levels using event sourcing patterns:
+    - Product creation triggers a `ProductCreatedEvent`
+    - Stock reservations trigger `StockReservedEvent`
+    - Stock releases trigger `StockReleasedEvent`
+
+    Stock levels are tracked as:
+    - `quantityOnHand`: Total physical inventory
+    - `quantityReserved`: Stock reserved for pending orders
+    - `availableQuantity`: `quantityOnHand - quantityReserved`
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:8082
+    description: Local development server
+  - url: http://inventory-service:8082
+    description: Docker Compose internal
+
+tags:
+  - name: Product Inventory
+    description: APIs for managing products and stock levels
+
+paths:
+  /api/products:
+    post:
+      tags:
+        - Product Inventory
+      summary: Create a new product
+      description: |
+        Adds a new product to the catalog.
+        Creates a `ProductCreatedEvent` which flows through the event pipeline.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductRequest'
+            example:
+              sku: LAPTOP-001
+              name: Gaming Laptop
+              description: High-performance gaming laptop
+              price: 1299.99
+              quantityOnHand: 50
+              category: Electronics
+      responses:
+        '201':
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+              example:
+                productId: prod-12345-uuid
+                sku: LAPTOP-001
+                name: Gaming Laptop
+                description: High-performance gaming laptop
+                price: 1299.99
+                quantityOnHand: 50
+                quantityReserved: 0
+                category: Electronics
+                status: ACTIVE
+        '400':
+          description: Invalid product data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/products/{productId}:
+    get:
+      tags:
+        - Product Inventory
+      summary: Get product by ID
+      description: |
+        Retrieves product details including current stock levels.
+        Returns data from the materialized view.
+      operationId: getProduct
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Unique product identifier
+          schema:
+            type: string
+          example: prod-12345-uuid
+      responses:
+        '200':
+          description: Product found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Product not found
+
+  /api/products/{productId}/stock/reserve:
+    post:
+      tags:
+        - Product Inventory
+      summary: Reserve stock
+      description: |
+        Reserves product stock for an order.
+        Creates a `StockReservedEvent` which increments `quantityReserved`.
+
+        **Validation:**
+        - Product must exist
+        - Available quantity (`quantityOnHand - quantityReserved`) must be >= requested quantity
+      operationId: reserveStock
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Unique product identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockReservationRequest'
+            example:
+              quantity: 2
+              orderId: order-12345-uuid
+      responses:
+        '200':
+          description: Stock reserved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Insufficient stock or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: 'Insufficient stock: requested 100, available 50'
+                code: INSUFFICIENT_STOCK
+        '404':
+          description: Product not found
+
+  /api/products/{productId}/stock/release:
+    post:
+      tags:
+        - Product Inventory
+      summary: Release stock
+      description: |
+        Releases previously reserved stock back to available inventory.
+        Creates a `StockReleasedEvent` which decrements `quantityReserved`.
+
+        Common reasons:
+        - Order cancelled
+        - Order timeout
+        - Payment failed
+      operationId: releaseStock
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Unique product identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockReleaseRequest'
+            example:
+              quantity: 2
+              orderId: order-12345-uuid
+              reason: Order cancelled by customer
+      responses:
+        '200':
+          description: Stock released successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid request
+        '404':
+          description: Product not found
+
+components:
+  schemas:
+    ProductRequest:
+      type: object
+      required:
+        - sku
+        - name
+        - price
+        - quantityOnHand
+      properties:
+        sku:
+          type: string
+          maxLength: 50
+          description: Stock Keeping Unit (unique product identifier)
+          example: LAPTOP-001
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+          description: Product name
+          example: Gaming Laptop
+        description:
+          type: string
+          maxLength: 1000
+          description: Product description
+          example: High-performance gaming laptop
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          description: Product price
+          example: 1299.99
+        quantityOnHand:
+          type: integer
+          minimum: 0
+          description: Initial stock quantity
+          example: 50
+        category:
+          type: string
+          description: Product category
+          example: Electronics
+
+    Product:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: Unique product identifier
+          example: prod-12345-uuid
+        sku:
+          type: string
+          description: Stock Keeping Unit
+          example: LAPTOP-001
+        name:
+          type: string
+          description: Product name
+          example: Gaming Laptop
+        description:
+          type: string
+          description: Product description
+          example: High-performance gaming laptop
+        price:
+          type: number
+          format: decimal
+          description: Product price
+          example: 1299.99
+        quantityOnHand:
+          type: integer
+          description: Total physical inventory
+          example: 50
+        quantityReserved:
+          type: integer
+          description: Stock reserved for pending orders
+          example: 5
+        availableQuantity:
+          type: integer
+          description: Available for new orders (quantityOnHand - quantityReserved)
+          example: 45
+        category:
+          type: string
+          description: Product category
+          example: Electronics
+        status:
+          type: string
+          enum: [ACTIVE, DISCONTINUED, OUT_OF_STOCK]
+          description: Product status
+          example: ACTIVE
+
+    StockReservationRequest:
+      type: object
+      required:
+        - quantity
+        - orderId
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantity to reserve
+          example: 2
+        orderId:
+          type: string
+          description: Order ID requesting the reservation
+          example: order-12345-uuid
+
+    StockReleaseRequest:
+      type: object
+      required:
+        - quantity
+        - orderId
+        - reason
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantity to release
+          example: 2
+        orderId:
+          type: string
+          description: Order ID releasing the stock
+          example: order-12345-uuid
+        reason:
+          type: string
+          description: Reason for releasing stock
+          example: Order cancelled by customer
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+          enum: [INSUFFICIENT_STOCK, PRODUCT_NOT_FOUND, INVALID_REQUEST]
