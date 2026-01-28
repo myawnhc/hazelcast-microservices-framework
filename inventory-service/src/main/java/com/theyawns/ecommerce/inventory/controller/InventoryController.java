@@ -2,6 +2,13 @@ package com.theyawns.ecommerce.inventory.controller;
 
 import com.theyawns.ecommerce.common.dto.ProductDTO;
 import com.theyawns.ecommerce.inventory.service.ProductService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -34,6 +41,7 @@ import java.util.concurrent.CompletableFuture;
  */
 @RestController
 @RequestMapping("/api/products")
+@Tag(name = "Product Inventory", description = "APIs for managing products and stock levels")
 public class InventoryController {
 
     private static final Logger logger = LoggerFactory.getLogger(InventoryController.class);
@@ -56,6 +64,12 @@ public class InventoryController {
      * @return the created product
      */
     @PostMapping
+    @Operation(summary = "Create a new product", description = "Adds a new product to the catalog")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Product created successfully",
+                    content = @Content(schema = @Schema(implementation = ProductDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid product data")
+    })
     public CompletableFuture<ResponseEntity<ProductDTO>> createProduct(@Valid @RequestBody ProductDTO dto) {
         logger.info("REST: Creating product with SKU: {}", dto.getSku());
 
@@ -74,7 +88,14 @@ public class InventoryController {
      * @return the product, or 404 if not found
      */
     @GetMapping("/{productId}")
-    public ResponseEntity<ProductDTO> getProduct(@PathVariable String productId) {
+    @Operation(summary = "Get product by ID", description = "Retrieves product details including stock levels")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Product found",
+                    content = @Content(schema = @Schema(implementation = ProductDTO.class))),
+            @ApiResponse(responseCode = "404", description = "Product not found")
+    })
+    public ResponseEntity<ProductDTO> getProduct(
+            @Parameter(description = "Product ID", required = true) @PathVariable String productId) {
         logger.debug("REST: Getting product: {}", productId);
 
         return productService.getProduct(productId)
@@ -93,8 +114,15 @@ public class InventoryController {
      * @return the updated product
      */
     @PostMapping("/{productId}/stock/reserve")
+    @Operation(summary = "Reserve stock", description = "Reserves product stock for an order")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Stock reserved successfully",
+                    content = @Content(schema = @Schema(implementation = ProductDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Insufficient stock or invalid request"),
+            @ApiResponse(responseCode = "404", description = "Product not found")
+    })
     public CompletableFuture<ResponseEntity<ProductDTO>> reserveStock(
-            @PathVariable String productId,
+            @Parameter(description = "Product ID", required = true) @PathVariable String productId,
             @Valid @RequestBody StockReservationRequest request) {
         logger.info("REST: Reserving {} units of product {} for order {}",
                 request.quantity(), productId, request.orderId());
@@ -116,8 +144,15 @@ public class InventoryController {
      * @return the updated product
      */
     @PostMapping("/{productId}/stock/release")
+    @Operation(summary = "Release stock", description = "Releases previously reserved stock back to available inventory")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Stock released successfully",
+                    content = @Content(schema = @Schema(implementation = ProductDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request"),
+            @ApiResponse(responseCode = "404", description = "Product not found")
+    })
     public CompletableFuture<ResponseEntity<ProductDTO>> releaseStock(
-            @PathVariable String productId,
+            @Parameter(description = "Product ID", required = true) @PathVariable String productId,
             @Valid @RequestBody StockReleaseRequest request) {
         logger.info("REST: Releasing {} units of product {} for order {} (reason: {})",
                 request.quantity(), productId, request.orderId(), request.reason());

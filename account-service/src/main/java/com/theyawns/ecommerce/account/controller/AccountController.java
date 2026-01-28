@@ -3,6 +3,13 @@ package com.theyawns.ecommerce.account.controller;
 import com.theyawns.ecommerce.account.service.CustomerService;
 import com.theyawns.ecommerce.common.domain.Customer;
 import com.theyawns.ecommerce.common.dto.CustomerDTO;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +42,7 @@ import java.util.concurrent.CompletableFuture;
  */
 @RestController
 @RequestMapping("/api/customers")
+@Tag(name = "Customer Management", description = "APIs for managing customer accounts")
 public class AccountController {
 
     private static final Logger logger = LoggerFactory.getLogger(AccountController.class);
@@ -57,7 +65,15 @@ public class AccountController {
      * @return the created customer
      */
     @PostMapping
-    public CompletableFuture<ResponseEntity<CustomerDTO>> createCustomer(@Valid @RequestBody CustomerDTO dto) {
+    @Operation(summary = "Create a new customer", description = "Registers a new customer account in the system")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Customer created successfully",
+                    content = @Content(schema = @Schema(implementation = CustomerDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid customer data")
+    })
+    public CompletableFuture<ResponseEntity<CustomerDTO>> createCustomer(
+            @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "Customer data", required = true) CustomerDTO dto) {
         logger.info("REST: Creating customer with email: {}", dto.getEmail());
 
         return customerService.createCustomer(dto)
@@ -75,7 +91,14 @@ public class AccountController {
      * @return the customer, or 404 if not found
      */
     @GetMapping("/{customerId}")
-    public ResponseEntity<CustomerDTO> getCustomer(@PathVariable String customerId) {
+    @Operation(summary = "Get customer by ID", description = "Retrieves customer details from the materialized view")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Customer found",
+                    content = @Content(schema = @Schema(implementation = CustomerDTO.class))),
+            @ApiResponse(responseCode = "404", description = "Customer not found")
+    })
+    public ResponseEntity<CustomerDTO> getCustomer(
+            @Parameter(description = "Customer ID", required = true) @PathVariable String customerId) {
         logger.debug("REST: Getting customer: {}", customerId);
 
         return customerService.getCustomer(customerId)
@@ -94,8 +117,15 @@ public class AccountController {
      * @return the updated customer
      */
     @PutMapping("/{customerId}")
+    @Operation(summary = "Update customer", description = "Updates customer profile information")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Customer updated successfully",
+                    content = @Content(schema = @Schema(implementation = CustomerDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid customer data"),
+            @ApiResponse(responseCode = "404", description = "Customer not found")
+    })
     public CompletableFuture<ResponseEntity<CustomerDTO>> updateCustomer(
-            @PathVariable String customerId,
+            @Parameter(description = "Customer ID", required = true) @PathVariable String customerId,
             @Valid @RequestBody CustomerDTO dto) {
         logger.info("REST: Updating customer: {}", customerId);
 
@@ -115,8 +145,15 @@ public class AccountController {
      * @return the updated customer
      */
     @PatchMapping("/{customerId}/status")
+    @Operation(summary = "Change customer status", description = "Changes account status (ACTIVE, SUSPENDED, CLOSED)")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Status changed successfully",
+                    content = @Content(schema = @Schema(implementation = CustomerDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid status"),
+            @ApiResponse(responseCode = "404", description = "Customer not found")
+    })
     public CompletableFuture<ResponseEntity<CustomerDTO>> changeStatus(
-            @PathVariable String customerId,
+            @Parameter(description = "Customer ID", required = true) @PathVariable String customerId,
             @RequestBody StatusChangeRequest request) {
         logger.info("REST: Changing status for customer {} to {}", customerId, request.status());
 

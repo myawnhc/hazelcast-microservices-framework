@@ -2,6 +2,14 @@ package com.theyawns.ecommerce.order.controller;
 
 import com.theyawns.ecommerce.common.dto.OrderDTO;
 import com.theyawns.ecommerce.order.service.OrderOperations;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.slf4j.Logger;
@@ -37,6 +45,7 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/orders")
+@Tag(name = "Order Management", description = "APIs for managing customer orders")
 public class OrderController {
 
     private static final Logger logger = LoggerFactory.getLogger(OrderController.class);
@@ -59,6 +68,12 @@ public class OrderController {
      * @return the created order
      */
     @PostMapping
+    @Operation(summary = "Create a new order", description = "Places a new order for a customer")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Order created successfully",
+                    content = @Content(schema = @Schema(implementation = OrderDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid order data")
+    })
     public CompletableFuture<ResponseEntity<OrderDTO>> createOrder(@Valid @RequestBody OrderDTO dto) {
         logger.info("REST: Creating order for customer: {}", dto.getCustomerId());
 
@@ -77,7 +92,14 @@ public class OrderController {
      * @return the order, or 404 if not found
      */
     @GetMapping("/{orderId}")
-    public ResponseEntity<OrderDTO> getOrder(@PathVariable String orderId) {
+    @Operation(summary = "Get order by ID", description = "Retrieves order details including enriched customer and product data")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Order found",
+                    content = @Content(schema = @Schema(implementation = OrderDTO.class))),
+            @ApiResponse(responseCode = "404", description = "Order not found")
+    })
+    public ResponseEntity<OrderDTO> getOrder(
+            @Parameter(description = "Order ID", required = true) @PathVariable String orderId) {
         logger.debug("REST: Getting order: {}", orderId);
 
         return orderService.getOrder(orderId)
@@ -95,7 +117,13 @@ public class OrderController {
      * @return list of orders for the customer
      */
     @GetMapping("/customer/{customerId}")
-    public ResponseEntity<List<OrderDTO>> getOrdersByCustomer(@PathVariable String customerId) {
+    @Operation(summary = "Get orders by customer", description = "Retrieves all orders for a specific customer")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Orders retrieved",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = OrderDTO.class))))
+    })
+    public ResponseEntity<List<OrderDTO>> getOrdersByCustomer(
+            @Parameter(description = "Customer ID", required = true) @PathVariable String customerId) {
         logger.debug("REST: Getting orders for customer: {}", customerId);
 
         List<OrderDTO> orders = orderService.getOrdersByCustomer(customerId).stream()
@@ -112,7 +140,15 @@ public class OrderController {
      * @return the confirmed order
      */
     @PatchMapping("/{orderId}/confirm")
-    public CompletableFuture<ResponseEntity<OrderDTO>> confirmOrder(@PathVariable String orderId) {
+    @Operation(summary = "Confirm order", description = "Confirms an order for fulfillment")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Order confirmed",
+                    content = @Content(schema = @Schema(implementation = OrderDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Order cannot be confirmed"),
+            @ApiResponse(responseCode = "404", description = "Order not found")
+    })
+    public CompletableFuture<ResponseEntity<OrderDTO>> confirmOrder(
+            @Parameter(description = "Order ID", required = true) @PathVariable String orderId) {
         logger.info("REST: Confirming order: {}", orderId);
 
         return orderService.confirmOrder(orderId)
@@ -131,8 +167,15 @@ public class OrderController {
      * @return the cancelled order
      */
     @PatchMapping("/{orderId}/cancel")
+    @Operation(summary = "Cancel order", description = "Cancels an order and releases reserved stock")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Order cancelled",
+                    content = @Content(schema = @Schema(implementation = OrderDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Order cannot be cancelled"),
+            @ApiResponse(responseCode = "404", description = "Order not found")
+    })
     public CompletableFuture<ResponseEntity<OrderDTO>> cancelOrder(
-            @PathVariable String orderId,
+            @Parameter(description = "Order ID", required = true) @PathVariable String orderId,
             @Valid @RequestBody CancelOrderRequest request) {
         logger.info("REST: Cancelling order: {} (reason: {})", orderId, request.reason());
 
