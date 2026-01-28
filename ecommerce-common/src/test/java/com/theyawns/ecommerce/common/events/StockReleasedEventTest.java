@@ -3,6 +3,8 @@ package com.theyawns.ecommerce.common.events;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.theyawns.ecommerce.common.domain.Product;
+import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.framework.saga.SagaEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -258,6 +260,43 @@ class StockReleasedEventTest {
             assertTrue(str.contains("5"));
             assertTrue(str.contains("order-456"));
             assertTrue(str.contains("ORDER_CANCELLED"));
+        }
+    }
+
+    @Nested
+    @DisplayName("SagaEvent interface")
+    class SagaEventInterface {
+
+        @Test
+        @DisplayName("should implement SagaEvent")
+        void shouldImplementSagaEvent() {
+            assertTrue(event instanceof SagaEvent);
+        }
+
+        @Test
+        @DisplayName("should return step 1 for saga step number (compensates StockReserved)")
+        void shouldReturnStep1ForSagaStepNumber() {
+            assertEquals(SagaCompensationConfig.STEP_STOCK_RESERVED, event.getSagaStepNumber());
+            assertEquals(1, event.getSagaStepNumber());
+        }
+
+        @Test
+        @DisplayName("should return null as compensating event type (compensation events have no compensation)")
+        void shouldReturnNullAsCompensatingEventType() {
+            assertNull(event.getCompensatingEventType());
+        }
+
+        @Test
+        @DisplayName("should be a compensating event")
+        void shouldBeACompensatingEvent() {
+            assertTrue(event.isCompensatingEvent());
+        }
+
+        @Test
+        @DisplayName("should return OrderFulfillment saga type")
+        void shouldReturnOrderFulfillmentSagaType() {
+            assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, event.getSagaTypeName());
+            assertEquals("OrderFulfillment", event.getSagaTypeName());
         }
     }
 }
