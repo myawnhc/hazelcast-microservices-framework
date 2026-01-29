@@ -6,6 +6,7 @@ import com.hazelcast.topic.ITopic;
 import com.hazelcast.topic.Message;
 import com.hazelcast.topic.MessageListener;
 import com.theyawns.ecommerce.common.events.OrderCreatedEvent;
+import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.inventory.service.ProductService;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  * <p>Listens for saga-related events that trigger inventory actions:
  * <ul>
  *   <li>{@link OrderCreatedEvent} - Triggers stock reservation (saga step 1)</li>
+ *   <li>{@link PaymentFailedEvent} - Triggers stock release compensation</li>
  * </ul>
  *
  * <p>This component connects the Inventory Service to the choreographed saga
@@ -55,6 +57,9 @@ public class InventorySagaListener {
 
         ITopic<GenericRecord> orderCreatedTopic = hazelcast.getTopic("OrderCreated");
         orderCreatedTopic.addMessageListener(new OrderCreatedListener());
+
+        ITopic<GenericRecord> paymentFailedTopic = hazelcast.getTopic("PaymentFailed");
+        paymentFailedTopic.addMessageListener(new PaymentFailedListener());
 
         logger.info("Inventory saga listeners registered successfully");
     }
@@ -128,6 +133,59 @@ public class InventorySagaListener {
                             productId, sagaId, orderId, e);
                     // Compensation will be handled in Day 7
                 }
+            }
+        }
+    }
+
+    /**
+     * Listener for PaymentFailed events.
+     *
+     * <p>When payment fails as part of a saga, releases stock that was
+     * previously reserved for the order. This compensates step 1 (StockReserved).
+     *
+     * <p>Reservations are tracked by orderId in the OrderStockReservations IMap
+     * during the reservation step. This listener looks up those reservations
+     * and releases each one.
+     */
+    class PaymentFailedListener implements MessageListener<GenericRecord> {
+
+        @Override
+        public void onMessage(Message<GenericRecord> message) {
+            GenericRecord record = message.getMessageObject();
+
+            String sagaId = record.getString("sagaId");
+            if (sagaId == null || sagaId.isEmpty()) {
+                logger.debug("PaymentFailed event without sagaId - not a saga event, ignoring");
+                return;
+            }
+
+            String orderId = record.getString("orderId");
+            String correlationId = record.getString("correlationId");
+            String failureReason = record.getString("failureReason");
+
+            logger.info("Received PaymentFailed saga event: orderId={}, sagaId={}, reason={}",
+                    orderId, sagaId, failureReason);
+
+            String reason = "Payment failed: " + failureReason;
+
+            try {
+                inventoryService.releaseStockForSaga(
+                        orderId,
+                        sagaId,
+                        correlationId,
+                        reason
+                ).whenComplete((product, error) -> {
+                    if (error != null) {
+                        logger.error("Failed to release stock for saga compensation: orderId={}, sagaId={}",
+                                orderId, sagaId, error);
+                    } else {
+                        logger.info("Stock released for saga compensation: orderId={}, sagaId={}",
+                                orderId, sagaId);
+                    }
+                });
+            } catch (Exception e) {
+                logger.error("Error initiating stock release for saga compensation: orderId={}, sagaId={}",
+                        orderId, sagaId, e);
             }
         }
     }

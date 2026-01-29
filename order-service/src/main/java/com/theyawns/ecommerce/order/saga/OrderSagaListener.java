@@ -5,6 +5,7 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.topic.ITopic;
 import com.hazelcast.topic.Message;
 import com.hazelcast.topic.MessageListener;
+import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.common.events.PaymentProcessedEvent;
 import com.theyawns.ecommerce.order.service.OrderOperations;
 import jakarta.annotation.PostConstruct;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  * <p>Listens for saga-related events that trigger order state transitions:
  * <ul>
  *   <li>{@link PaymentProcessedEvent} - Triggers order confirmation (saga step 3)</li>
+ *   <li>{@link PaymentFailedEvent} - Triggers order cancellation compensation</li>
  * </ul>
  *
  * <p>This component connects the Order Service to the choreographed saga
@@ -56,6 +58,9 @@ public class OrderSagaListener {
 
         ITopic<GenericRecord> paymentProcessedTopic = hazelcast.getTopic("PaymentProcessed");
         paymentProcessedTopic.addMessageListener(new PaymentProcessedListener());
+
+        ITopic<GenericRecord> paymentFailedTopic = hazelcast.getTopic("PaymentFailed");
+        paymentFailedTopic.addMessageListener(new PaymentFailedListener());
 
         logger.info("Order saga listeners registered successfully");
     }
@@ -98,6 +103,54 @@ public class OrderSagaListener {
                         });
             } catch (Exception e) {
                 logger.error("Error initiating order confirmation for saga: {} (orderId: {})",
+                        sagaId, orderId, e);
+            }
+        }
+    }
+
+    /**
+     * Listener for PaymentFailed events.
+     *
+     * <p>When payment fails as part of a saga, cancels the order and marks
+     * the saga as COMPENSATED. This compensates step 0 (OrderCreated) and
+     * finalizes the compensation flow.
+     */
+    class PaymentFailedListener implements MessageListener<GenericRecord> {
+
+        @Override
+        public void onMessage(Message<GenericRecord> message) {
+            GenericRecord record = message.getMessageObject();
+
+            String sagaId = record.getString("sagaId");
+            if (sagaId == null || sagaId.isEmpty()) {
+                logger.debug("PaymentFailed event without sagaId - not a saga event, ignoring");
+                return;
+            }
+
+            String orderId = record.getString("orderId");
+            String correlationId = record.getString("correlationId");
+            String failureReason = record.getString("failureReason");
+
+            logger.info("Received PaymentFailed saga event for order cancellation: orderId={}, sagaId={}, reason={}",
+                    orderId, sagaId, failureReason);
+
+            try {
+                orderService.cancelOrderForSaga(
+                        orderId,
+                        "Payment failed: " + failureReason,
+                        sagaId,
+                        correlationId
+                ).whenComplete((order, error) -> {
+                    if (error != null) {
+                        logger.error("Failed to cancel order {} for saga compensation: {}",
+                                orderId, sagaId, error);
+                    } else {
+                        logger.info("Order cancelled via saga compensation: orderId={}, status={}, sagaId={}",
+                                orderId, order.getStatus(), sagaId);
+                    }
+                });
+            } catch (Exception e) {
+                logger.error("Error initiating order cancellation for saga compensation: {} (orderId: {})",
                         sagaId, orderId, e);
             }
         }

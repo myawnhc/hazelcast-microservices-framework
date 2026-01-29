@@ -257,4 +257,138 @@ class InventorySagaListenerTest {
             assertEquals(3, quantityCaptor.getAllValues().get(1));
         }
     }
+
+    @Nested
+    @DisplayName("PaymentFailed event handling - Compensation")
+    class PaymentFailedTests {
+
+        @Test
+        @DisplayName("should release stock when PaymentFailed saga event is received")
+        void shouldReleaseStockForSagaEvent() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord paymentFailedRecord = GenericRecordBuilder.compact("PaymentFailedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentFailed")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Payment")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 2)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "22.00")
+                    .setString("currency", "USD")
+                    .setString("failureReason", "Insufficient funds")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            Product mockProduct = new Product("prod-1", "SKU-001", "Widget A",
+                    new BigDecimal("10.00"), 100);
+            when(inventoryService.releaseStockForSaga(
+                    anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(CompletableFuture.completedFuture(mockProduct));
+
+            @SuppressWarnings("unchecked")
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(paymentFailedRecord);
+
+            // Act
+            listener.new PaymentFailedListener().onMessage(message);
+
+            // Assert
+            verify(inventoryService).releaseStockForSaga(
+                    eq(orderId),
+                    eq(sagaId),
+                    eq(correlationId),
+                    eq("Payment failed: Insufficient funds")
+            );
+        }
+
+        @Test
+        @DisplayName("should ignore PaymentFailed events without sagaId")
+        void shouldIgnoreNonSagaEvents() {
+            // Arrange
+            GenericRecord record = GenericRecordBuilder.compact("PaymentFailedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentFailed")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Payment")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", UUID.randomUUID().toString())
+                    .setString("sagaId", null)
+                    .setString("sagaType", null)
+                    .setInt32("stepNumber", 0)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", "order-1")
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "10.00")
+                    .setString("currency", "USD")
+                    .setString("failureReason", "Declined")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            @SuppressWarnings("unchecked")
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act
+            listener.new PaymentFailedListener().onMessage(message);
+
+            // Assert
+            verify(inventoryService, never()).releaseStockForSaga(
+                    anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("should handle service exception gracefully during compensation")
+        void shouldHandleServiceExceptionGracefully() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("PaymentFailedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentFailed")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Payment")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 2)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "10.00")
+                    .setString("currency", "USD")
+                    .setString("failureReason", "Timeout")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            when(inventoryService.releaseStockForSaga(anyString(), anyString(), anyString(), anyString()))
+                    .thenThrow(new RuntimeException("Product not found"));
+
+            @SuppressWarnings("unchecked")
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act - should not throw
+            listener.new PaymentFailedListener().onMessage(message);
+
+            // Assert - exception was caught internally
+            verify(inventoryService).releaseStockForSaga(
+                    eq(orderId), eq(sagaId), eq(correlationId), eq("Payment failed: Timeout"));
+        }
+    }
 }

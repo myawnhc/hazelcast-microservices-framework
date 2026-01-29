@@ -16,6 +16,7 @@ import com.theyawns.framework.controller.SagaMetadata;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.saga.SagaCompensationConfig;
 import com.theyawns.framework.saga.SagaStateStore;
+import com.theyawns.framework.saga.SagaStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -260,6 +261,67 @@ public class OrderService implements OrderOperations {
                     );
 
                     logger.info("Order Fulfillment saga completed: sagaId={}, orderId={}",
+                            sagaId, orderId);
+
+                    return getOrderOrThrow(orderId);
+                });
+    }
+
+    /**
+     * Cancels an order as part of saga compensation.
+     *
+     * <p>This method is called by the saga listener when a PaymentFailed event
+     * is received. It cancels the order, records the compensation step for
+     * step 0 (OrderCreated), and marks the saga as COMPENSATED.
+     *
+     * @param orderId the order ID
+     * @param reason the cancellation reason
+     * @param sagaId the saga instance ID
+     * @param correlationId the correlation ID
+     * @return a future that completes with the cancelled order
+     * @throws OrderNotFoundException if order does not exist
+     * @throws InvalidOrderStateException if order cannot be cancelled
+     */
+    @Override
+    public CompletableFuture<Order> cancelOrderForSaga(
+            final String orderId, final String reason,
+            final String sagaId, final String correlationId) {
+
+        logger.info("Cancelling order for saga compensation: orderId={}, sagaId={}", orderId, sagaId);
+
+        Order order = getOrderOrThrow(orderId);
+
+        if (order.getStatus() != Order.Status.PENDING && order.getStatus() != Order.Status.CONFIRMED) {
+            throw new InvalidOrderStateException(orderId, order.getStatus().name(), "cancel");
+        }
+
+        OrderCancelledEvent event = new OrderCancelledEvent(orderId, reason, "system");
+        event.setIsCompensating(true);
+
+        SagaMetadata sagaMetadata = SagaMetadata.builder()
+                .sagaId(sagaId)
+                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(SagaCompensationConfig.STEP_ORDER_CREATED)
+                .compensating(true)
+                .build();
+
+        return controller.handleEvent(event, UUID.fromString(correlationId), sagaMetadata)
+                .thenApply(completionInfo -> {
+                    logger.debug("Order cancelled event processed for saga: {} (sagaId: {})",
+                            completionInfo.getEventId(), sagaId);
+
+                    // Record compensation step for order creation (step 0)
+                    sagaStateStore.recordCompensationStep(
+                            sagaId,
+                            SagaCompensationConfig.STEP_ORDER_CREATED,
+                            SagaCompensationConfig.ORDER_CANCELLED,
+                            SagaCompensationConfig.ORDER_SERVICE
+                    );
+
+                    // Mark the saga as COMPENSATED (all compensation steps done)
+                    sagaStateStore.completeSaga(sagaId, SagaStatus.COMPENSATED);
+
+                    logger.info("Order Fulfillment saga compensated: sagaId={}, orderId={}",
                             sagaId, orderId);
 
                     return getOrderOrThrow(orderId);

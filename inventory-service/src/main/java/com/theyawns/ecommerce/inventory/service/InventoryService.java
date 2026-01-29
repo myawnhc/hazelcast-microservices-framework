@@ -1,5 +1,7 @@
 package com.theyawns.ecommerce.inventory.service;
 
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
 import com.theyawns.ecommerce.common.domain.Product;
 import com.theyawns.ecommerce.common.dto.ProductDTO;
 import com.theyawns.ecommerce.common.events.ProductCreatedEvent;
@@ -16,6 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -40,20 +44,30 @@ public class InventoryService implements ProductService {
 
     private static final Logger logger = LoggerFactory.getLogger(InventoryService.class);
 
+    /**
+     * IMap name for tracking stock reservations by orderId.
+     * Used during saga compensation to know which products/quantities to release.
+     */
+    private static final String ORDER_RESERVATIONS_MAP = "OrderStockReservations";
+
     private final EventSourcingController<Product, String, DomainEvent<Product, String>> controller;
     private final SagaStateStore sagaStateStore;
+    private final HazelcastInstance hazelcast;
 
     /**
      * Creates a new InventoryService.
      *
      * @param controller the event sourcing controller for product events
      * @param sagaStateStore the saga state store for tracking distributed transactions
+     * @param hazelcast the Hazelcast instance
      */
     public InventoryService(
             EventSourcingController<Product, String, DomainEvent<Product, String>> controller,
-            SagaStateStore sagaStateStore) {
+            SagaStateStore sagaStateStore,
+            HazelcastInstance hazelcast) {
         this.controller = controller;
         this.sagaStateStore = sagaStateStore;
+        this.hazelcast = hazelcast;
     }
 
     /**
@@ -184,6 +198,9 @@ public class InventoryService implements ProductService {
                     logger.debug("Stock reserved event processed for saga: {} (sagaId: {})",
                             completionInfo.getEventId(), sagaId);
 
+                    // Track the reservation for potential compensation
+                    trackReservation(orderId, productId, quantity);
+
                     // Record step 1 completed
                     sagaStateStore.recordStepCompleted(
                             sagaId,
@@ -195,6 +212,79 @@ public class InventoryService implements ProductService {
 
                     return getProductOrThrow(productId);
                 });
+    }
+
+    /**
+     * Releases all previously reserved stock for an order as part of saga compensation.
+     *
+     * <p>Looks up tracked reservations by orderId and releases stock for each
+     * product that was reserved during the saga's stock reservation step.
+     * Records the compensation step in the SagaStateStore.
+     *
+     * @param orderId the order ID whose reservations should be released
+     * @param sagaId the saga instance ID
+     * @param correlationId the correlation ID
+     * @param reason the reason for releasing
+     * @return a future that completes with the last updated product (or completed with null if no reservations)
+     */
+    @Override
+    public CompletableFuture<Product> releaseStockForSaga(
+            final String orderId, final String sagaId,
+            final String correlationId, final String reason) {
+
+        logger.info("Releasing reserved stock for order {} (saga compensation, sagaId: {})", orderId, sagaId);
+
+        List<String> reservationEntries = getReservations(orderId);
+        if (reservationEntries.isEmpty()) {
+            logger.warn("No tracked reservations found for order: {} (sagaId: {})", orderId, sagaId);
+            // Still record compensation step even if no reservations found
+            sagaStateStore.recordCompensationStep(
+                    sagaId,
+                    SagaCompensationConfig.STEP_STOCK_RESERVED,
+                    SagaCompensationConfig.STOCK_RELEASED,
+                    SagaCompensationConfig.INVENTORY_SERVICE
+            );
+            return CompletableFuture.completedFuture(null);
+        }
+
+        SagaMetadata sagaMetadata = SagaMetadata.builder()
+                .sagaId(sagaId)
+                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(SagaCompensationConfig.STEP_STOCK_RESERVED)
+                .compensating(true)
+                .build();
+
+        CompletableFuture<Product> lastFuture = CompletableFuture.completedFuture(null);
+
+        for (String entry : reservationEntries) {
+            String[] parts = entry.split(":");
+            String productId = parts[0];
+            int quantity = Integer.parseInt(parts[1]);
+
+            logger.info("Releasing {} units of product {} for order {} (sagaId: {})",
+                    quantity, productId, orderId, sagaId);
+
+            StockReleasedEvent event = new StockReleasedEvent(productId, quantity, orderId, reason);
+            event.setIsCompensating(true);
+
+            lastFuture = controller.handleEvent(event, UUID.fromString(correlationId), sagaMetadata)
+                    .thenApply(completionInfo -> {
+                        logger.debug("Stock released for product {} in saga: {} (sagaId: {})",
+                                productId, completionInfo.getEventId(), sagaId);
+                        return getProductOrThrow(productId);
+                    });
+        }
+
+        // Record compensation step after all releases
+        return lastFuture.thenApply(product -> {
+            sagaStateStore.recordCompensationStep(
+                    sagaId,
+                    SagaCompensationConfig.STEP_STOCK_RESERVED,
+                    SagaCompensationConfig.STOCK_RELEASED,
+                    SagaCompensationConfig.INVENTORY_SERVICE
+            );
+            return product;
+        });
     }
 
     /**
@@ -246,6 +336,40 @@ public class InventoryService implements ProductService {
     private Product getProductOrThrow(String productId) {
         return getProduct(productId)
                 .orElseThrow(() -> new ProductNotFoundException(productId));
+    }
+
+    /**
+     * Tracks a stock reservation by orderId for potential compensation.
+     * Stored as "productId:quantity" entries in a list per orderId.
+     *
+     * @param orderId the order ID
+     * @param productId the product ID
+     * @param quantity the quantity reserved
+     */
+    @SuppressWarnings("unchecked")
+    private void trackReservation(String orderId, String productId, int quantity) {
+        IMap<String, List<String>> reservations = hazelcast.getMap(ORDER_RESERVATIONS_MAP);
+        reservations.executeOnKey(orderId, entry -> {
+            List<String> items = entry.getValue();
+            if (items == null) {
+                items = new ArrayList<>();
+            }
+            items.add(productId + ":" + quantity);
+            entry.setValue(items);
+            return null;
+        });
+    }
+
+    /**
+     * Looks up tracked reservations for an orderId.
+     *
+     * @param orderId the order ID
+     * @return list of "productId:quantity" entries, or empty list
+     */
+    List<String> getReservations(String orderId) {
+        IMap<String, List<String>> reservations = hazelcast.getMap(ORDER_RESERVATIONS_MAP);
+        List<String> items = reservations.get(orderId);
+        return items != null ? items : new ArrayList<>();
     }
 
     /**

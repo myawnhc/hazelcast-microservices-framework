@@ -68,6 +68,20 @@ public interface OrderOperations {
     CompletableFuture<Order> cancelOrder(String orderId, String reason, String cancelledBy);
 
     /**
+     * Cancels an order as part of saga compensation.
+     *
+     * <p>Records the compensation step and marks the saga as COMPENSATED.
+     *
+     * @param orderId the order ID
+     * @param reason the cancellation reason
+     * @param sagaId the saga instance ID
+     * @param correlationId the correlation ID
+     * @return a future that completes with the cancelled order
+     */
+    CompletableFuture<Order> cancelOrderForSaga(String orderId, String reason,
+                                                  String sagaId, String correlationId);
+
+    /**
      * Checks if an order exists.
      *
      * @param orderId the order ID

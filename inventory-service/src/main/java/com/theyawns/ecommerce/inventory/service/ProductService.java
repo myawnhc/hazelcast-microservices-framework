@@ -71,6 +71,21 @@ public interface ProductService {
             String customerId, String amount, String currency, String method);
 
     /**
+     * Releases all previously reserved stock for an order as part of saga compensation.
+     *
+     * <p>Looks up tracked reservations by orderId and releases stock for each
+     * product that was reserved during the saga's stock reservation step.
+     *
+     * @param orderId the order ID whose reservations should be released
+     * @param sagaId the saga instance ID
+     * @param correlationId the correlation ID
+     * @param reason the reason for releasing
+     * @return a future that completes with the last updated product (or null if no reservations)
+     */
+    CompletableFuture<Product> releaseStockForSaga(
+            String orderId, String sagaId, String correlationId, String reason);
+
+    /**
      * Checks if a product exists.
      *
      * @param productId the product ID
