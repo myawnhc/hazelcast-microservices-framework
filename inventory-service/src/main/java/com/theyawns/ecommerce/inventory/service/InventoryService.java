@@ -8,7 +8,10 @@ import com.theyawns.ecommerce.common.events.StockReservedEvent;
 import com.theyawns.ecommerce.inventory.exception.InsufficientStockException;
 import com.theyawns.ecommerce.inventory.exception.ProductNotFoundException;
 import com.theyawns.framework.controller.EventSourcingController;
+import com.theyawns.framework.controller.SagaMetadata;
 import com.theyawns.framework.event.DomainEvent;
+import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.framework.saga.SagaStateStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -38,14 +41,19 @@ public class InventoryService implements ProductService {
     private static final Logger logger = LoggerFactory.getLogger(InventoryService.class);
 
     private final EventSourcingController<Product, String, DomainEvent<Product, String>> controller;
+    private final SagaStateStore sagaStateStore;
 
     /**
      * Creates a new InventoryService.
      *
      * @param controller the event sourcing controller for product events
+     * @param sagaStateStore the saga state store for tracking distributed transactions
      */
-    public InventoryService(EventSourcingController<Product, String, DomainEvent<Product, String>> controller) {
+    public InventoryService(
+            EventSourcingController<Product, String, DomainEvent<Product, String>> controller,
+            SagaStateStore sagaStateStore) {
         this.controller = controller;
+        this.sagaStateStore = sagaStateStore;
     }
 
     /**
@@ -116,6 +124,75 @@ public class InventoryService implements ProductService {
         return controller.handleEvent(event)
                 .thenApply(completionInfo -> {
                     logger.debug("Stock reserved event processed: {}", completionInfo.getEventId());
+                    return getProductOrThrow(productId);
+                });
+    }
+
+    /**
+     * Reserves stock for an order as part of a saga.
+     *
+     * <p>This method propagates saga context (sagaId, correlationId) through
+     * the StockReservedEvent and records step 1 completion in the SagaStateStore.
+     * It also sets payment context fields on the event so the downstream
+     * PaymentService can process payment.
+     *
+     * @param productId the product ID
+     * @param quantity the quantity to reserve
+     * @param orderId the order ID
+     * @param sagaId the saga instance ID
+     * @param correlationId the correlation ID
+     * @param customerId the customer ID (propagated for payment)
+     * @param amount the order amount (propagated for payment)
+     * @param currency the currency code (propagated for payment)
+     * @param method the payment method (propagated for payment)
+     * @return a future that completes with the updated product
+     * @throws ProductNotFoundException if product does not exist
+     * @throws InsufficientStockException if insufficient stock available
+     */
+    public CompletableFuture<Product> reserveStockForSaga(
+            final String productId, final int quantity, final String orderId,
+            final String sagaId, final String correlationId,
+            final String customerId, final String amount,
+            final String currency, final String method) {
+
+        logger.info("Reserving {} units of product {} for order {} (sagaId: {})",
+                quantity, productId, orderId, sagaId);
+
+        Product product = getProductOrThrow(productId);
+
+        int available = product.getAvailableQuantity();
+        if (available < quantity) {
+            throw new InsufficientStockException(productId, quantity, available);
+        }
+
+        StockReservedEvent event = new StockReservedEvent(productId, quantity, orderId);
+
+        // Set saga context fields for downstream payment processing
+        event.setCustomerId(customerId);
+        event.setAmount(amount);
+        event.setCurrency(currency);
+        event.setMethod(method);
+
+        SagaMetadata sagaMetadata = SagaMetadata.builder()
+                .sagaId(sagaId)
+                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(SagaCompensationConfig.STEP_STOCK_RESERVED)
+                .build();
+
+        return controller.handleEvent(event, UUID.fromString(correlationId), sagaMetadata)
+                .thenApply(completionInfo -> {
+                    logger.debug("Stock reserved event processed for saga: {} (sagaId: {})",
+                            completionInfo.getEventId(), sagaId);
+
+                    // Record step 1 completed
+                    sagaStateStore.recordStepCompleted(
+                            sagaId,
+                            SagaCompensationConfig.STEP_STOCK_RESERVED,
+                            SagaCompensationConfig.STOCK_RESERVED,
+                            SagaCompensationConfig.INVENTORY_SERVICE,
+                            completionInfo.getEventId()
+                    );
+
                     return getProductOrThrow(productId);
                 });
     }

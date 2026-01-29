@@ -52,6 +52,25 @@ public interface ProductService {
     CompletableFuture<Product> releaseStock(String productId, int quantity, String orderId, String reason);
 
     /**
+     * Reserves stock for an order as part of a saga.
+     *
+     * @param productId the product ID
+     * @param quantity the quantity to reserve
+     * @param orderId the order ID
+     * @param sagaId the saga instance ID
+     * @param correlationId the correlation ID
+     * @param customerId the customer ID (propagated for payment)
+     * @param amount the order amount (propagated for payment)
+     * @param currency the currency code (propagated for payment)
+     * @param method the payment method (propagated for payment)
+     * @return a future that completes with the updated product
+     */
+    CompletableFuture<Product> reserveStockForSaga(
+            String productId, int quantity, String orderId,
+            String sagaId, String correlationId,
+            String customerId, String amount, String currency, String method);
+
+    /**
      * Checks if a product exists.
      *
      * @param productId the product ID

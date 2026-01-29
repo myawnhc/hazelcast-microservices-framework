@@ -48,6 +48,16 @@ public interface OrderOperations {
     CompletableFuture<Order> confirmOrder(String orderId);
 
     /**
+     * Confirms an order as part of a saga.
+     *
+     * @param orderId the order ID
+     * @param sagaId the saga instance ID
+     * @param correlationId the correlation ID
+     * @return a future that completes with the confirmed order
+     */
+    CompletableFuture<Order> confirmOrderForSaga(String orderId, String sagaId, String correlationId);
+
+    /**
      * Cancels an order.
      *
      * @param orderId the order ID

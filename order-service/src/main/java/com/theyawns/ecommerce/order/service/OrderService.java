@@ -12,11 +12,15 @@ import com.theyawns.ecommerce.common.events.OrderCreatedEvent;
 import com.theyawns.ecommerce.order.exception.InvalidOrderStateException;
 import com.theyawns.ecommerce.order.exception.OrderNotFoundException;
 import com.theyawns.framework.controller.EventSourcingController;
+import com.theyawns.framework.controller.SagaMetadata;
 import com.theyawns.framework.event.DomainEvent;
+import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.framework.saga.SagaStateStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -45,20 +49,34 @@ public class OrderService implements OrderOperations {
 
     private static final Logger logger = LoggerFactory.getLogger(OrderService.class);
 
+    /**
+     * Default saga timeout for Order Fulfillment sagas.
+     */
+    private static final Duration SAGA_TIMEOUT = Duration.ofSeconds(60);
+
+    /**
+     * Total number of steps in the Order Fulfillment saga.
+     */
+    private static final int SAGA_TOTAL_STEPS = 4;
+
     private final EventSourcingController<Order, String, DomainEvent<Order, String>> controller;
     private final HazelcastInstance hazelcast;
+    private final SagaStateStore sagaStateStore;
 
     /**
      * Creates a new OrderService.
      *
      * @param controller the event sourcing controller for order events
      * @param hazelcast the Hazelcast instance
+     * @param sagaStateStore the saga state store for tracking distributed transactions
      */
     public OrderService(
             EventSourcingController<Order, String, DomainEvent<Order, String>> controller,
-            HazelcastInstance hazelcast) {
+            HazelcastInstance hazelcast,
+            SagaStateStore sagaStateStore) {
         this.controller = controller;
         this.hazelcast = hazelcast;
+        this.sagaStateStore = sagaStateStore;
     }
 
     /**
@@ -70,7 +88,27 @@ public class OrderService implements OrderOperations {
     @Override
     public CompletableFuture<Order> createOrder(OrderDTO dto) {
         String orderId = UUID.randomUUID().toString();
-        logger.info("Creating order with ID: {} for customer: {}", orderId, dto.getCustomerId());
+        String sagaId = UUID.randomUUID().toString();
+        UUID correlationId = UUID.randomUUID();
+
+        logger.info("Creating order with ID: {} for customer: {} (sagaId: {})",
+                orderId, dto.getCustomerId(), sagaId);
+
+        // Start the Order Fulfillment saga
+        sagaStateStore.startSaga(
+                sagaId,
+                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                correlationId.toString(),
+                SAGA_TOTAL_STEPS,
+                SAGA_TIMEOUT
+        );
+
+        // Build saga metadata for step 0
+        SagaMetadata sagaMetadata = SagaMetadata.builder()
+                .sagaId(sagaId)
+                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(SagaCompensationConfig.STEP_ORDER_CREATED)
+                .build();
 
         // Convert DTOs to domain objects
         List<OrderLineItem> lineItems = dto.getLineItems().stream()
@@ -86,9 +124,19 @@ public class OrderService implements OrderOperations {
         event.setCustomerName(dto.getCustomerName());
         event.setCustomerEmail(dto.getCustomerEmail());
 
-        return controller.handleEvent(event)
+        return controller.handleEvent(event, correlationId, sagaMetadata)
                 .thenApply(completionInfo -> {
-                    logger.debug("Order created event processed: {}", completionInfo.getEventId());
+                    logger.debug("Order created event processed: {} (sagaId: {})",
+                            completionInfo.getEventId(), sagaId);
+
+                    // Record step 0 completed in saga state store
+                    sagaStateStore.recordStepCompleted(
+                            sagaId,
+                            SagaCompensationConfig.STEP_ORDER_CREATED,
+                            SagaCompensationConfig.ORDER_CREATED,
+                            SagaCompensationConfig.ORDER_SERVICE,
+                            completionInfo.getEventId()
+                    );
 
                     // Index order by customer for getOrdersByCustomer
                     indexOrderByCustomer(dto.getCustomerId(), orderId);
@@ -159,6 +207,61 @@ public class OrderService implements OrderOperations {
         return controller.handleEvent(event)
                 .thenApply(completionInfo -> {
                     logger.debug("Order confirmed event processed: {}", completionInfo.getEventId());
+                    return getOrderOrThrow(orderId);
+                });
+    }
+
+    /**
+     * Confirms an order as part of a saga.
+     *
+     * <p>This method is called by the saga listener when a PaymentProcessed event
+     * is received. It confirms the order and records the final saga step, then
+     * marks the saga as COMPLETED.
+     *
+     * @param orderId the order ID
+     * @param sagaId the saga instance ID
+     * @param correlationId the correlation ID
+     * @return a future that completes with the confirmed order
+     * @throws OrderNotFoundException if order does not exist
+     * @throws InvalidOrderStateException if order cannot be confirmed
+     */
+    public CompletableFuture<Order> confirmOrderForSaga(
+            final String orderId, final String sagaId, final String correlationId) {
+        logger.info("Confirming order for saga: orderId={}, sagaId={}", orderId, sagaId);
+
+        Order order = getOrderOrThrow(orderId);
+
+        if (order.getStatus() != Order.Status.PENDING) {
+            throw new InvalidOrderStateException(orderId, order.getStatus().name(), "confirm");
+        }
+
+        String confirmationNumber = generateConfirmationNumber();
+        OrderConfirmedEvent event = new OrderConfirmedEvent(orderId, confirmationNumber);
+
+        SagaMetadata sagaMetadata = SagaMetadata.builder()
+                .sagaId(sagaId)
+                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(SagaCompensationConfig.STEP_ORDER_CONFIRMED)
+                .build();
+
+        return controller.handleEvent(event, UUID.fromString(correlationId), sagaMetadata)
+                .thenApply(completionInfo -> {
+                    logger.debug("Order confirmed event processed for saga: {} (sagaId: {})",
+                            completionInfo.getEventId(), sagaId);
+
+                    // Record step 3 completed - this is the final step,
+                    // so SagaState automatically transitions to COMPLETED
+                    sagaStateStore.recordStepCompleted(
+                            sagaId,
+                            SagaCompensationConfig.STEP_ORDER_CONFIRMED,
+                            SagaCompensationConfig.ORDER_CONFIRMED,
+                            SagaCompensationConfig.ORDER_SERVICE,
+                            completionInfo.getEventId()
+                    );
+
+                    logger.info("Order Fulfillment saga completed: sagaId={}, orderId={}",
+                            sagaId, orderId);
+
                     return getOrderOrThrow(orderId);
                 });
     }

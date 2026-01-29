@@ -37,6 +37,12 @@ public class StockReservedEvent extends DomainEvent<Product, String>
     private int quantity;
     private String orderId;
 
+    // Saga context fields - propagated from OrderCreated for downstream services
+    private String customerId;
+    private String amount;
+    private String currency;
+    private String method;
+
     /**
      * Default constructor for serialization.
      */
@@ -83,6 +89,12 @@ public class StockReservedEvent extends DomainEvent<Product, String>
         event.quantity = record.getInt32("quantity");
         event.orderId = record.getString("orderId");
 
+        // Saga context fields
+        event.customerId = record.getString("customerId");
+        event.amount = record.getString("amount");
+        event.currency = record.getString("currency");
+        event.method = record.getString("method");
+
         // Saga fields
         event.sagaId = record.getString("sagaId");
         event.sagaType = record.getString("sagaType");
@@ -108,6 +120,10 @@ public class StockReservedEvent extends DomainEvent<Product, String>
                 .setBoolean("isCompensating", isCompensating != null && isCompensating)
                 .setInt32("quantity", quantity)
                 .setString("orderId", orderId)
+                .setString("customerId", customerId)
+                .setString("amount", amount)
+                .setString("currency", currency)
+                .setString("method", method)
                 .build();
     }
 
@@ -157,6 +173,38 @@ public class StockReservedEvent extends DomainEvent<Product, String>
 
     public void setOrderId(String orderId) {
         this.orderId = orderId;
+    }
+
+    public String getCustomerId() {
+        return customerId;
+    }
+
+    public void setCustomerId(String customerId) {
+        this.customerId = customerId;
+    }
+
+    public String getAmount() {
+        return amount;
+    }
+
+    public void setAmount(String amount) {
+        this.amount = amount;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
+    }
+
+    public String getMethod() {
+        return method;
+    }
+
+    public void setMethod(String method) {
+        this.method = method;
     }
 
     @Override
