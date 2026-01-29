@@ -37,3 +37,14 @@ logging:
     com.hazelcast: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Saga timeout configuration
+saga:
+  timeout:
+    enabled: true
+    check-interval: 5000
+    default-deadline: 30000
+    auto-compensate: true
+    max-batch-size: 100
+    saga-types:
+      OrderFulfillment: 60000
