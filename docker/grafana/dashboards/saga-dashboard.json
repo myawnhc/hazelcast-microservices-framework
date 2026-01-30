@@ -1,0 +1,503 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Saga lifecycle, step, compensation, and timeout metrics for the eCommerce microservices platform.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Saga Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Active Sagas",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sagas_active_count",
+          "legendFormat": "Active"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "orange", "value": null },
+              { "color": "red", "value": 3 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Compensating",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sagas_compensating_count",
+          "legendFormat": "Compensating"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 4,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Total Started",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "saga_started_total",
+          "legendFormat": "Started"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 5,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Total Completed",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "saga_completed_total",
+          "legendFormat": "Completed"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "orange", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 6,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Total Compensated",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "saga_compensated_total",
+          "legendFormat": "Compensated"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 7,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Total Timed Out",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "saga_timedout_total",
+          "legendFormat": "Timed Out"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 10,
+      "title": "Saga Throughput",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 11,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Saga Start Rate (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_started_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} started"
+        },
+        {
+          "expr": "rate(saga_completed_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} completed"
+        },
+        {
+          "expr": "rate(saga_compensated_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} compensated"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 12,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Step Rate (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_steps_completed_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} steps completed"
+        },
+        {
+          "expr": "rate(saga_steps_failed_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} steps failed"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 20,
+      "title": "Saga Duration",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 21,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Saga Duration Percentiles",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "saga_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.5\"}",
+          "legendFormat": "{{sagaType}} p50"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.95\"}",
+          "legendFormat": "{{sagaType}} p95"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.99\"}",
+          "legendFormat": "{{sagaType}} p99"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 22,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Compensation Duration Percentiles",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "saga_compensation_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.5\"}",
+          "legendFormat": "{{sagaType}} p50"
+        },
+        {
+          "expr": "saga_compensation_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.95\"}",
+          "legendFormat": "{{sagaType}} p95"
+        },
+        {
+          "expr": "saga_compensation_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.99\"}",
+          "legendFormat": "{{sagaType}} p99"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 30,
+      "title": "Timeout Detection",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 31,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Timeout Detection",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_timeouts_detected_total[$__rate_interval])",
+          "legendFormat": "Timeouts detected /s"
+        },
+        {
+          "expr": "rate(saga_timeouts_compensations_triggered_total[$__rate_interval])",
+          "legendFormat": "Compensations triggered /s"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 32,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Timeout Check Duration",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_timeout_check_duration_seconds_sum[$__rate_interval]) / rate(saga_timeout_check_duration_seconds_count[$__rate_interval])",
+          "legendFormat": "Avg check duration"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 40,
+      "title": "Compensation",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "id": 41,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Compensation Operations",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_compensations_started_total[$__rate_interval])",
+          "legendFormat": "Started"
+        },
+        {
+          "expr": "rate(saga_compensations_completed_total[$__rate_interval])",
+          "legendFormat": "Completed"
+        },
+        {
+          "expr": "rate(saga_compensations_failed_total[$__rate_interval])",
+          "legendFormat": "Failed"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "id": 42,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Compensation Steps by Saga Type",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_compensation_steps_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}}"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "id": 50,
+      "title": "Success Rate",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 42 },
+      "id": 51,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Saga Success Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "saga_completed_total / (saga_completed_total + saga_compensated_total + saga_failed_total + saga_timedout_total)",
+          "legendFormat": "Success Rate"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "stacking": { "mode": "normal" }, "fillOpacity": 50 },
+          "unit": "short"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Completed" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Compensated" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Failed" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Timed Out" }, "properties": [{ "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 42 },
+      "id": 52,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Saga Outcome Distribution",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "increase(saga_completed_total[$__rate_interval])",
+          "legendFormat": "Completed"
+        },
+        {
+          "expr": "increase(saga_compensated_total[$__rate_interval])",
+          "legendFormat": "Compensated"
+        },
+        {
+          "expr": "increase(saga_failed_total[$__rate_interval])",
+          "legendFormat": "Failed"
+        },
+        {
+          "expr": "increase(saga_timedout_total[$__rate_interval])",
+          "legendFormat": "Timed Out"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["saga", "microservices", "hazelcast"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "definition": "label_values(saga_started_total, sagaType)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "sagaType",
+        "query": "label_values(saga_started_total, sagaType)",
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Saga Dashboard",
+  "uid": "saga-dashboard",
+  "version": 1
+}

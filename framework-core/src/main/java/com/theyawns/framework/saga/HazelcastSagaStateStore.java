@@ -14,7 +14,6 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -23,6 +22,10 @@ import java.util.stream.Collectors;
  * <p>Stores saga state in a distributed IMap, enabling saga tracking
  * across multiple service instances. Uses GenericRecord serialization
  * for flexibility and cluster independence.
+ *
+ * <p>Metrics are collected via {@link SagaMetrics} when a {@link MeterRegistry}
+ * is provided. Active/compensating saga gauges are registered directly against
+ * the registry for live query support.
  *
  * <p>Map configuration recommendations:
  * <pre>{@code
@@ -56,14 +59,9 @@ public class HazelcastSagaStateStore implements SagaStateStore {
 
     private final HazelcastInstance hazelcast;
     private final IMap<String, GenericRecord> sagaMap;
+    private final SagaMetrics sagaMetrics;
     private final MeterRegistry meterRegistry;
     private final String mapName;
-
-    // Metrics counters
-    private final AtomicLong sagasStarted = new AtomicLong(0);
-    private final AtomicLong sagasCompleted = new AtomicLong(0);
-    private final AtomicLong sagasCompensated = new AtomicLong(0);
-    private final AtomicLong sagasFailed = new AtomicLong(0);
 
     /**
      * Creates a new HazelcastSagaStateStore with default map name.
@@ -86,21 +84,39 @@ public class HazelcastSagaStateStore implements SagaStateStore {
                                     String mapName) {
         this.hazelcast = hazelcast;
         this.meterRegistry = meterRegistry;
+        this.sagaMetrics = meterRegistry != null ? new SagaMetrics(meterRegistry) : null;
         this.mapName = mapName;
         this.sagaMap = hazelcast.getMap(mapName);
 
-        registerMetrics();
+        registerLiveGauges();
         logger.info("Initialized HazelcastSagaStateStore with map: {}", mapName);
     }
 
-    private void registerMetrics() {
-        if (meterRegistry == null) return;
+    /**
+     * Creates a new HazelcastSagaStateStore with an existing SagaMetrics instance.
+     *
+     * @param hazelcast the Hazelcast instance
+     * @param sagaMetrics the saga metrics collector (may be null)
+     * @param mapName the name of the IMap to use
+     */
+    public HazelcastSagaStateStore(HazelcastInstance hazelcast, SagaMetrics sagaMetrics,
+                                    String mapName) {
+        this.hazelcast = hazelcast;
+        this.sagaMetrics = sagaMetrics;
+        this.meterRegistry = sagaMetrics != null ? sagaMetrics.getMeterRegistry() : null;
+        this.mapName = mapName;
+        this.sagaMap = hazelcast.getMap(mapName);
 
-        meterRegistry.gauge("sagas.started.total", sagasStarted);
-        meterRegistry.gauge("sagas.completed.total", sagasCompleted);
-        meterRegistry.gauge("sagas.compensated.total", sagasCompensated);
-        meterRegistry.gauge("sagas.failed.total", sagasFailed);
+        registerLiveGauges();
+        logger.info("Initialized HazelcastSagaStateStore with map: {}", mapName);
+    }
 
+    private void registerLiveGauges() {
+        if (meterRegistry == null) {
+            return;
+        }
+
+        // Live gauges that query the map directly for current counts
         meterRegistry.gauge("sagas.active.count", Tags.empty(), this,
                 store -> store.countByStatus(SagaStatus.IN_PROGRESS) +
                          store.countByStatus(SagaStatus.STARTED));
@@ -119,8 +135,9 @@ public class HazelcastSagaStateStore implements SagaStateStore {
         SagaState state = SagaState.start(sagaId, sagaType, correlationId, totalSteps, timeout);
         sagaMap.set(sagaId, state.toGenericRecord());
 
-        sagasStarted.incrementAndGet();
-        recordMetric("sagas.started", sagaType);
+        if (sagaMetrics != null) {
+            sagaMetrics.recordSagaStarted(sagaType);
+        }
 
         logger.info("Saga started: {} type: {}", sagaId, sagaType);
         return state;
@@ -135,24 +152,16 @@ public class HazelcastSagaStateStore implements SagaStateStore {
         sagaMap.set(sagaId, completed.toGenericRecord());
 
         // Update metrics
-        switch (outcome) {
-            case COMPLETED -> {
-                sagasCompleted.incrementAndGet();
-                recordMetric("sagas.completed", state.getSagaType());
+        if (sagaMetrics != null) {
+            switch (outcome) {
+                case COMPLETED -> sagaMetrics.recordSagaCompleted(state.getSagaType());
+                case COMPENSATED -> sagaMetrics.recordSagaCompensated(state.getSagaType());
+                case TIMED_OUT -> sagaMetrics.recordSagaTimedOut(state.getSagaType());
+                case FAILED -> sagaMetrics.recordSagaFailed(state.getSagaType());
+                default -> { }
             }
-            case COMPENSATED -> {
-                sagasCompensated.incrementAndGet();
-                recordMetric("sagas.compensated", state.getSagaType());
-            }
-            case FAILED, TIMED_OUT -> {
-                sagasFailed.incrementAndGet();
-                recordMetric("sagas.failed", state.getSagaType());
-            }
-            default -> { }
+            sagaMetrics.recordSagaDuration(state.getSagaType(), completed.getDuration());
         }
-
-        // Record duration
-        recordDuration(state.getSagaType(), completed.getDuration());
 
         logger.info("Saga completed: {} outcome: {} duration: {}ms",
                 sagaId, outcome, completed.getDuration().toMillis());
@@ -171,13 +180,16 @@ public class HazelcastSagaStateStore implements SagaStateStore {
         SagaState updated = state.recordStepCompleted(stepNumber, eventType, service, eventId);
         sagaMap.set(sagaId, updated.toGenericRecord());
 
-        recordMetric("saga.steps.completed", state.getSagaType());
+        if (sagaMetrics != null) {
+            sagaMetrics.recordStepCompleted(state.getSagaType());
 
-        // Check if saga is now complete
-        if (updated.getStatus() == SagaStatus.COMPLETED) {
-            sagasCompleted.incrementAndGet();
-            recordMetric("sagas.completed", state.getSagaType());
-            recordDuration(state.getSagaType(), updated.getDuration());
+            // Check if saga is now complete
+            if (updated.getStatus() == SagaStatus.COMPLETED) {
+                sagaMetrics.recordSagaCompleted(state.getSagaType());
+                sagaMetrics.recordSagaDuration(state.getSagaType(), updated.getDuration());
+                logger.info("Saga completed via final step: {}", sagaId);
+            }
+        } else if (updated.getStatus() == SagaStatus.COMPLETED) {
             logger.info("Saga completed via final step: {}", sagaId);
         }
 
@@ -194,7 +206,9 @@ public class HazelcastSagaStateStore implements SagaStateStore {
         SagaState updated = state.recordStepFailed(stepNumber, eventType, service, reason);
         sagaMap.set(sagaId, updated.toGenericRecord());
 
-        recordMetric("saga.steps.failed", state.getSagaType());
+        if (sagaMetrics != null) {
+            sagaMetrics.recordStepFailed(state.getSagaType());
+        }
 
         logger.info("Saga step failed, compensation started: saga={} step={}", sagaId, stepNumber);
         return updated;
@@ -210,7 +224,9 @@ public class HazelcastSagaStateStore implements SagaStateStore {
         SagaState updated = state.startCompensation();
         sagaMap.set(sagaId, updated.toGenericRecord());
 
-        recordMetric("sagas.compensation.started", state.getSagaType());
+        if (sagaMetrics != null) {
+            sagaMetrics.recordCompensationStarted(state.getSagaType());
+        }
         return updated;
     }
 
@@ -224,7 +240,9 @@ public class HazelcastSagaStateStore implements SagaStateStore {
         SagaState updated = state.recordCompensationStep(stepNumber, eventType, service);
         sagaMap.set(sagaId, updated.toGenericRecord());
 
-        recordMetric("saga.compensation.steps.completed", state.getSagaType());
+        if (sagaMetrics != null) {
+            sagaMetrics.recordCompensationStep(state.getSagaType());
+        }
         return updated;
     }
 
@@ -305,6 +323,21 @@ public class HazelcastSagaStateStore implements SagaStateStore {
         return sagaMap.size();
     }
 
+    @Override
+    public List<SagaState> findActiveSagas() {
+        Collection<GenericRecord> records = sagaMap.values(
+                Predicates.or(
+                        Predicates.equal("status", SagaStatus.STARTED.name()),
+                        Predicates.equal("status", SagaStatus.IN_PROGRESS.name()),
+                        Predicates.equal("status", SagaStatus.COMPENSATING.name())
+                )
+        );
+
+        return records.stream()
+                .map(SagaState::fromGenericRecord)
+                .collect(Collectors.toList());
+    }
+
     // ========== Maintenance ==========
 
     @Override
@@ -344,19 +377,6 @@ public class HazelcastSagaStateStore implements SagaStateStore {
                 .orElseThrow(() -> new IllegalArgumentException("Saga not found: " + sagaId));
     }
 
-    private void recordMetric(String name, String sagaType) {
-        if (meterRegistry != null) {
-            meterRegistry.counter(name, "sagaType", sagaType).increment();
-        }
-    }
-
-    private void recordDuration(String sagaType, Duration duration) {
-        if (meterRegistry != null) {
-            meterRegistry.timer("saga.duration", "sagaType", sagaType)
-                    .record(duration);
-        }
-    }
-
     /**
      * Returns the underlying Hazelcast map.
      * Useful for advanced queries or testing.
@@ -374,5 +394,14 @@ public class HazelcastSagaStateStore implements SagaStateStore {
      */
     public String getMapName() {
         return mapName;
+    }
+
+    /**
+     * Returns the SagaMetrics instance, if available.
+     *
+     * @return the saga metrics, or null if no meter registry was provided
+     */
+    public SagaMetrics getSagaMetrics() {
+        return sagaMetrics;
     }
 }

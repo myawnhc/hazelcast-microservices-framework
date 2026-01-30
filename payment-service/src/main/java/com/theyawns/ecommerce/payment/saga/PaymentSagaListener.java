@@ -67,8 +67,10 @@ public class PaymentSagaListener {
     /**
      * Listener for StockReserved events.
      * When stock is reserved as part of a saga, processes the payment.
+     *
+     * <p>Package-private for testability.
      */
-    private class StockReservedListener implements MessageListener<GenericRecord> {
+    class StockReservedListener implements MessageListener<GenericRecord> {
 
         @Override
         public void onMessage(Message<GenericRecord> message) {
@@ -120,8 +122,10 @@ public class PaymentSagaListener {
     /**
      * Listener for PaymentRefundRequested events.
      * When saga compensation requires a refund, processes the refund.
+     *
+     * <p>Package-private for testability.
      */
-    private class PaymentRefundRequestedListener implements MessageListener<GenericRecord> {
+    class PaymentRefundRequestedListener implements MessageListener<GenericRecord> {
 
         @Override
         public void onMessage(Message<GenericRecord> message) {
