@@ -127,6 +127,8 @@ services:
       - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=account-service
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -160,6 +162,8 @@ services:
       - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=inventory-service
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -193,6 +197,8 @@ services:
       - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
       - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=order-service
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -211,9 +217,68 @@ services:
         limits:
           memory: 512M
 
+  payment-service:
+    build:
+      context: ../payment-service
+      dockerfile: Dockerfile
+    container_name: payment-service
+    hostname: payment-service
+    networks:
+      - ecommerce-network
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
+      - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=payment-service
+    depends_on:
+      hazelcast-1:
+        condition: service_healthy
+      hazelcast-2:
+        condition: service_healthy
+      hazelcast-3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
   # ============================================
   # Monitoring
   # ============================================
+
+  management-center:
+    image: hazelcast/management-center:5.6.0
+    container_name: management-center
+    hostname: management-center
+    networks:
+      - ecommerce-network
+    ports:
+      - "8080:8080"
+    environment:
+      - MC_DEFAULT_CLUSTER=ecommerce-cluster
+      - MC_DEFAULT_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
+    depends_on:
+      hazelcast-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   prometheus:
     image: prom/prometheus:v2.48.0
@@ -234,6 +299,28 @@ services:
       - '--web.enable-lifecycle'
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: jaeger
+    hostname: jaeger
+    networks:
+      - ecommerce-network
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC receiver
+      - "4318:4318"     # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:16687"]
       interval: 30s
       timeout: 10s
       retries: 3

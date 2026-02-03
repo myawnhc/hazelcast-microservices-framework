@@ -287,13 +287,26 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
                 })
                 .setName("4-update-materialized-view");
 
-        // Stage 5: PUBLISH - Mark as published (actual event bus not used in pipeline)
+        // Stage 5: PUBLISH - Publish event to event-type-specific ITopic
+        // Saga listeners subscribe to topics named by event type (e.g., "OrderCreated")
+        EventTopicPublisherServiceCreator publisherCreator = new EventTopicPublisherServiceCreator();
+        ServiceFactory<?, EventTopicPublisherServiceCreator.TopicPublisher> publisherFactory = ServiceFactories
+                .<EventTopicPublisherServiceCreator.TopicPublisher>sharedService(publisherCreator)
+                .toNonCooperative();
+
         StreamStage<EventContext<K>> published = viewUpdated
-                .map(ctx -> {
+                .mapUsingService(publisherFactory, (publisher, ctx) -> {
                     if (!ctx.viewUpdated) {
                         return ctx;
                     }
-                    return ctx.withPublished(true, Instant.now());
+                    try {
+                        publisher.publish(ctx.eventType, ctx.eventRecord);
+                        return ctx.withPublished(true, Instant.now());
+                    } catch (Exception e) {
+                        logger.warn("Failed to publish event {} to topic: {}",
+                                ctx.eventId, ctx.eventType, e);
+                        return ctx.withPublished(false, Instant.now());
+                    }
                 })
                 .setName("5-publish-to-subscribers");
 

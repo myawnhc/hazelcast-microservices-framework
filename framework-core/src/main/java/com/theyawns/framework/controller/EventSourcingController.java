@@ -11,9 +11,11 @@ import com.theyawns.framework.pipeline.EventSourcingPipeline;
 import com.theyawns.framework.pipeline.HazelcastEventBus;
 import com.theyawns.framework.store.EventStore;
 import com.theyawns.framework.store.PartitionedSequenceKey;
+import com.theyawns.framework.tracing.EventSpanDecorator;
 import com.theyawns.framework.view.HazelcastViewStore;
 import com.theyawns.framework.view.ViewUpdater;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.tracing.Span;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +26,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Main controller for the event sourcing framework.
@@ -84,12 +87,14 @@ public class EventSourcingController<D extends DomainObject<K>,
     private final Class<? extends ViewUpdater<K>> viewUpdaterClass;
     private final IMap<PartitionedSequenceKey<K>, GenericRecord> pendingEventsMap;
     private final MeterRegistry meterRegistry;
+    private final EventSpanDecorator eventSpanDecorator;
     private final EventSourcingPipeline<D, K, E> pipeline;
 
     /**
      * Tracks pending completions for async notification.
+     * Maps the event's PartitionedSequenceKey to both the future and the pre-built CompletionInfo.
      */
-    private final ConcurrentMap<PartitionedSequenceKey<K>, CompletableFuture<CompletionInfo<K>>> pendingCompletions;
+    private final ConcurrentMap<PartitionedSequenceKey<K>, PendingCompletion<K>> pendingCompletions;
 
     /**
      * Private constructor - use builder.
@@ -101,11 +106,29 @@ public class EventSourcingController<D extends DomainObject<K>,
         this.viewUpdater = builder.viewUpdater;
         this.viewUpdaterClass = builder.viewUpdaterClass;
         this.meterRegistry = builder.meterRegistry;
+        this.eventSpanDecorator = builder.eventSpanDecorator;
 
         // Initialize Hazelcast structures
         this.sequenceGenerator = hazelcast.getFlakeIdGenerator(domainName + SEQUENCE_GEN_SUFFIX);
         this.pendingEventsMap = hazelcast.getMap(domainName + PENDING_SUFFIX);
         this.pendingCompletions = new ConcurrentHashMap<>();
+
+        // Listen for pipeline completions on the completions map
+        IMap<PartitionedSequenceKey<K>, GenericRecord> completionsMap =
+                hazelcast.getMap(domainName + "_COMPLETIONS");
+        completionsMap.addEntryListener(
+                (com.hazelcast.map.listener.EntryAddedListener<PartitionedSequenceKey<K>, GenericRecord>)
+                        event -> {
+                            PartitionedSequenceKey<K> key = event.getKey();
+                            PendingCompletion<K> pending = pendingCompletions.remove(key);
+                            if (pending != null) {
+                                pending.completionInfo.markCompleted();
+                                pending.future.complete(pending.completionInfo);
+                                logger.debug("Pipeline completed for event: {} (key: {})",
+                                        pending.completionInfo.getEventType(), key);
+                            }
+                        },
+                true);
 
         // Build the pipeline
         EventSourcingPipeline.Builder<D, K, E> pipelineBuilder =
@@ -179,8 +202,17 @@ public class EventSourcingController<D extends DomainObject<K>,
         Objects.requireNonNull(event, "event cannot be null");
         Objects.requireNonNull(correlationId, "correlationId cannot be null");
 
+        // Start tracing span if decorator is available
+        Span span = null;
+        if (eventSpanDecorator != null) {
+            // Set metadata first so span captures it
+            event.setCorrelationId(correlationId.toString());
+            event.setSource(domainName);
+            span = eventSpanDecorator.startEventSpan(event);
+        }
+
         try {
-            // Set metadata
+            // Set metadata (idempotent if already set above)
             event.setCorrelationId(correlationId.toString());
             event.setSource(domainName);
             event.setSubmittedAt(Instant.now());
@@ -202,7 +234,7 @@ public class EventSourcingController<D extends DomainObject<K>,
                     psk, correlationId, event.getEventType(), event.getEventId());
 
             CompletableFuture<CompletionInfo<K>> future = new CompletableFuture<>();
-            pendingCompletions.put(psk, future);
+            pendingCompletions.put(psk, new PendingCompletion<>(future, completionInfo));
 
             // Write to pending events map (TRIGGERS PIPELINE)
             GenericRecord eventRecord = event.toGenericRecord();
@@ -217,17 +249,25 @@ public class EventSourcingController<D extends DomainObject<K>,
             logger.debug("Event submitted: {} (key: {}, correlation: {}, sequence: {})",
                     event.getEventType(), event.getKey(), correlationId, sequence);
 
-            // For now, complete immediately (pipeline completion tracking to be enhanced)
-            // In a full implementation, the pipeline would call back to complete the future
-            completionInfo.markCompleted();
-            future.complete(completionInfo);
-            pendingCompletions.remove(psk);
+            // End tracing span on success (covers submission; pipeline stages have own spans)
+            if (eventSpanDecorator != null) {
+                eventSpanDecorator.endSpan(span);
+            }
 
-            return future;
+            // Future completes when the pipeline writes to the completions map
+            // (via the EntryAddedListener registered in constructor).
+            // Add a safety timeout to avoid hanging indefinitely if the pipeline fails.
+            return future.orTimeout(30, TimeUnit.SECONDS);
 
         } catch (Exception e) {
             logger.error("Failed to handle event: {} for key: {}",
                     event.getEventType(), event.getKey(), e);
+
+            // Record error in tracing span
+            if (eventSpanDecorator != null) {
+                eventSpanDecorator.recordError(span, e);
+                eventSpanDecorator.endSpan(span);
+            }
 
             meterRegistry.counter("eventsourcing.events.failed",
                     "eventType", event.getEventType(),
@@ -381,6 +421,7 @@ public class EventSourcingController<D extends DomainObject<K>,
         private Class<? extends ViewUpdater<K>> viewUpdaterClass;
         private HazelcastEventBus<D, K> eventBus;
         private MeterRegistry meterRegistry;
+        private EventSpanDecorator eventSpanDecorator;
 
         /**
          * Sets the Hazelcast instance.
@@ -461,6 +502,17 @@ public class EventSourcingController<D extends DomainObject<K>,
         }
 
         /**
+         * Sets the event span decorator for distributed tracing (optional).
+         *
+         * @param eventSpanDecorator the span decorator
+         * @return this builder
+         */
+        public Builder<D, K, E> eventSpanDecorator(EventSpanDecorator eventSpanDecorator) {
+            this.eventSpanDecorator = eventSpanDecorator;
+            return this;
+        }
+
+        /**
          * Builds the EventSourcingController.
          *
          * @return the configured controller
@@ -475,6 +527,23 @@ public class EventSourcingController<D extends DomainObject<K>,
             Objects.requireNonNull(meterRegistry, "meterRegistry is required");
 
             return new EventSourcingController<>(this);
+        }
+    }
+
+    // ==================== Internal Helper ====================
+
+    /**
+     * Pairs a CompletableFuture with its pre-built CompletionInfo for async resolution
+     * when the pipeline signals completion via the completions map.
+     */
+    private static class PendingCompletion<K extends Comparable<K>> {
+
+        final CompletableFuture<CompletionInfo<K>> future;
+        final CompletionInfo<K> completionInfo;
+
+        PendingCompletion(CompletableFuture<CompletionInfo<K>> future, CompletionInfo<K> completionInfo) {
+            this.future = future;
+            this.completionInfo = completionInfo;
         }
     }
 }

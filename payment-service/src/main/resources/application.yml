@@ -28,6 +28,13 @@ management:
         enabled: true
     tags:
       application: ${spring.application.name}
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
 
 # Logging configuration
 logging:

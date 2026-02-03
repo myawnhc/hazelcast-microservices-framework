@@ -47,6 +47,16 @@ scrape_configs:
         target_label: instance
         replacement: 'order-service'
 
+  # Payment Service
+  - job_name: 'payment-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['payment-service:8084']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'payment-service'
+
   # Hazelcast Nodes (via REST API metrics)
   - job_name: 'hazelcast'
     metrics_path: '/hazelcast/rest/cluster'

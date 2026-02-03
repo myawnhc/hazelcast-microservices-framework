@@ -8,9 +8,12 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.ecommerce.common.events.PaymentRefundedEvent;
 import com.theyawns.ecommerce.common.events.StockReservedEvent;
 import com.theyawns.ecommerce.payment.service.PaymentOperations;
+import com.theyawns.framework.tracing.EventSpanDecorator;
+import io.micrometer.tracing.Span;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -36,6 +39,7 @@ public class PaymentSagaListener {
 
     private final PaymentOperations paymentService;
     private final HazelcastInstance hazelcast;
+    private EventSpanDecorator eventSpanDecorator;
 
     /**
      * Creates a new PaymentSagaListener.
@@ -46,6 +50,16 @@ public class PaymentSagaListener {
     public PaymentSagaListener(PaymentOperations paymentService, HazelcastInstance hazelcast) {
         this.paymentService = paymentService;
         this.hazelcast = hazelcast;
+    }
+
+    /**
+     * Sets the event span decorator for distributed tracing (optional).
+     *
+     * @param eventSpanDecorator the span decorator
+     */
+    @Autowired(required = false)
+    public void setEventSpanDecorator(EventSpanDecorator eventSpanDecorator) {
+        this.eventSpanDecorator = eventSpanDecorator;
     }
 
     /**
@@ -87,6 +101,13 @@ public class PaymentSagaListener {
 
             logger.info("Received StockReserved saga event: orderId={}, sagaId={}", orderId, sagaId);
 
+            Span span = null;
+            if (eventSpanDecorator != null) {
+                span = eventSpanDecorator.startSagaSpan("StockReserved", sagaId,
+                        "OrderFulfillment", 2);
+            }
+            final Span currentSpan = span;
+
             // Extract payment details from the event context
             // In a real system, these would come from the order or a shared saga context
             String customerId = record.getString("customerId");
@@ -107,14 +128,24 @@ public class PaymentSagaListener {
                     if (error != null) {
                         logger.error("Failed to process saga payment for order: {} (sagaId: {})",
                                 orderId, sagaId, error);
+                        if (eventSpanDecorator != null) {
+                            eventSpanDecorator.recordError(currentSpan, error);
+                        }
                     } else {
                         logger.info("Saga payment completed: paymentId={}, status={}, orderId={}, sagaId={}",
                                 payment.getPaymentId(), payment.getStatus(), orderId, sagaId);
+                    }
+                    if (eventSpanDecorator != null) {
+                        eventSpanDecorator.endSpan(currentSpan);
                     }
                 });
             } catch (Exception e) {
                 logger.error("Error initiating saga payment for order: {} (sagaId: {})",
                         orderId, sagaId, e);
+                if (eventSpanDecorator != null) {
+                    eventSpanDecorator.recordError(currentSpan, e);
+                    eventSpanDecorator.endSpan(currentSpan);
+                }
             }
         }
     }
@@ -142,6 +173,13 @@ public class PaymentSagaListener {
 
             logger.info("Received PaymentRefundRequested: paymentId={}, sagaId={}", paymentId, sagaId);
 
+            Span span = null;
+            if (eventSpanDecorator != null) {
+                span = eventSpanDecorator.startSagaSpan("PaymentRefundRequested",
+                        sagaId != null ? sagaId : "unknown", "OrderFulfillment", 2);
+            }
+            final Span currentSpan = span;
+
             try {
                 paymentService.refundPaymentForSaga(
                         paymentId,
@@ -152,14 +190,24 @@ public class PaymentSagaListener {
                     if (error != null) {
                         logger.error("Failed to refund payment {} for saga: {}",
                                 paymentId, sagaId, error);
+                        if (eventSpanDecorator != null) {
+                            eventSpanDecorator.recordError(currentSpan, error);
+                        }
                     } else {
                         logger.info("Saga payment refunded: paymentId={}, sagaId={}",
                                 paymentId, sagaId);
+                    }
+                    if (eventSpanDecorator != null) {
+                        eventSpanDecorator.endSpan(currentSpan);
                     }
                 });
             } catch (Exception e) {
                 logger.error("Error initiating saga refund for payment: {} (sagaId: {})",
                         paymentId, sagaId, e);
+                if (eventSpanDecorator != null) {
+                    eventSpanDecorator.recordError(currentSpan, e);
+                    eventSpanDecorator.endSpan(currentSpan);
+                }
             }
         }
     }

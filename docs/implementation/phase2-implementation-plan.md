@@ -72,6 +72,14 @@
 ```yaml
 # docker-compose additions
 services:
+  management-center:
+    image: hazelcast/management-center:5.6.0
+    ports:
+      - "8080:8080"   # Management Center UI
+    environment:
+      - MC_DEFAULT_CLUSTER=ecommerce-cluster
+      - MC_DEFAULT_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
+
   jaeger:
     image: jaegertracing/all-in-one:1.54
     ports:

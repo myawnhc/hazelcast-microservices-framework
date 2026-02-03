@@ -23,10 +23,10 @@ This directory contains Docker configuration for running the complete Hazelcast 
 │  │   :8081      │  │   :8082      │  │   :8083      │          │
 │  └──────────────┘  └──────────────┘  └──────────────┘          │
 │                                                                  │
-│  ┌──────────────┐                                               │
-│  │  prometheus  │                                               │
-│  │   :9090      │                                               │
-│  └──────────────┘                                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  prometheus  │  │    jaeger    │  │  mgmt-center │          │
+│  │   :9090      │  │   :16686    │  │   :8080      │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -104,10 +104,13 @@ For detailed walkthrough instructions, see [docs/demo/demo-walkthrough.md](../do
 | account-service | 8081 | Customer management | http://localhost:8081/actuator/health |
 | inventory-service | 8082 | Product/stock management | http://localhost:8082/actuator/health |
 | order-service | 8083 | Order management | http://localhost:8083/actuator/health |
+| payment-service | 8084 | Payment processing | http://localhost:8084/actuator/health |
 | hazelcast-1 | 5701 | Hazelcast cluster node 1 | http://localhost:5701/hazelcast/health |
 | hazelcast-2 | 5702 | Hazelcast cluster node 2 | http://localhost:5702/hazelcast/health |
 | hazelcast-3 | 5703 | Hazelcast cluster node 3 | http://localhost:5703/hazelcast/health |
+| management-center | 8080 | Hazelcast cluster monitoring UI | http://localhost:8080 |
 | prometheus | 9090 | Metrics collection | http://localhost:9090 |
+| jaeger | 16686 | Distributed tracing UI | http://localhost:16686 |
 
 ## API Examples
 
@@ -183,10 +186,24 @@ The stack is optimized to run on a laptop with 8GB RAM:
 | account-service | 512 MB |
 | inventory-service | 512 MB |
 | order-service | 512 MB |
+| payment-service | 512 MB |
+| management-center | 256 MB |
 | prometheus | 256 MB |
-| **Total** | **~3.5 GB** |
+| jaeger | 256 MB |
+| **Total** | **~4.5 GB** |
 
 ## Monitoring
+
+### Hazelcast Management Center
+
+Access at http://localhost:8080
+
+Management Center auto-connects to the `ecommerce-cluster` on startup. It provides:
+- Cluster member status and health
+- Map browser (view PENDING, ES, VIEW, and COMPLETIONS maps)
+- Jet job monitoring (event sourcing pipelines)
+- Memory and partition distribution
+- Real-time cluster metrics
 
 ### Prometheus Metrics
 
@@ -196,6 +213,12 @@ Useful queries:
 - `jvm_memory_used_bytes` - JVM memory usage
 - `http_server_requests_seconds_count` - HTTP request counts
 - `events_submitted_total` - Event sourcing metrics
+
+### Jaeger Tracing
+
+Access Jaeger UI at http://localhost:16686
+
+View distributed traces for event processing and saga flows across services.
 
 ### Service Health
 
@@ -235,11 +258,13 @@ curl -s http://localhost:5701/hazelcast/rest/cluster | jq
 docker/
 ├── docker-compose.yml      # Main orchestration file
 ├── hazelcast/
-│   └── hazelcast.yaml      # Hazelcast cluster configuration
+│   └── hazelcast-docker.yaml  # Hazelcast cluster configuration
 ├── prometheus/
 │   └── prometheus.yml      # Prometheus scrape configuration
 └── README.md               # This file
 ```
+
+Management Center and Jaeger are configured via environment variables in docker-compose.yml (no separate config files needed).
 
 ## Customization
 

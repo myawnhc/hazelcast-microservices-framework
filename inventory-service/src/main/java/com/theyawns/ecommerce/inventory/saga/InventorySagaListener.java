@@ -8,9 +8,12 @@ import com.hazelcast.topic.MessageListener;
 import com.theyawns.ecommerce.common.events.OrderCreatedEvent;
 import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.inventory.service.ProductService;
+import com.theyawns.framework.tracing.EventSpanDecorator;
+import io.micrometer.tracing.Span;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -36,6 +39,7 @@ public class InventorySagaListener {
 
     private final ProductService inventoryService;
     private final HazelcastInstance hazelcast;
+    private EventSpanDecorator eventSpanDecorator;
 
     /**
      * Creates a new InventorySagaListener.
@@ -46,6 +50,16 @@ public class InventorySagaListener {
     public InventorySagaListener(ProductService inventoryService, HazelcastInstance hazelcast) {
         this.inventoryService = inventoryService;
         this.hazelcast = hazelcast;
+    }
+
+    /**
+     * Sets the event span decorator for distributed tracing (optional).
+     *
+     * @param eventSpanDecorator the span decorator
+     */
+    @Autowired(required = false)
+    public void setEventSpanDecorator(EventSpanDecorator eventSpanDecorator) {
+        this.eventSpanDecorator = eventSpanDecorator;
     }
 
     /**
@@ -90,6 +104,13 @@ public class InventorySagaListener {
 
             logger.info("Received OrderCreated saga event: orderId={}, sagaId={}", orderId, sagaId);
 
+            Span span = null;
+            if (eventSpanDecorator != null) {
+                span = eventSpanDecorator.startSagaSpan("OrderCreated", sagaId,
+                        "OrderFulfillment", 1);
+            }
+            final Span currentSpan = span;
+
             // Extract order total and payment context for downstream payment processing
             String total = record.getString("total");
             String currency = "USD"; // Default currency
@@ -99,6 +120,9 @@ public class InventorySagaListener {
             GenericRecord[] lineItems = record.getArrayOfGenericRecord("lineItems");
             if (lineItems == null || lineItems.length == 0) {
                 logger.warn("OrderCreated event has no line items: orderId={}, sagaId={}", orderId, sagaId);
+                if (eventSpanDecorator != null) {
+                    eventSpanDecorator.endSpan(currentSpan);
+                }
                 return;
             }
 
@@ -122,16 +146,24 @@ public class InventorySagaListener {
                         if (error != null) {
                             logger.error("Failed to reserve stock for product {} in saga: {} (orderId: {})",
                                     productId, sagaId, orderId, error);
-                            // Compensation will be handled in Day 7
+                            if (eventSpanDecorator != null) {
+                                eventSpanDecorator.recordError(currentSpan, error);
+                            }
                         } else {
                             logger.info("Stock reserved for saga: productId={}, quantity={}, orderId={}, sagaId={}",
                                     productId, quantity, orderId, sagaId);
+                        }
+                        if (eventSpanDecorator != null) {
+                            eventSpanDecorator.endSpan(currentSpan);
                         }
                     });
                 } catch (Exception e) {
                     logger.error("Error initiating stock reservation for product {} in saga: {} (orderId: {})",
                             productId, sagaId, orderId, e);
-                    // Compensation will be handled in Day 7
+                    if (eventSpanDecorator != null) {
+                        eventSpanDecorator.recordError(currentSpan, e);
+                        eventSpanDecorator.endSpan(currentSpan);
+                    }
                 }
             }
         }
@@ -166,6 +198,13 @@ public class InventorySagaListener {
             logger.info("Received PaymentFailed saga event: orderId={}, sagaId={}, reason={}",
                     orderId, sagaId, failureReason);
 
+            Span span = null;
+            if (eventSpanDecorator != null) {
+                span = eventSpanDecorator.startSagaSpan("PaymentFailed", sagaId,
+                        "OrderFulfillment", 1);
+            }
+            final Span currentSpan = span;
+
             String reason = "Payment failed: " + failureReason;
 
             try {
@@ -178,14 +217,24 @@ public class InventorySagaListener {
                     if (error != null) {
                         logger.error("Failed to release stock for saga compensation: orderId={}, sagaId={}",
                                 orderId, sagaId, error);
+                        if (eventSpanDecorator != null) {
+                            eventSpanDecorator.recordError(currentSpan, error);
+                        }
                     } else {
                         logger.info("Stock released for saga compensation: orderId={}, sagaId={}",
                                 orderId, sagaId);
+                    }
+                    if (eventSpanDecorator != null) {
+                        eventSpanDecorator.endSpan(currentSpan);
                     }
                 });
             } catch (Exception e) {
                 logger.error("Error initiating stock release for saga compensation: orderId={}, sagaId={}",
                         orderId, sagaId, e);
+                if (eventSpanDecorator != null) {
+                    eventSpanDecorator.recordError(currentSpan, e);
+                    eventSpanDecorator.endSpan(currentSpan);
+                }
             }
         }
     }

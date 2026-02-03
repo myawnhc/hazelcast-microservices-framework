@@ -8,9 +8,12 @@ import com.hazelcast.topic.MessageListener;
 import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.common.events.PaymentProcessedEvent;
 import com.theyawns.ecommerce.order.service.OrderOperations;
+import com.theyawns.framework.tracing.EventSpanDecorator;
+import io.micrometer.tracing.Span;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -37,6 +40,7 @@ public class OrderSagaListener {
 
     private final OrderOperations orderService;
     private final HazelcastInstance hazelcast;
+    private EventSpanDecorator eventSpanDecorator;
 
     /**
      * Creates a new OrderSagaListener.
@@ -47,6 +51,16 @@ public class OrderSagaListener {
     public OrderSagaListener(OrderOperations orderService, HazelcastInstance hazelcast) {
         this.orderService = orderService;
         this.hazelcast = hazelcast;
+    }
+
+    /**
+     * Sets the event span decorator for distributed tracing (optional).
+     *
+     * @param eventSpanDecorator the span decorator
+     */
+    @Autowired(required = false)
+    public void setEventSpanDecorator(EventSpanDecorator eventSpanDecorator) {
+        this.eventSpanDecorator = eventSpanDecorator;
     }
 
     /**
@@ -89,21 +103,37 @@ public class OrderSagaListener {
 
             logger.info("Received PaymentProcessed saga event: orderId={}, sagaId={}", orderId, sagaId);
 
+            Span span = null;
+            if (eventSpanDecorator != null) {
+                span = eventSpanDecorator.startSagaSpan("PaymentProcessed", sagaId,
+                        "OrderFulfillment", 3);
+            }
+            final Span currentSpan = span;
+
             try {
                 orderService.confirmOrderForSaga(orderId, sagaId, correlationId)
                         .whenComplete((order, error) -> {
                             if (error != null) {
                                 logger.error("Failed to confirm order {} for saga: {}",
                                         orderId, sagaId, error);
-                                // Compensation will be handled in Day 7
+                                if (eventSpanDecorator != null) {
+                                    eventSpanDecorator.recordError(currentSpan, error);
+                                }
                             } else {
                                 logger.info("Order confirmed via saga: orderId={}, status={}, sagaId={}",
                                         orderId, order.getStatus(), sagaId);
+                            }
+                            if (eventSpanDecorator != null) {
+                                eventSpanDecorator.endSpan(currentSpan);
                             }
                         });
             } catch (Exception e) {
                 logger.error("Error initiating order confirmation for saga: {} (orderId: {})",
                         sagaId, orderId, e);
+                if (eventSpanDecorator != null) {
+                    eventSpanDecorator.recordError(currentSpan, e);
+                    eventSpanDecorator.endSpan(currentSpan);
+                }
             }
         }
     }
@@ -134,6 +164,13 @@ public class OrderSagaListener {
             logger.info("Received PaymentFailed saga event for order cancellation: orderId={}, sagaId={}, reason={}",
                     orderId, sagaId, failureReason);
 
+            Span span = null;
+            if (eventSpanDecorator != null) {
+                span = eventSpanDecorator.startSagaSpan("PaymentFailed", sagaId,
+                        "OrderFulfillment", 3);
+            }
+            final Span currentSpan = span;
+
             try {
                 orderService.cancelOrderForSaga(
                         orderId,
@@ -144,14 +181,24 @@ public class OrderSagaListener {
                     if (error != null) {
                         logger.error("Failed to cancel order {} for saga compensation: {}",
                                 orderId, sagaId, error);
+                        if (eventSpanDecorator != null) {
+                            eventSpanDecorator.recordError(currentSpan, error);
+                        }
                     } else {
                         logger.info("Order cancelled via saga compensation: orderId={}, status={}, sagaId={}",
                                 orderId, order.getStatus(), sagaId);
+                    }
+                    if (eventSpanDecorator != null) {
+                        eventSpanDecorator.endSpan(currentSpan);
                     }
                 });
             } catch (Exception e) {
                 logger.error("Error initiating order cancellation for saga compensation: {} (orderId: {})",
                         sagaId, orderId, e);
+                if (eventSpanDecorator != null) {
+                    eventSpanDecorator.recordError(currentSpan, e);
+                    eventSpanDecorator.endSpan(currentSpan);
+                }
             }
         }
     }

@@ -362,20 +362,14 @@ http_server_requests_seconds_count
 eventsourcing_events_submitted_total
 ```
 
-### Hazelcast Management Center (Optional)
+### Hazelcast Management Center
 
-```bash
-# Add to docker-compose.yml
-management-center:
-  image: hazelcast/management-center:5.6.0
-  ports:
-    - "8080:8080"
-  environment:
-    - MC_DEFAULT_CLUSTER=ecommerce-demo
-    - MC_DEFAULT_CLUSTER_MEMBERS=hazelcast-1:5701
-```
+Management Center is included in the Docker Compose stack and starts automatically.
+It is pre-configured to connect to the `ecommerce-cluster`.
 
 Access at: http://localhost:8080
+
+Features: cluster member health, map browser, Jet job monitoring, memory/partition metrics.
 
 ## Next Steps
 
