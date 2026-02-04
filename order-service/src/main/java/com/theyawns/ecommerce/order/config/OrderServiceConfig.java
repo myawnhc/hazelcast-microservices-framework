@@ -2,7 +2,10 @@ package com.theyawns.ecommerce.order.config;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
+import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
+import com.hazelcast.config.NetworkConfig;
+import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.ecommerce.common.domain.Order;
@@ -13,6 +16,8 @@ import com.theyawns.ecommerce.common.view.OrderViewUpdater;
 import com.theyawns.ecommerce.order.domain.ProductAvailabilityViewUpdater;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
+import com.theyawns.framework.saga.HazelcastSagaStateStore;
+import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.store.HazelcastEventStore;
 import com.theyawns.framework.view.HazelcastViewStore;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -54,6 +59,9 @@ public class OrderServiceConfig {
 
     @Value("${hazelcast.cluster.name:ecommerce-cluster}")
     private String clusterName;
+
+    @Value("${hazelcast.cluster.members:}")
+    private String clusterMembers;
 
     @Value("${hazelcast.event-journal.capacity:10000}")
     private int eventJournalCapacity;
@@ -116,6 +124,24 @@ public class OrderServiceConfig {
         // Configure customer order summary view map (aggregated order stats)
         MapConfig customerOrderSummaryMapConfig = new MapConfig(CUSTOMER_ORDER_SUMMARY_NAME + "_VIEW");
         config.addMapConfig(customerOrderSummaryMapConfig);
+
+        // Configure network discovery - disable multicast to prevent accidental cluster formation
+        // with other services. Use TCP-IP if HAZELCAST_CLUSTER_MEMBERS is specified.
+        NetworkConfig networkConfig = config.getNetworkConfig();
+        JoinConfig joinConfig = networkConfig.getJoin();
+        joinConfig.getMulticastConfig().setEnabled(false);
+        joinConfig.getAutoDetectionConfig().setEnabled(false);
+
+        if (clusterMembers != null && !clusterMembers.isBlank()) {
+            TcpIpConfig tcpIpConfig = joinConfig.getTcpIpConfig();
+            tcpIpConfig.setEnabled(true);
+            for (String member : clusterMembers.split(",")) {
+                tcpIpConfig.addMember(member.trim());
+            }
+            logger.info("TCP-IP discovery enabled with members: {}", clusterMembers);
+        } else {
+            logger.info("No cluster members configured - running as single-member cluster");
+        }
 
         // Enable Jet for stream processing pipeline
         config.getJetConfig().setEnabled(true);
@@ -260,6 +286,18 @@ public class OrderServiceConfig {
     public CustomerOrderSummaryViewUpdater customerOrderSummaryViewUpdater(
             HazelcastViewStore<String> customerOrderSummaryViewStore) {
         return new CustomerOrderSummaryViewUpdater(customerOrderSummaryViewStore);
+    }
+
+    /**
+     * Creates the saga state store for saga tracking.
+     *
+     * @param hazelcast the Hazelcast instance
+     * @param meterRegistry the metrics registry
+     * @return the saga state store
+     */
+    @Bean
+    public SagaStateStore sagaStateStore(HazelcastInstance hazelcast, MeterRegistry meterRegistry) {
+        return new HazelcastSagaStateStore(hazelcast, meterRegistry);
     }
 
     /**

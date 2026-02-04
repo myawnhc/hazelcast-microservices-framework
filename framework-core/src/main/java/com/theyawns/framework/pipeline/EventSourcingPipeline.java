@@ -311,9 +311,10 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
                 .setName("5-publish-to-subscribers");
 
         // Stage 6: COMPLETE - Signal completion by updating completions map
-        // Use map() to transform to entry, then write to map sink
-        // This avoids serialization issues with EventContext
-        published.map(ctx -> Map.entry(ctx.key, ctx.eventRecord))
+        // Use eventId (String) as the map key instead of PartitionedSequenceKey
+        // to avoid serialization round-trip issues with custom key types in
+        // Hazelcast entry listeners. The controller matches by eventId.
+        published.map(ctx -> Map.entry(ctx.eventId, ctx.eventRecord))
                 .writeTo(Sinks.map(localCompletionsMapName))
                 .setName("6-signal-completion");
 

@@ -2,13 +2,18 @@ package com.theyawns.ecommerce.inventory.config;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
+import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
+import com.hazelcast.config.NetworkConfig;
+import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.ecommerce.common.domain.Product;
 import com.theyawns.ecommerce.common.view.ProductViewUpdater;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
+import com.theyawns.framework.saga.HazelcastSagaStateStore;
+import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.store.HazelcastEventStore;
 import com.theyawns.framework.view.HazelcastViewStore;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -42,6 +47,9 @@ public class InventoryServiceConfig {
 
     @Value("${hazelcast.cluster.name:ecommerce-cluster}")
     private String clusterName;
+
+    @Value("${hazelcast.cluster.members:}")
+    private String clusterMembers;
 
     @Value("${hazelcast.event-journal.capacity:10000}")
     private int eventJournalCapacity;
@@ -85,6 +93,24 @@ public class InventoryServiceConfig {
         MapConfig eventStoreMapConfig = new MapConfig(DOMAIN_NAME + "_ES");
         config.addMapConfig(eventStoreMapConfig);
 
+        // Configure network discovery - disable multicast to prevent accidental cluster formation
+        // with other services. Use TCP-IP if HAZELCAST_CLUSTER_MEMBERS is specified.
+        NetworkConfig networkConfig = config.getNetworkConfig();
+        JoinConfig joinConfig = networkConfig.getJoin();
+        joinConfig.getMulticastConfig().setEnabled(false);
+        joinConfig.getAutoDetectionConfig().setEnabled(false);
+
+        if (clusterMembers != null && !clusterMembers.isBlank()) {
+            TcpIpConfig tcpIpConfig = joinConfig.getTcpIpConfig();
+            tcpIpConfig.setEnabled(true);
+            for (String member : clusterMembers.split(",")) {
+                tcpIpConfig.addMember(member.trim());
+            }
+            logger.info("TCP-IP discovery enabled with members: {}", clusterMembers);
+        } else {
+            logger.info("No cluster members configured - running as single-member cluster");
+        }
+
         // Enable Jet for stream processing pipeline
         config.getJetConfig().setEnabled(true);
         config.getJetConfig().setResourceUploadEnabled(true);
@@ -125,6 +151,18 @@ public class InventoryServiceConfig {
     @Bean
     public ProductViewUpdater productViewUpdater(HazelcastViewStore<String> viewStore) {
         return new ProductViewUpdater(viewStore);
+    }
+
+    /**
+     * Creates the saga state store for saga tracking.
+     *
+     * @param hazelcast the Hazelcast instance
+     * @param meterRegistry the metrics registry
+     * @return the saga state store
+     */
+    @Bean
+    public SagaStateStore sagaStateStore(HazelcastInstance hazelcast, MeterRegistry meterRegistry) {
+        return new HazelcastSagaStateStore(hazelcast, meterRegistry);
     }
 
     /**

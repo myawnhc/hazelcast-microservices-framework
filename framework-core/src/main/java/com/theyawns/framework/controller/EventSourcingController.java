@@ -92,9 +92,11 @@ public class EventSourcingController<D extends DomainObject<K>,
 
     /**
      * Tracks pending completions for async notification.
-     * Maps the event's PartitionedSequenceKey to both the future and the pre-built CompletionInfo.
+     * Maps the event's eventId (String) to both the future and the pre-built CompletionInfo.
+     * Using eventId (a simple String) instead of PartitionedSequenceKey avoids
+     * serialization round-trip issues with custom key types in Hazelcast listeners.
      */
-    private final ConcurrentMap<PartitionedSequenceKey<K>, PendingCompletion<K>> pendingCompletions;
+    private final ConcurrentMap<String, PendingCompletion<K>> pendingCompletions;
 
     /**
      * Private constructor - use builder.
@@ -113,19 +115,21 @@ public class EventSourcingController<D extends DomainObject<K>,
         this.pendingEventsMap = hazelcast.getMap(domainName + PENDING_SUFFIX);
         this.pendingCompletions = new ConcurrentHashMap<>();
 
-        // Listen for pipeline completions on the completions map
-        IMap<PartitionedSequenceKey<K>, GenericRecord> completionsMap =
+        // Listen for pipeline completions on the completions map.
+        // The pipeline writes to this map with eventId (String) as the key,
+        // which avoids serialization round-trip issues with PartitionedSequenceKey.
+        IMap<String, GenericRecord> completionsMap =
                 hazelcast.getMap(domainName + "_COMPLETIONS");
         completionsMap.addEntryListener(
-                (com.hazelcast.map.listener.EntryAddedListener<PartitionedSequenceKey<K>, GenericRecord>)
+                (com.hazelcast.map.listener.EntryAddedListener<String, GenericRecord>)
                         event -> {
-                            PartitionedSequenceKey<K> key = event.getKey();
-                            PendingCompletion<K> pending = pendingCompletions.remove(key);
+                            String eventId = event.getKey();
+                            PendingCompletion<K> pending = pendingCompletions.remove(eventId);
                             if (pending != null) {
                                 pending.completionInfo.markCompleted();
                                 pending.future.complete(pending.completionInfo);
-                                logger.debug("Pipeline completed for event: {} (key: {})",
-                                        pending.completionInfo.getEventType(), key);
+                                logger.debug("Pipeline completed for event: {} (eventId: {})",
+                                        pending.completionInfo.getEventType(), eventId);
                             }
                         },
                 true);
@@ -234,7 +238,7 @@ public class EventSourcingController<D extends DomainObject<K>,
                     psk, correlationId, event.getEventType(), event.getEventId());
 
             CompletableFuture<CompletionInfo<K>> future = new CompletableFuture<>();
-            pendingCompletions.put(psk, new PendingCompletion<>(future, completionInfo));
+            pendingCompletions.put(event.getEventId(), new PendingCompletion<>(future, completionInfo));
 
             // Write to pending events map (TRIGGERS PIPELINE)
             GenericRecord eventRecord = event.toGenericRecord();
@@ -257,7 +261,20 @@ public class EventSourcingController<D extends DomainObject<K>,
             // Future completes when the pipeline writes to the completions map
             // (via the EntryAddedListener registered in constructor).
             // Add a safety timeout to avoid hanging indefinitely if the pipeline fails.
-            return future.orTimeout(30, TimeUnit.SECONDS);
+            final String eventId = event.getEventId();
+            return future.orTimeout(30, TimeUnit.SECONDS)
+                    .whenComplete((result, throwable) -> {
+                        if (throwable != null) {
+                            // Clean up the pending entry on failure/timeout
+                            pendingCompletions.remove(eventId);
+                            if (throwable instanceof java.util.concurrent.TimeoutException) {
+                                logger.error("Pipeline timeout after 30s for event: {} (type: {}, key: {}, seq: {}). "
+                                                + "Pipeline running: {}, pending completions: {}",
+                                        eventId, event.getEventType(), event.getKey(),
+                                        sequence, pipeline.isRunning(), pendingCompletions.size());
+                            }
+                        }
+                    });
 
         } catch (Exception e) {
             logger.error("Failed to handle event: {} for key: {}",
