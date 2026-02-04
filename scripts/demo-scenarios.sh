@@ -400,7 +400,10 @@ scenario_2_cancellation() {
     print_step "4" "Cancelling the order"
     print_substep "PATCH /api/orders/$order_id/cancel"
 
-    local cancel_response=$(api_patch "$ORDER_SERVICE/api/orders/$order_id/cancel")
+    local cancel_response=$(api_patch "$ORDER_SERVICE/api/orders/$order_id/cancel" '{
+        "reason": "Customer changed mind",
+        "cancelledBy": "customer"
+    }')
 
     if echo "$cancel_response" | grep -q '"status":"CANCELLED"'; then
         print_success "Order cancelled!"
