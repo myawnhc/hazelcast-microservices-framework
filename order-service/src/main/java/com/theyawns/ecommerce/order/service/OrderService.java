@@ -2,6 +2,7 @@ package com.theyawns.ecommerce.order.service;
 
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
+import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.ecommerce.common.domain.Order;
 import com.theyawns.ecommerce.common.domain.OrderLineItem;
 import com.theyawns.ecommerce.common.dto.OrderDTO;
@@ -17,10 +18,13 @@ import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.saga.SagaCompensationConfig;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
+import com.theyawns.framework.view.HazelcastViewStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,6 +67,7 @@ public class OrderService implements OrderOperations {
     private final EventSourcingController<Order, String, DomainEvent<Order, String>> controller;
     private final HazelcastInstance hazelcast;
     private final SagaStateStore sagaStateStore;
+    private final HazelcastViewStore<String> productAvailabilityViewStore;
 
     /**
      * Creates a new OrderService.
@@ -70,14 +75,18 @@ public class OrderService implements OrderOperations {
      * @param controller the event sourcing controller for order events
      * @param hazelcast the Hazelcast instance
      * @param sagaStateStore the saga state store for tracking distributed transactions
+     * @param productAvailabilityViewStore the product availability cache for price lookups
      */
     public OrderService(
             EventSourcingController<Order, String, DomainEvent<Order, String>> controller,
             HazelcastInstance hazelcast,
-            SagaStateStore sagaStateStore) {
+            SagaStateStore sagaStateStore,
+            @Qualifier("productAvailabilityViewStore")
+            HazelcastViewStore<String> productAvailabilityViewStore) {
         this.controller = controller;
         this.hazelcast = hazelcast;
         this.sagaStateStore = sagaStateStore;
+        this.productAvailabilityViewStore = productAvailabilityViewStore;
     }
 
     /**
@@ -383,17 +392,46 @@ public class OrderService implements OrderOperations {
 
     /**
      * Converts an OrderLineItemDTO to an OrderLineItem domain object.
+     * If unitPrice is not provided in the DTO, looks it up from the product availability cache.
      *
      * @param dto the DTO
      * @return the domain object
+     * @throws IllegalArgumentException if product price cannot be determined
      */
     private OrderLineItem toOrderLineItem(OrderLineItemDTO dto) {
+        BigDecimal unitPrice = dto.getUnitPrice();
+        String productName = dto.getProductName();
+        String sku = dto.getSku();
+
+        // If price is missing, look it up from the product availability cache
+        if (unitPrice == null) {
+            Optional<GenericRecord> productOpt = productAvailabilityViewStore.get(dto.getProductId());
+            if (productOpt.isPresent()) {
+                GenericRecord product = productOpt.get();
+                String priceStr = product.getString("price");
+                if (priceStr != null && !priceStr.isEmpty()) {
+                    unitPrice = new BigDecimal(priceStr);
+                    logger.debug("Looked up price {} for product {} from cache", unitPrice, dto.getProductId());
+                }
+                // Also enrich product name and SKU if missing
+                if (productName == null || productName.isEmpty()) {
+                    productName = product.getString("name");
+                }
+                if (sku == null || sku.isEmpty()) {
+                    sku = product.getString("sku");
+                }
+            } else {
+                logger.warn("Product {} not found in availability cache, cannot determine price",
+                        dto.getProductId());
+            }
+        }
+
         return new OrderLineItem(
                 dto.getProductId(),
-                dto.getProductName(),
-                dto.getSku(),
+                productName,
+                sku,
                 dto.getQuantity(),
-                dto.getUnitPrice()
+                unitPrice
         );
     }
 

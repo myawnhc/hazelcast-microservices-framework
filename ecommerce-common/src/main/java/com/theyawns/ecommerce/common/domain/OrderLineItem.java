@@ -39,10 +39,16 @@ public class OrderLineItem implements Serializable {
      * @param productName the product name
      * @param sku the product SKU
      * @param quantity the quantity ordered
-     * @param unitPrice the price per unit
+     * @param unitPrice the price per unit (must not be null)
+     * @throws IllegalArgumentException if unitPrice is null
      */
     public OrderLineItem(String productId, String productName, String sku,
                          int quantity, BigDecimal unitPrice) {
+        if (unitPrice == null) {
+            throw new IllegalArgumentException(
+                    "unitPrice cannot be null for product: " + productId +
+                    ". Ensure product has a price set or provide price in order request.");
+        }
         this.productId = productId;
         this.productName = productName;
         this.sku = sku;
