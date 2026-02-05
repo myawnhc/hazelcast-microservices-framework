@@ -143,6 +143,20 @@ public class PipelineMetrics implements Serializable {
     }
 
     /**
+     * Records timing for a specific pipeline stage with a pre-computed duration.
+     *
+     * @param stage the pipeline stage
+     * @param eventType the type of event being processed
+     * @param duration the pre-computed duration for this stage
+     */
+    public void recordStageTiming(PipelineStage stage, String eventType, Duration duration) {
+        if (duration != null && !duration.isNegative()) {
+            getTimer("stage.duration", stage.getStageName(), eventType)
+                    .record(duration.toNanos(), TimeUnit.NANOSECONDS);
+        }
+    }
+
+    /**
      * Records end-to-end latency from event submission to completion.
      *
      * @param eventType the type of event
@@ -151,6 +165,19 @@ public class PipelineMetrics implements Serializable {
     public void recordEndToEndLatency(String eventType, Instant submittedAt) {
         if (submittedAt != null) {
             Duration duration = Duration.between(submittedAt, Instant.now());
+            getTimerByEventType("latency.end_to_end", eventType)
+                    .record(duration.toNanos(), TimeUnit.NANOSECONDS);
+        }
+    }
+
+    /**
+     * Records end-to-end latency with a pre-computed duration.
+     *
+     * @param eventType the type of event
+     * @param duration the pre-computed end-to-end duration
+     */
+    public void recordEndToEndLatency(String eventType, Duration duration) {
+        if (duration != null && !duration.isNegative()) {
             getTimerByEventType("latency.end_to_end", eventType)
                     .record(duration.toNanos(), TimeUnit.NANOSECONDS);
         }
@@ -166,6 +193,19 @@ public class PipelineMetrics implements Serializable {
     public void recordQueueWaitTime(String eventType, Instant submittedAt, Instant pipelineEntryTime) {
         if (submittedAt != null && pipelineEntryTime != null) {
             Duration duration = Duration.between(submittedAt, pipelineEntryTime);
+            getTimerByEventType("latency.queue_wait", eventType)
+                    .record(duration.toNanos(), TimeUnit.NANOSECONDS);
+        }
+    }
+
+    /**
+     * Records queue wait time with a pre-computed duration.
+     *
+     * @param eventType the type of event
+     * @param duration the pre-computed queue wait duration
+     */
+    public void recordQueueWaitTime(String eventType, Duration duration) {
+        if (duration != null && !duration.isNegative()) {
             getTimerByEventType("latency.queue_wait", eventType)
                     .record(duration.toNanos(), TimeUnit.NANOSECONDS);
         }
@@ -246,6 +286,7 @@ public class PipelineMetrics implements Serializable {
                         .tag("domain", domainName)
                         .tag("stage", stage)
                         .publishPercentiles(0.5, 0.95, 0.99)
+                        .publishPercentileHistogram(true)
                         .register(meterRegistry)
         );
     }
@@ -258,6 +299,7 @@ public class PipelineMetrics implements Serializable {
                         .tag("stage", stage)
                         .tag("eventType", eventType)
                         .publishPercentiles(0.5, 0.95, 0.99)
+                        .publishPercentileHistogram(true)
                         .register(meterRegistry)
         );
     }
@@ -269,6 +311,7 @@ public class PipelineMetrics implements Serializable {
                         .tag("domain", domainName)
                         .tag("eventType", eventType)
                         .publishPercentiles(0.5, 0.95, 0.99)
+                        .publishPercentileHistogram(true)
                         .register(meterRegistry)
         );
     }

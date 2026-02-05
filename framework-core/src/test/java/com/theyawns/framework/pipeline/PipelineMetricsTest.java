@@ -205,7 +205,7 @@ class PipelineMetricsTest {
         @DisplayName("should handle null submittedAt gracefully")
         void shouldHandleNullSubmittedAtGracefully() {
             // Should not throw
-            metrics.recordEndToEndLatency("CustomerCreated", null);
+            metrics.recordEndToEndLatency("CustomerCreated", (Instant) null);
 
             Timer timer = meterRegistry.find("eventsourcing.pipeline.latency.end_to_end")
                     .tag("eventType", "CustomerCreated")

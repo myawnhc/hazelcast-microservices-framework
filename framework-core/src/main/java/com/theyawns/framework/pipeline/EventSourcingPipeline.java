@@ -12,6 +12,7 @@ import com.hazelcast.jet.pipeline.Sources;
 import com.hazelcast.jet.pipeline.StreamStage;
 import com.hazelcast.map.IMap;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
+import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.theyawns.framework.domain.DomainObject;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.store.EventStore;
@@ -314,7 +315,24 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
         // Use eventId (String) as the map key instead of PartitionedSequenceKey
         // to avoid serialization round-trip issues with custom key types in
         // Hazelcast entry listeners. The controller matches by eventId.
-        published.map(ctx -> Map.entry(ctx.eventId, ctx.eventRecord))
+        // The completion record carries timing metadata so the controller can
+        // record pipeline metrics (MeterRegistry is not available inside Jet).
+        published.map(ctx -> {
+                    long completionMs = Instant.now().toEpochMilli();
+                    GenericRecord completion = GenericRecordBuilder.compact("PipelineCompletion")
+                            .setString("eventId", ctx.eventId)
+                            .setString("eventType", ctx.eventType)
+                            .setBoolean("persisted", ctx.persisted)
+                            .setBoolean("viewUpdated", ctx.viewUpdated)
+                            .setBoolean("published", ctx.published)
+                            .setInt64("pipelineEntryMs", ctx.pipelineEntryTime.toEpochMilli())
+                            .setInt64("persistStartMs", ctx.persistTime != null ? ctx.persistTime.toEpochMilli() : 0L)
+                            .setInt64("viewUpdateStartMs", ctx.viewUpdateTime != null ? ctx.viewUpdateTime.toEpochMilli() : 0L)
+                            .setInt64("publishTimeMs", ctx.publishTime != null ? ctx.publishTime.toEpochMilli() : 0L)
+                            .setInt64("completionMs", completionMs)
+                            .build();
+                    return Map.entry(ctx.eventId, completion);
+                })
                 .writeTo(Sinks.map(localCompletionsMapName))
                 .setName("6-signal-completion");
 
