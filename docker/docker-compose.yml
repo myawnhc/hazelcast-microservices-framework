@@ -12,6 +12,7 @@
 #   - inventory-service: Product/stock management (port 8082)
 #   - order-service: Order management (port 8083)
 #   - prometheus: Metrics collection (port 9090)
+#   - grafana: Dashboards & visualization (port 3000)
 #
 # Memory: Total ~4GB (runs on 8GB laptop)
 
@@ -125,7 +126,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
-      - HAZELCAST_CLUSTER_NAME=account-cluster
+      - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=account-service
     depends_on:
@@ -159,7 +161,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
-      - HAZELCAST_CLUSTER_NAME=inventory-cluster
+      - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=inventory-service
     depends_on:
@@ -193,7 +196,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
-      - HAZELCAST_CLUSTER_NAME=order-cluster
+      - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=order-service
     depends_on:
@@ -227,7 +231,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
-      - HAZELCAST_CLUSTER_NAME=payment-cluster
+      - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=payment-service
     depends_on:
@@ -303,6 +308,36 @@ services:
         limits:
           memory: 256M
 
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: grafana
+    hostname: grafana
+    networks:
+      - ecommerce-network
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/system-overview.json
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
   jaeger:
     image: jaegertracing/all-in-one:1.53
     container_name: jaeger
@@ -327,3 +362,4 @@ services:
 
 volumes:
   prometheus-data:
+  grafana-data:

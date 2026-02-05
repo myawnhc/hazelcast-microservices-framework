@@ -1,0 +1,242 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: saga-alerts
+    folder: Saga Alerts
+    interval: 1m
+    rules:
+      # Alert when saga failure rate exceeds threshold
+      - uid: saga-failure-rate
+        title: High Saga Failure Rate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: increase(saga_failed_total[5m])
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: increase(saga_started_total[5m])
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "Saga failures detected"
+          description: "{{ $value }} saga(s) have failed in the last 5 minutes."
+        labels:
+          severity: critical
+
+      # Alert when sagas are timing out
+      - uid: saga-timeout-rate
+        title: Saga Timeouts Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: increase(saga_timeouts_detected_total[5m])
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "Saga timeouts detected"
+          description: "{{ $value }} saga(s) have timed out in the last 5 minutes."
+        labels:
+          severity: warning
+
+      # Alert when compensation failure rate is high
+      - uid: saga-compensation-failure
+        title: Saga Compensation Failures
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: increase(saga_compensations_failed_total[5m])
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "Saga compensation failures detected"
+          description: "{{ $value }} saga compensation(s) have failed in the last 5 minutes. Manual intervention may be required."
+        labels:
+          severity: critical
+
+      # Alert when success rate drops below threshold
+      - uid: saga-low-success-rate
+        title: Low Saga Success Rate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: >-
+                saga_completed_total
+                / (saga_completed_total + saga_compensated_total + saga_failed_total + saga_timedout_total)
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params:
+                      - 0.9
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Saga success rate below 90%"
+          description: "Saga success rate is {{ $value | humanizePercentage }}. Investigate failures and compensations."
+        labels:
+          severity: warning
+
+  - orgId: 1
+    name: service-health-alerts
+    folder: Service Health
+    interval: 1m
+    rules:
+      # Alert when a service goes down
+      - uid: service-down
+        title: Service Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: up{job=~"account-service|inventory-service|order-service|payment-service"}
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params:
+                      - 1
+              refId: C
+        noDataState: Alerting
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "The {{ $labels.job }} service has been unreachable for more than 1 minute."
+        labels:
+          severity: critical
+
+      # Alert on high event processing error rate
+      - uid: high-event-error-rate
+        title: High Event Processing Error Rate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: >-
+                sum(rate(eventsourcing_pipeline_events_failed_total[5m]))
+                / (sum(rate(eventsourcing_pipeline_events_processed_total[5m]))
+                + sum(rate(eventsourcing_pipeline_events_failed_total[5m])))
+                * 100
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 5
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 3m
+        annotations:
+          summary: "Event processing error rate above 5%"
+          description: "Event processing error rate is {{ $value | printf \"%.1f\" }}%. Check pipeline logs."
+        labels:
+          severity: warning
