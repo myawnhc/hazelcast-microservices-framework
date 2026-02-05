@@ -5,10 +5,12 @@ import com.hazelcast.flakeidgen.FlakeIdGenerator;
 import com.hazelcast.jet.Job;
 import com.hazelcast.map.IMap;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
+import com.hazelcast.topic.ITopic;
 import com.theyawns.framework.domain.DomainObject;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.pipeline.EventSourcingPipeline;
 import com.theyawns.framework.pipeline.HazelcastEventBus;
+import com.theyawns.framework.pipeline.PipelineMetrics;
 import com.theyawns.framework.store.EventStore;
 import com.theyawns.framework.store.PartitionedSequenceKey;
 import com.theyawns.framework.tracing.EventSpanDecorator;
@@ -19,6 +21,7 @@ import io.micrometer.tracing.Span;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
@@ -80,6 +83,7 @@ public class EventSourcingController<D extends DomainObject<K>,
     private static final String SEQUENCE_GEN_SUFFIX = "_SEQ";
 
     private final HazelcastInstance hazelcast;
+    private final HazelcastInstance sharedHazelcast;
     private final String domainName;
     private final FlakeIdGenerator sequenceGenerator;
     private final EventStore<D, K, E> eventStore;
@@ -87,6 +91,7 @@ public class EventSourcingController<D extends DomainObject<K>,
     private final Class<? extends ViewUpdater<K>> viewUpdaterClass;
     private final IMap<PartitionedSequenceKey<K>, GenericRecord> pendingEventsMap;
     private final MeterRegistry meterRegistry;
+    private final PipelineMetrics pipelineMetrics;
     private final EventSpanDecorator eventSpanDecorator;
     private final EventSourcingPipeline<D, K, E> pipeline;
 
@@ -103,11 +108,13 @@ public class EventSourcingController<D extends DomainObject<K>,
      */
     private EventSourcingController(Builder<D, K, E> builder) {
         this.hazelcast = builder.hazelcast;
+        this.sharedHazelcast = builder.sharedHazelcast;
         this.domainName = builder.domainName;
         this.eventStore = builder.eventStore;
         this.viewUpdater = builder.viewUpdater;
         this.viewUpdaterClass = builder.viewUpdaterClass;
         this.meterRegistry = builder.meterRegistry;
+        this.pipelineMetrics = new PipelineMetrics(meterRegistry, domainName);
         this.eventSpanDecorator = builder.eventSpanDecorator;
 
         // Initialize Hazelcast structures
@@ -116,21 +123,27 @@ public class EventSourcingController<D extends DomainObject<K>,
         this.pendingCompletions = new ConcurrentHashMap<>();
 
         // Listen for pipeline completions on the completions map.
-        // The pipeline writes to this map with eventId (String) as the key,
-        // which avoids serialization round-trip issues with PartitionedSequenceKey.
+        // The pipeline writes a PipelineCompletion GenericRecord with timing metadata.
+        // We extract timing here (where MeterRegistry is available) to record metrics.
         IMap<String, GenericRecord> completionsMap =
                 hazelcast.getMap(domainName + "_COMPLETIONS");
         completionsMap.addEntryListener(
                 (com.hazelcast.map.listener.EntryAddedListener<String, GenericRecord>)
                         event -> {
                             String eventId = event.getKey();
+                            GenericRecord completion = event.getValue();
                             PendingCompletion<K> pending = pendingCompletions.remove(eventId);
                             if (pending != null) {
                                 pending.completionInfo.markCompleted();
                                 pending.future.complete(pending.completionInfo);
                                 logger.debug("Pipeline completed for event: {} (eventId: {})",
                                         pending.completionInfo.getEventType(), eventId);
+
+                                // Republish the event to the shared cluster's ITopic
+                                // so saga listeners on other services can receive it
+                                republishToSharedCluster(pending);
                             }
+                            recordPipelineMetrics(completion, pending);
                         },
                 true);
 
@@ -238,10 +251,13 @@ public class EventSourcingController<D extends DomainObject<K>,
                     psk, correlationId, event.getEventType(), event.getEventId());
 
             CompletableFuture<CompletionInfo<K>> future = new CompletableFuture<>();
-            pendingCompletions.put(event.getEventId(), new PendingCompletion<>(future, completionInfo));
 
             // Write to pending events map (TRIGGERS PIPELINE)
             GenericRecord eventRecord = event.toGenericRecord();
+
+            // Store event record + type for cross-cluster republishing on completion
+            pendingCompletions.put(event.getEventId(),
+                    new PendingCompletion<>(future, completionInfo, eventRecord, event.getEventType()));
             pendingEventsMap.set(psk, eventRecord);
 
             // Record metrics
@@ -406,6 +422,113 @@ public class EventSourcingController<D extends DomainObject<K>,
         return pipeline;
     }
 
+    /**
+     * Returns the shared Hazelcast instance (client connected to external cluster),
+     * or null if not configured.
+     *
+     * @return the shared Hazelcast instance, or null
+     */
+    public HazelcastInstance getSharedHazelcast() {
+        return sharedHazelcast;
+    }
+
+    // ==================== Cross-Cluster Publishing ====================
+
+    /**
+     * Republishes a completed event to the shared cluster's ITopic so that
+     * saga listeners on other services can receive it. This bridges the gap
+     * between the local embedded Hazelcast instance (used for Jet pipeline
+     * processing) and the external shared cluster (used for cross-service
+     * communication).
+     *
+     * <p>Only publishes if a shared Hazelcast instance is configured and the
+     * event record is available.
+     *
+     * @param pending the completed event's pending completion data
+     */
+    private void republishToSharedCluster(PendingCompletion<K> pending) {
+        if (sharedHazelcast == null || pending.eventRecord == null || pending.eventType == null) {
+            return;
+        }
+        try {
+            ITopic<GenericRecord> topic = sharedHazelcast.getTopic(pending.eventType);
+            topic.publish(pending.eventRecord);
+            logger.debug("Republished event {} to shared cluster topic: {}", pending.eventType, pending.eventType);
+        } catch (Exception e) {
+            logger.warn("Failed to republish event {} to shared cluster: {}", pending.eventType, e.getMessage());
+        }
+    }
+
+    // ==================== Pipeline Metrics ====================
+
+    /**
+     * Extracts timing fields from the PipelineCompletion record and records
+     * all pipeline metrics. Called from the completions map EntryAddedListener.
+     *
+     * @param completion the PipelineCompletion GenericRecord from Stage 6
+     * @param pending the pending completion info (may be null for orphan completions)
+     */
+    private void recordPipelineMetrics(GenericRecord completion, PendingCompletion<K> pending) {
+        try {
+            final String eventType = completion.getString("eventType");
+            final boolean persisted = completion.getBoolean("persisted");
+            final boolean viewUpdated = completion.getBoolean("viewUpdated");
+            final boolean published = completion.getBoolean("published");
+            final long pipelineEntryMs = completion.getInt64("pipelineEntryMs");
+            final long persistStartMs = completion.getInt64("persistStartMs");
+            final long viewUpdateStartMs = completion.getInt64("viewUpdateStartMs");
+            final long publishTimeMs = completion.getInt64("publishTimeMs");
+            final long completionMs = completion.getInt64("completionMs");
+
+            // Always record received
+            pipelineMetrics.recordEventReceived(eventType);
+
+            // Record processed or failed
+            if (persisted && viewUpdated && published) {
+                pipelineMetrics.recordEventProcessed(eventType);
+            } else if (!persisted) {
+                pipelineMetrics.recordEventFailed(eventType, PipelineMetrics.PipelineStage.PERSIST);
+            } else if (!viewUpdated) {
+                pipelineMetrics.recordEventFailed(eventType, PipelineMetrics.PipelineStage.UPDATE_VIEW);
+            } else {
+                pipelineMetrics.recordEventFailed(eventType, PipelineMetrics.PipelineStage.PUBLISH);
+            }
+
+            // Stage timings (derived from sequential stage boundaries)
+            if (persistStartMs > 0 && viewUpdateStartMs > 0) {
+                pipelineMetrics.recordStageTiming(PipelineMetrics.PipelineStage.PERSIST, eventType,
+                        Duration.ofMillis(viewUpdateStartMs - persistStartMs));
+            }
+            if (viewUpdateStartMs > 0 && publishTimeMs > 0) {
+                pipelineMetrics.recordStageTiming(PipelineMetrics.PipelineStage.UPDATE_VIEW, eventType,
+                        Duration.ofMillis(publishTimeMs - viewUpdateStartMs));
+            }
+            if (publishTimeMs > 0 && completionMs > 0) {
+                pipelineMetrics.recordStageTiming(PipelineMetrics.PipelineStage.PUBLISH, eventType,
+                        Duration.ofMillis(completionMs - publishTimeMs));
+            }
+
+            // View and publish counters
+            if (viewUpdated) {
+                pipelineMetrics.recordViewUpdated(eventType);
+            }
+            if (published) {
+                pipelineMetrics.recordEventPublished(eventType);
+            }
+
+            // End-to-end and queue wait (require submittedAt from CompletionInfo)
+            if (pending != null && pending.completionInfo.getSubmittedAt() != null) {
+                long submittedMs = pending.completionInfo.getSubmittedAt().toEpochMilli();
+                pipelineMetrics.recordEndToEndLatency(eventType,
+                        Duration.ofMillis(completionMs - submittedMs));
+                pipelineMetrics.recordQueueWaitTime(eventType,
+                        Duration.ofMillis(pipelineEntryMs - submittedMs));
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to record pipeline metrics for completion record", e);
+        }
+    }
+
     // Builder
 
     /**
@@ -432,6 +555,7 @@ public class EventSourcingController<D extends DomainObject<K>,
             E extends DomainEvent<D, K>> {
 
         private HazelcastInstance hazelcast;
+        private HazelcastInstance sharedHazelcast;
         private String domainName;
         private EventStore<D, K, E> eventStore;
         private ViewUpdater<K> viewUpdater;
@@ -448,6 +572,23 @@ public class EventSourcingController<D extends DomainObject<K>,
          */
         public Builder<D, K, E> hazelcast(HazelcastInstance hazelcast) {
             this.hazelcast = hazelcast;
+            return this;
+        }
+
+        /**
+         * Sets the shared Hazelcast instance for cross-service communication (optional).
+         *
+         * <p>When set, the controller republishes events to the shared cluster's ITopic
+         * after local pipeline processing completes. This enables saga listeners on
+         * other services to receive events without requiring the local Hazelcast
+         * instance to join the shared cluster (which would cause Jet lambda
+         * serialization failures).
+         *
+         * @param sharedHazelcast the shared Hazelcast client instance
+         * @return this builder
+         */
+        public Builder<D, K, E> sharedHazelcast(HazelcastInstance sharedHazelcast) {
+            this.sharedHazelcast = sharedHazelcast;
             return this;
         }
 
@@ -557,10 +698,15 @@ public class EventSourcingController<D extends DomainObject<K>,
 
         final CompletableFuture<CompletionInfo<K>> future;
         final CompletionInfo<K> completionInfo;
+        final GenericRecord eventRecord;
+        final String eventType;
 
-        PendingCompletion(CompletableFuture<CompletionInfo<K>> future, CompletionInfo<K> completionInfo) {
+        PendingCompletion(CompletableFuture<CompletionInfo<K>> future, CompletionInfo<K> completionInfo,
+                          GenericRecord eventRecord, String eventType) {
             this.future = future;
             this.completionInfo = completionInfo;
+            this.eventRecord = eventRecord;
+            this.eventType = eventType;
         }
     }
 }

@@ -85,6 +85,94 @@ public long getNextSequence() {
 
 ---
 
+## Critical Architecture Decisions
+
+> **READ THESE BEFORE MAKING CHANGES TO HAZELCAST CONFIGURATION OR CLUSTERING**
+
+### Dual-Instance Hazelcast Architecture (ADR 008)
+
+**THIS IS A SETTLED DECISION. Do not attempt to change to a single-cluster architecture.**
+
+Each microservice runs **TWO** Hazelcast instances:
+
+1. **`hazelcastInstance`** (embedded, standalone, `@Primary`)
+   - No cluster join - runs completely isolated
+   - Runs Jet pipeline for event sourcing
+   - Stores event store, view maps, pending events locally
+   - Lambdas never serialize across nodes
+
+2. **`hazelcastClient`** (client to external cluster)
+   - Connects to the shared 3-node Hazelcast cluster
+   - Used for cross-service ITopic pub/sub (saga events)
+   - Used for shared saga state IMap
+   - No Jet jobs submitted through this instance
+
+**Why this architecture exists:**
+
+Jet pipeline lambdas reference service-specific classes (e.g., `OrderViewUpdater`). When services join a shared cluster, Jet distributes jobs to ALL members. Members from other services don't have these classes → `ClassCastException: cannot assign instance of java.lang.invoke.SerializedLambda`.
+
+**Alternatives that DO NOT WORK:**
+
+| Approach | Why It Fails |
+|----------|--------------|
+| Single shared cluster (all services as members) | Jet lambda serialization fails across services |
+| Separate cluster per service | Cross-service ITopic/IMap impossible - breaks sagas |
+| User Code Deployment | Deprecated, removed in next major version |
+| User Code Namespaces | Enterprise Edition only - violates ADR 005 |
+| `JobConfig.addClass()` | Spring Boot uber-JARs incompatible, doesn't work with proxies |
+
+**Required configuration pattern:**
+
+```java
+@Configuration
+public class ServiceConfig {
+
+    @Primary  // REQUIRED - hazelcast-spring needs this
+    @Bean
+    public HazelcastInstance hazelcastInstance() {
+        // Standalone - NO cluster join
+        Config config = new Config();
+        config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
+        config.getNetworkConfig().getJoin().getAutoDetectionConfig().setEnabled(false);
+        config.getJetConfig().setEnabled(true);
+        return Hazelcast.newHazelcastInstance(config);
+    }
+
+    @Bean(name = "hazelcastClient")
+    public HazelcastInstance hazelcastClient() {
+        // Client to shared cluster for cross-service communication
+        ClientConfig clientConfig = new ClientConfig();
+        clientConfig.setClusterName("ecommerce-cluster");
+        clientConfig.getNetworkConfig().addAddress("hazelcast-1:5701", ...);
+        return HazelcastClient.newHazelcastClient(clientConfig);
+    }
+
+    @Bean
+    public EventSourcingController<...> controller(
+            HazelcastInstance hazelcastInstance,  // Embedded for Jet
+            @Qualifier("hazelcastClient") HazelcastInstance hazelcastClient,  // For ITopic
+            ...) {
+        return EventSourcingController.builder()
+                .hazelcast(hazelcastInstance)
+                .sharedHazelcast(hazelcastClient)  // Republishes events to shared cluster
+                .build();
+    }
+}
+```
+
+**Saga listeners must use the client:**
+
+```java
+public SagaListener(@Qualifier("hazelcastClient") HazelcastInstance hazelcast) {
+    ITopic<GenericRecord> topic = hazelcast.getTopic("EventName");
+    topic.addMessageListener(...);
+}
+```
+
+**Full details:** See `docs/architecture/adr/008-dual-instance-hazelcast-architecture.md`
+
+---
+
 ## Code Standards
 
 ### Package Structure

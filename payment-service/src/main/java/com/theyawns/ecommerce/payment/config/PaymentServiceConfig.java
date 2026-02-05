@@ -1,11 +1,12 @@
 package com.theyawns.ecommerce.payment.config;
 
+import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
 import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
 import com.hazelcast.config.NetworkConfig;
-import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.ecommerce.common.domain.Payment;
@@ -23,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
  * Spring configuration for the Payment Service.
@@ -62,13 +64,28 @@ public class PaymentServiceConfig {
      *
      * @return the configured Hazelcast instance
      */
+    @Primary
     @Bean
     public HazelcastInstance hazelcastInstance() {
         Config config = new Config();
-        String effectiveClusterName = (clusterName != null && !clusterName.isEmpty())
-                ? clusterName
-                : "ecommerce-cluster";
-        logger.info("Cluster name from config: '{}', effective: '{}'", clusterName, effectiveClusterName);
+
+        // Resolve cluster name: @Value → env var → default
+        String effectiveClusterName = clusterName;
+        if (effectiveClusterName == null || effectiveClusterName.isEmpty()) {
+            effectiveClusterName = System.getenv("HAZELCAST_CLUSTER_NAME");
+        }
+        if (effectiveClusterName == null || effectiveClusterName.isEmpty()) {
+            effectiveClusterName = "ecommerce-cluster";
+        }
+
+        // Resolve cluster members: @Value → env var → empty
+        String effectiveClusterMembers = clusterMembers;
+        if (effectiveClusterMembers == null || effectiveClusterMembers.isEmpty()) {
+            effectiveClusterMembers = System.getenv("HAZELCAST_CLUSTER_MEMBERS");
+        }
+
+        logger.info("Cluster name: '{}', members: '{}'", effectiveClusterName,
+                effectiveClusterMembers != null ? effectiveClusterMembers : "none");
         config.setClusterName(effectiveClusterName);
 
         // Enable event journal for pending events map (required for Jet streaming)
@@ -91,30 +108,64 @@ public class PaymentServiceConfig {
         MapConfig eventStoreMapConfig = new MapConfig(DOMAIN_NAME + "_ES");
         config.addMapConfig(eventStoreMapConfig);
 
-        // Configure network discovery - disable multicast to prevent accidental cluster formation
-        // with other services. Use TCP-IP if HAZELCAST_CLUSTER_MEMBERS is specified.
+        // Standalone embedded instance - no cluster join.
+        // Cross-service communication uses the separate hazelcastClient() bean.
         NetworkConfig networkConfig = config.getNetworkConfig();
         JoinConfig joinConfig = networkConfig.getJoin();
         joinConfig.getMulticastConfig().setEnabled(false);
         joinConfig.getAutoDetectionConfig().setEnabled(false);
 
-        if (clusterMembers != null && !clusterMembers.isBlank()) {
-            TcpIpConfig tcpIpConfig = joinConfig.getTcpIpConfig();
-            tcpIpConfig.setEnabled(true);
-            for (String member : clusterMembers.split(",")) {
-                tcpIpConfig.addMember(member.trim());
-            }
-            logger.info("TCP-IP discovery enabled with members: {}", clusterMembers);
-        } else {
-            logger.info("No cluster members configured - running as single-member cluster");
-        }
-
         // Enable Jet for stream processing pipeline
         config.getJetConfig().setEnabled(true);
         config.getJetConfig().setResourceUploadEnabled(true);
 
-        logger.info("Creating Hazelcast instance for cluster: {} with Jet enabled", clusterName);
+        logger.info("Creating standalone Hazelcast instance for local Jet processing (cluster: {})",
+                effectiveClusterName);
         return Hazelcast.newHazelcastInstance(config);
+    }
+
+    /**
+     * Creates a Hazelcast client that connects to the external shared cluster.
+     *
+     * <p>This client is used for cross-service communication:
+     * <ul>
+     *   <li>ITopic pub/sub for saga event propagation</li>
+     *   <li>Shared saga state IMap</li>
+     * </ul>
+     *
+     * @return the Hazelcast client instance, or null if no cluster members configured
+     */
+    @Bean(name = "hazelcastClient")
+    public HazelcastInstance hazelcastClient() {
+        // Resolve cluster members: @Value → env var
+        String effectiveClusterMembers = clusterMembers;
+        if (effectiveClusterMembers == null || effectiveClusterMembers.isEmpty()) {
+            effectiveClusterMembers = System.getenv("HAZELCAST_CLUSTER_MEMBERS");
+        }
+
+        if (effectiveClusterMembers == null || effectiveClusterMembers.isBlank()) {
+            logger.info("No cluster members configured - shared Hazelcast client not created");
+            return null;
+        }
+
+        // Resolve cluster name
+        String effectiveClusterName = clusterName;
+        if (effectiveClusterName == null || effectiveClusterName.isEmpty()) {
+            effectiveClusterName = System.getenv("HAZELCAST_CLUSTER_NAME");
+        }
+        if (effectiveClusterName == null || effectiveClusterName.isEmpty()) {
+            effectiveClusterName = "ecommerce-cluster";
+        }
+
+        ClientConfig clientConfig = new ClientConfig();
+        clientConfig.setClusterName(effectiveClusterName);
+        for (String member : effectiveClusterMembers.split(",")) {
+            clientConfig.getNetworkConfig().addAddress(member.trim());
+        }
+
+        logger.info("Creating Hazelcast client for shared cluster: {} with members: {}",
+                effectiveClusterName, effectiveClusterMembers);
+        return HazelcastClient.newHazelcastClient(clientConfig);
     }
 
     /**
@@ -159,14 +210,22 @@ public class PaymentServiceConfig {
      * @return the saga state store
      */
     @Bean
-    public SagaStateStore sagaStateStore(HazelcastInstance hazelcast, MeterRegistry meterRegistry) {
-        return new HazelcastSagaStateStore(hazelcast, meterRegistry);
+    public SagaStateStore sagaStateStore(
+            @org.springframework.beans.factory.annotation.Qualifier("hazelcastClient")
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            HazelcastInstance hazelcastClient,
+            HazelcastInstance hazelcastInstance,
+            MeterRegistry meterRegistry) {
+        // Use shared cluster for saga state if available, otherwise fall back to embedded
+        HazelcastInstance hz = hazelcastClient != null ? hazelcastClient : hazelcastInstance;
+        return new HazelcastSagaStateStore(hz, meterRegistry);
     }
 
     /**
      * Creates the event sourcing controller for payment operations.
      *
-     * @param hazelcast the Hazelcast instance
+     * @param hazelcastInstance the embedded Hazelcast instance
+     * @param hazelcastClient the shared Hazelcast client (optional)
      * @param eventStore the event store
      * @param viewUpdater the view updater
      * @param meterRegistry the metrics registry
@@ -174,13 +233,17 @@ public class PaymentServiceConfig {
      */
     @Bean
     public EventSourcingController<Payment, String, DomainEvent<Payment, String>> paymentEventSourcingController(
-            HazelcastInstance hazelcast,
+            HazelcastInstance hazelcastInstance,
+            @org.springframework.beans.factory.annotation.Qualifier("hazelcastClient")
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            HazelcastInstance hazelcastClient,
             HazelcastEventStore<Payment, String, DomainEvent<Payment, String>> eventStore,
             PaymentViewUpdater viewUpdater,
             MeterRegistry meterRegistry) {
 
         controller = EventSourcingController.<Payment, String, DomainEvent<Payment, String>>builder()
-                .hazelcast(hazelcast)
+                .hazelcast(hazelcastInstance)
+                .sharedHazelcast(hazelcastClient)
                 .domainName(DOMAIN_NAME)
                 .eventStore(eventStore)
                 .viewUpdater(viewUpdater)

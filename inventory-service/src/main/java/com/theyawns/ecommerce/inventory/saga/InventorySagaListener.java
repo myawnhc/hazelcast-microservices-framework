@@ -5,6 +5,7 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.topic.ITopic;
 import com.hazelcast.topic.Message;
 import com.hazelcast.topic.MessageListener;
+import com.theyawns.ecommerce.common.events.OrderCancelledEvent;
 import com.theyawns.ecommerce.common.events.OrderCreatedEvent;
 import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.inventory.service.ProductService;
@@ -14,6 +15,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Component;
  * <p>Listens for saga-related events that trigger inventory actions:
  * <ul>
  *   <li>{@link OrderCreatedEvent} - Triggers stock reservation (saga step 1)</li>
+ *   <li>{@link OrderCancelledEvent} - Triggers stock release on order cancellation</li>
  *   <li>{@link PaymentFailedEvent} - Triggers stock release compensation</li>
  * </ul>
  *
@@ -45,9 +48,10 @@ public class InventorySagaListener {
      * Creates a new InventorySagaListener.
      *
      * @param inventoryService the inventory service for stock operations
-     * @param hazelcast the Hazelcast instance for topic subscriptions
+     * @param hazelcast the shared Hazelcast client for cross-service topic subscriptions
      */
-    public InventorySagaListener(ProductService inventoryService, HazelcastInstance hazelcast) {
+    public InventorySagaListener(ProductService inventoryService,
+                                 @Qualifier("hazelcastClient") HazelcastInstance hazelcast) {
         this.inventoryService = inventoryService;
         this.hazelcast = hazelcast;
     }
@@ -71,6 +75,9 @@ public class InventorySagaListener {
 
         ITopic<GenericRecord> orderCreatedTopic = hazelcast.getTopic("OrderCreated");
         orderCreatedTopic.addMessageListener(new OrderCreatedListener());
+
+        ITopic<GenericRecord> orderCancelledTopic = hazelcast.getTopic("OrderCancelled");
+        orderCancelledTopic.addMessageListener(new OrderCancelledListener());
 
         ITopic<GenericRecord> paymentFailedTopic = hazelcast.getTopic("PaymentFailed");
         paymentFailedTopic.addMessageListener(new PaymentFailedListener());
@@ -164,6 +171,83 @@ public class InventorySagaListener {
                         eventSpanDecorator.recordError(currentSpan, e);
                         eventSpanDecorator.endSpan(currentSpan);
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * Listener for OrderCancelled events.
+     *
+     * <p>When an order is cancelled (either directly by the customer or by the
+     * system), releases all stock that was previously reserved for that order.
+     * Handles both saga and non-saga cancellations.
+     */
+    class OrderCancelledListener implements MessageListener<GenericRecord> {
+
+        @Override
+        public void onMessage(Message<GenericRecord> message) {
+            GenericRecord record = message.getMessageObject();
+
+            String orderId = record.getString("key");
+            String sagaId = record.getString("sagaId");
+            String correlationId = record.getString("correlationId");
+            String reason = record.getString("reason");
+
+            logger.info("Received OrderCancelled event: orderId={}, sagaId={}", orderId,
+                    sagaId != null ? sagaId : "none");
+
+            Span span = null;
+            if (eventSpanDecorator != null) {
+                span = eventSpanDecorator.startSagaSpan("OrderCancelled",
+                        sagaId != null ? sagaId : "direct", "OrderFulfillment", 1);
+            }
+            final Span currentSpan = span;
+
+            String releaseReason = "Order cancelled" + (reason != null ? ": " + reason : "");
+
+            try {
+                if (sagaId != null && !sagaId.isEmpty()) {
+                    // Saga cancellation path - records compensation steps
+                    inventoryService.releaseStockForSaga(orderId, sagaId, correlationId, releaseReason)
+                            .whenComplete((product, error) -> {
+                                if (error != null) {
+                                    logger.error("Failed to release stock for cancelled order: orderId={}, sagaId={}",
+                                            orderId, sagaId, error);
+                                    if (eventSpanDecorator != null) {
+                                        eventSpanDecorator.recordError(currentSpan, error);
+                                    }
+                                } else {
+                                    logger.info("Stock released for cancelled order: orderId={}, sagaId={}",
+                                            orderId, sagaId);
+                                }
+                                if (eventSpanDecorator != null) {
+                                    eventSpanDecorator.endSpan(currentSpan);
+                                }
+                            });
+                } else {
+                    // Direct cancellation path - no saga tracking
+                    inventoryService.releaseReservedStockForOrder(orderId, releaseReason)
+                            .whenComplete((product, error) -> {
+                                if (error != null) {
+                                    logger.error("Failed to release stock for cancelled order: orderId={}",
+                                            orderId, error);
+                                    if (eventSpanDecorator != null) {
+                                        eventSpanDecorator.recordError(currentSpan, error);
+                                    }
+                                } else {
+                                    logger.info("Stock released for cancelled order: orderId={}", orderId);
+                                }
+                                if (eventSpanDecorator != null) {
+                                    eventSpanDecorator.endSpan(currentSpan);
+                                }
+                            });
+                }
+            } catch (Exception e) {
+                logger.error("Error initiating stock release for cancelled order: orderId={}", orderId, e);
+                if (eventSpanDecorator != null) {
+                    eventSpanDecorator.recordError(currentSpan, e);
+                    eventSpanDecorator.endSpan(currentSpan);
                 }
             }
         }

@@ -14,6 +14,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -46,9 +47,10 @@ public class OrderSagaListener {
      * Creates a new OrderSagaListener.
      *
      * @param orderService the order service for order operations
-     * @param hazelcast the Hazelcast instance for topic subscriptions
+     * @param hazelcast the shared Hazelcast client for cross-service topic subscriptions
      */
-    public OrderSagaListener(OrderOperations orderService, HazelcastInstance hazelcast) {
+    public OrderSagaListener(OrderOperations orderService,
+                             @Qualifier("hazelcastClient") HazelcastInstance hazelcast) {
         this.orderService = orderService;
         this.hazelcast = hazelcast;
     }
