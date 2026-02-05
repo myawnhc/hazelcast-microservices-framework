@@ -7,9 +7,11 @@
 
 **Phase 2 Focus**: Distributed transaction patterns, AI-powered features, visual observability, MCP integration
 
-**Prerequisites**: Phase 1 complete (verified 2026-01-27)
+**Prerequisites**:
+- Phase 1 complete (verified 2026-01-27)
+- Edition Configuration System (ADR 009) - enables Enterprise features
 
-**Duration**: 24 days (5 weeks)
+**Duration**: 25 days (5 weeks)
 
 **Key Deliverables**:
 1. Payment Service (4th microservice)
@@ -26,12 +28,23 @@
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
+| **Edition Configuration** | Three-tier system (ADR 009) | Supports CE/EE, secure license mgmt, extensible |
 | Saga Style | Choreographed (Phase 2) | Simpler for 4-service scenario |
 | Orchestration | Foundation only | Enable future orchestration |
 | Dashboard | Grafana | Faster than custom UI |
 | Vector Store | Optional | Requires Enterprise license |
 | Tracing | OpenTelemetry + Jaeger | Industry standard |
 | PostgreSQL | Optional persistence | Keep in-memory as default |
+
+### Edition Configuration Strategy
+
+See [ADR 009: Flexible Edition Configuration](../architecture/adr/009-flexible-edition-configuration.md) and [Edition Configuration Design](../design/edition-configuration-design.md) for full details.
+
+**Key Points**:
+- License key via `HZ_LICENSEKEY` environment variable (never in config files)
+- Feature flags: `auto` (default), `true` (require), `false` (disable)
+- Graceful fallback: Enterprise features return no-op when unavailable
+- Extensible pattern for other tiered products (databases, monitoring)
 
 ---
 
@@ -179,6 +192,71 @@ hazelcast-microservices-framework/
 ---
 
 ## Implementation Sequence
+
+### Pre-Week: Edition Configuration (Day 0)
+
+**Goal**: Implement flexible Community/Enterprise edition support
+
+**Reference**: [ADR 009](../architecture/adr/009-flexible-edition-configuration.md), [Design Spec](../design/edition-configuration-design.md)
+
+**Tasks**:
+1. Create `EditionDetector` service in framework-core
+2. Create `EditionProperties` configuration class
+3. Create `@ConditionalOnEnterpriseFeature` annotation
+4. Create `@ConditionalOnCommunityFallback` annotation
+5. Update application.yml with `framework:` configuration section
+6. Add startup logging for edition status
+7. Add /actuator/info contributor for edition details
+8. Update .gitignore for license files
+9. Update docker-compose.yml for license environment variable
+10. Write unit tests for edition detection
+
+**Configuration Structure**:
+```yaml
+framework:
+  edition:
+    mode: ${HAZELCAST_EDITION_MODE:auto}    # auto|community|enterprise
+    license:
+      env-var: HZ_LICENSEKEY
+      missing-behavior: warn                  # warn|fail|silent
+
+  # Feature Groups - enable/disable related features together
+  feature-groups:
+    ai-ml:                                   # Vector Store
+      enabled: ${FEATURE_GROUP_AI_ML:auto}
+    consistency:                             # CP Subsystem
+      enabled: ${FEATURE_GROUP_CONSISTENCY:auto}
+    persistence:                             # Hot Restart
+      enabled: ${FEATURE_GROUP_PERSISTENCE:auto}
+    security:                                # TLS, Auth, AuthZ (grouped)
+      enabled: ${FEATURE_GROUP_SECURITY:auto}
+    performance:                             # HD Memory
+      enabled: ${FEATURE_GROUP_PERFORMANCE:auto}
+
+  # Individual feature overrides (use 'inherit' to follow group)
+  features:
+    vector-store:
+      enabled: ${FEATURE_VECTOR_STORE:inherit}
+      fallback-behavior: empty-results
+```
+
+**Key Decisions**:
+- License rotation requires service restart (no runtime reload)
+- Feature groups for related features (security features grouped together)
+- Actuator `/info` exposes edition by default (operators need visibility)
+- Enterprise tests run when working on EE features OR nightly
+
+**Deliverables**:
+- [ ] `EditionDetector` service
+- [ ] `EditionProperties` with feature groups
+- [ ] `@ConditionalOnEnterpriseFeature` / `@ConditionalOnCommunityFallback` annotations
+- [ ] Updated YAML configuration with groups
+- [ ] Actuator `/info` contributor (enabled by default)
+- [ ] CI/CD workflow for dual-edition testing
+- [ ] Unit tests for both editions
+- [ ] Documentation updates
+
+---
 
 ### Week 1: Saga Infrastructure (Days 1-5)
 
@@ -1014,15 +1092,17 @@ public class EventSpanDecorator {
 
 **Goal**: Product recommendations via Hazelcast Vector Store
 
-**Note**: This feature requires Hazelcast Enterprise. Implementation includes graceful fallback.
+**Note**: This feature requires Hazelcast Enterprise. Uses the Edition Configuration System (Day 0) for feature detection and graceful fallback.
+
+**Prerequisites**: Edition Configuration (Day 0) complete
 
 **Tasks**:
 1. Define `VectorStoreService` interface
-2. Implement `HazelcastVectorStore` (Enterprise)
-3. Implement `NoOpVectorStore` (fallback)
+2. Implement `HazelcastVectorStoreService` with `@ConditionalOnEnterpriseFeature(VECTOR_STORE)`
+3. Implement `NoOpVectorStoreService` with `@ConditionalOnCommunityFallback(VECTOR_STORE)`
 4. Add product embedding generation
-5. Add similarity search endpoint
-6. Feature flag configuration
+5. Add `/api/products/{id}/similar` endpoint
+6. Test both Community and Enterprise code paths
 
 **VectorStoreService.java**:
 ```java
