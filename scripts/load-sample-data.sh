@@ -36,7 +36,7 @@ check_health() {
     local url=$2
 
     echo -n "Checking $service_name health... "
-    if curl -s "$url/actuator/health" | grep -q '"status":"UP"'; then
+    if curl -s "$url/actuator/health" | grep -qE '"status" *: *"UP"'; then
         echo -e "${GREEN}OK${NC}"
         return 0
     else
@@ -63,7 +63,7 @@ create_customer() {
         }")
 
     # Try to extract ID from success response first
-    local customer_id=$(echo "$response" | grep -o '"customerId":"[^"]*"' | cut -d'"' -f4)
+    local customer_id=$(echo "$response" | grep -oE '"customerId" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
 
     # If not found, extract from error message (eventual consistency case)
     if [ -z "$customer_id" ]; then
@@ -105,7 +105,7 @@ create_product() {
         }")
 
     # Try to extract ID from success response first
-    local product_id=$(echo "$response" | grep -o '"productId":"[^"]*"' | cut -d'"' -f4)
+    local product_id=$(echo "$response" | grep -oE '"productId" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
 
     # If not found, extract from error message (eventual consistency case)
     if [ -z "$product_id" ]; then

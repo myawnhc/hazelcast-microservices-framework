@@ -72,7 +72,7 @@ fi
 # Check service health
 echo -e "${YELLOW}Checking service health...${NC}"
 for service_url in "$ACCOUNT_SERVICE" "$INVENTORY_SERVICE" "$ORDER_SERVICE"; do
-    if curl -s "${service_url}/actuator/health" | grep -q '"status":"UP"'; then
+    if curl -s "${service_url}/actuator/health" | grep -qE '"status" *: *"UP"'; then
         echo -e "  ${service_url}: ${GREEN}OK${NC}"
     else
         echo -e "  ${service_url}: ${RED}FAILED${NC}"
@@ -84,10 +84,23 @@ echo ""
 
 # Load sample data IDs if available
 IDS_FILE="$(dirname "$0")/../demo-data/sample-data-ids.sh"
+STALE_IDS=false
 if [ -f "$IDS_FILE" ]; then
     source "$IDS_FILE"
-    echo -e "${GREEN}Loaded sample data IDs${NC}"
-else
+    # Validate IDs still exist (Hazelcast is in-memory; stale after restart)
+    if [ -n "${ALICE_ID:-}" ]; then
+        _check=$(curl -s -o /dev/null -w "%{http_code}" "$ACCOUNT_SERVICE/api/customers/$ALICE_ID" 2>/dev/null)
+        if [ "$_check" != "200" ]; then
+            echo -e "${YELLOW}Sample data IDs are stale — creating fresh test data${NC}"
+            STALE_IDS=true
+            unset ALICE_ID BOB_ID LAPTOP_ID WATCH_ID BAND_ID
+        else
+            echo -e "${GREEN}Loaded sample data IDs${NC}"
+        fi
+    fi
+fi
+
+if [ "$STALE_IDS" = true ] || [ ! -f "$IDS_FILE" ]; then
     # Create test customer and product on the fly
     echo -e "${YELLOW}Creating test data...${NC}"
 
@@ -95,13 +108,13 @@ else
     CUSTOMER_RESPONSE=$(curl -s -X POST "$ACCOUNT_SERVICE/api/customers" \
         -H "Content-Type: application/json" \
         -d '{"email":"loadtest@example.com","name":"Load Test User","address":"123 Test St"}')
-    TEST_CUSTOMER_ID=$(echo "$CUSTOMER_RESPONSE" | grep -o '"customerId":"[^"]*"' | cut -d'"' -f4)
+    TEST_CUSTOMER_ID=$(echo "$CUSTOMER_RESPONSE" | grep -oE '"customerId" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
 
     # Create test product
     PRODUCT_RESPONSE=$(curl -s -X POST "$INVENTORY_SERVICE/api/products" \
         -H "Content-Type: application/json" \
-        -d '{"sku":"LOAD-TEST-001","name":"Load Test Product","price":10.00,"quantityOnHand":10000}')
-    TEST_PRODUCT_ID=$(echo "$PRODUCT_RESPONSE" | grep -o '"productId":"[^"]*"' | cut -d'"' -f4)
+        -d '{"sku":"LOAD-TEST-001","name":"Load Test Product","price":10.00,"quantityOnHand":100000}')
+    TEST_PRODUCT_ID=$(echo "$PRODUCT_RESPONSE" | grep -oE '"productId" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
 
     if [ -z "$TEST_CUSTOMER_ID" ] || [ -z "$TEST_PRODUCT_ID" ]; then
         echo -e "${RED}Failed to create test data${NC}"
@@ -125,21 +138,20 @@ START_TIME=$(date +%s%N)
 # Create temporary file for results
 RESULTS_FILE=$(mktemp)
 
-# Function to create order
-create_order() {
-    local customer_id="${TEST_CUSTOMER_ID:-$ALICE_ID}"
-    local product_id="${TEST_PRODUCT_ID:-$LAPTOP_ID}"
+# Mixed workload functions — exercises all 3 services to populate all dashboards
+CUSTOMER_ID="${TEST_CUSTOMER_ID:-$ALICE_ID}"
+PRODUCT_ID="${TEST_PRODUCT_ID:-$LAPTOP_ID}"
 
+create_order() {
     local response=$(curl -s -w "%{http_code}" -o /dev/null -X POST "$ORDER_SERVICE/api/orders" \
         -H "Content-Type: application/json" \
         -d "{
-            \"customerId\": \"$customer_id\",
+            \"customerId\": \"$CUSTOMER_ID\",
             \"lineItems\": [
-                {\"productId\": \"$product_id\", \"quantity\": 1}
+                {\"productId\": \"$PRODUCT_ID\", \"quantity\": 1}
             ],
-            \"shippingAddress\": \"123 Load Test St\"
+            \"shippingAddress\": \"$((RANDOM % 999)) Load Test St\"
         }")
-
     if [[ "$response" == "201" || "$response" == "200" ]]; then
         echo "1" >> "$RESULTS_FILE"
     else
@@ -147,8 +159,45 @@ create_order() {
     fi
 }
 
+reserve_stock() {
+    local response=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
+        "$INVENTORY_SERVICE/api/products/$PRODUCT_ID/stock/reserve" \
+        -H "Content-Type: application/json" \
+        -d "{\"quantity\": 1, \"orderId\": \"loadtest-$RANDOM\"}")
+    if [[ "$response" == "200" ]]; then
+        echo "1" >> "$RESULTS_FILE"
+    else
+        echo "0" >> "$RESULTS_FILE"
+    fi
+}
+
+create_customer() {
+    local response=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
+        "$ACCOUNT_SERVICE/api/customers" \
+        -H "Content-Type: application/json" \
+        -d "{\"email\": \"lt${RANDOM}@example.com\", \"name\": \"Load User $RANDOM\", \"address\": \"$RANDOM Test Ave\"}")
+    if [[ "$response" == "201" || "$response" == "200" ]]; then
+        echo "1" >> "$RESULTS_FILE"
+    else
+        echo "0" >> "$RESULTS_FILE"
+    fi
+}
+
+# Mixed workload: 60% orders, 25% stock reservations, 15% customer creations
+mixed_workload() {
+    local roll=$((RANDOM % 100))
+    if [ $roll -lt 60 ]; then
+        create_order
+    elif [ $roll -lt 85 ]; then
+        reserve_stock
+    else
+        create_customer
+    fi
+}
+
 # Run concurrent requests
 echo -e "Running $CONCURRENCY concurrent workers for ${DURATION}s..."
+echo -e "Workload mix: 60% orders, 25% stock reserves, 15% customer creates"
 echo ""
 
 END_TIME=$(($(date +%s) + DURATION))
@@ -157,7 +206,7 @@ END_TIME=$(($(date +%s) + DURATION))
 for i in $(seq 1 $CONCURRENCY); do
     (
         while [ $(date +%s) -lt $END_TIME ]; do
-            create_order
+            mixed_workload
         done
     ) &
 done
