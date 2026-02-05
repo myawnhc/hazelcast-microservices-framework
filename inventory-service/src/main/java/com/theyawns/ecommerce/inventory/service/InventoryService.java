@@ -316,6 +316,51 @@ public class InventoryService implements ProductService {
     }
 
     /**
+     * Releases all reserved stock for an order (non-saga path).
+     *
+     * <p>Looks up tracked reservations by orderId and releases stock for each
+     * product without recording saga compensation steps.
+     *
+     * @param orderId the order ID whose reservations should be released
+     * @param reason the reason for releasing
+     * @return a future that completes with the last updated product (or null if no reservations)
+     */
+    @Override
+    public CompletableFuture<Product> releaseReservedStockForOrder(
+            final String orderId, final String reason) {
+
+        logger.info("Releasing reserved stock for order {} (direct cancellation)", orderId);
+
+        List<String> reservationEntries = getReservations(orderId);
+        if (reservationEntries.isEmpty()) {
+            logger.warn("No tracked reservations found for order: {}", orderId);
+            return CompletableFuture.completedFuture(null);
+        }
+
+        CompletableFuture<Product> lastFuture = CompletableFuture.completedFuture(null);
+
+        for (String entry : reservationEntries) {
+            String[] parts = entry.split(":");
+            String productId = parts[0];
+            int quantity = Integer.parseInt(parts[1]);
+
+            logger.info("Releasing {} units of product {} for order {} (direct cancellation)",
+                    quantity, productId, orderId);
+
+            StockReleasedEvent event = new StockReleasedEvent(productId, quantity, orderId, reason);
+
+            lastFuture = controller.handleEvent(event)
+                    .thenApply(completionInfo -> {
+                        logger.debug("Stock released for product {} (direct cancellation, orderId: {})",
+                                productId, orderId);
+                        return getProductOrThrow(productId);
+                    });
+        }
+
+        return lastFuture;
+    }
+
+    /**
      * Checks if a product exists in the materialized view.
      *
      * @param productId the product ID
