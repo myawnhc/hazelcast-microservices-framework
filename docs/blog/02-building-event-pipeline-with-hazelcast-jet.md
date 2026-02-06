@@ -1,6 +1,6 @@
 # Building the Event Pipeline with Hazelcast Jet
 
-*Part 2 of 3 in the "Building Event-Driven Microservices with Hazelcast" series*
+*Part 2 of 6 in the "Building Event-Driven Microservices with Hazelcast" series*
 
 ---
 

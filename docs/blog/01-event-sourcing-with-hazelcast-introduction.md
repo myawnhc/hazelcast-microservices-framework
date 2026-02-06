@@ -1,6 +1,6 @@
 # Event Sourcing with Hazelcast: A Practical Introduction
 
-*Part 1 of 3 in the "Building Event-Driven Microservices with Hazelcast" series*
+*Part 1 of 6 in the "Building Event-Driven Microservices with Hazelcast" series*
 
 ---
 
@@ -351,10 +351,13 @@ This is possible because:
 
 ## What's Next?
 
-This article introduced the fundamentals of event sourcing with Hazelcast. In the next two articles, we'll dive deeper:
+This article introduced the fundamentals of event sourcing with Hazelcast. In the next articles, we'll dive deeper:
 
 - **Part 2**: Building the Event Pipeline with Hazelcast Jet - How the 6-stage pipeline processes events in real-time
 - **Part 3**: Materialized Views for Fast Queries - How to design denormalized views for different query patterns
+- **Part 4**: Observability in Event-Sourced Systems - Prometheus metrics, Grafana dashboards, and distributed tracing
+- **Part 5**: The Saga Pattern for Distributed Transactions - Choreographed sagas with compensation and timeout handling
+- **Part 6**: Vector Similarity Search with Hazelcast - Embeddings, cosine similarity, and edition-aware features
 
 ---
 

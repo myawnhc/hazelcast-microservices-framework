@@ -1,6 +1,6 @@
 # Materialized Views for Fast Queries
 
-*Part 3 of 3 in the "Building Event-Driven Microservices with Hazelcast" series*
+*Part 3 of 6 in the "Building Event-Driven Microservices with Hazelcast" series*
 
 ---
 
@@ -663,6 +663,8 @@ The code is available on GitHub with 677 tests, Docker Compose setup, and demo s
 - [CQRS and Event Sourcing](https://docs.microsoft.com/en-us/azure/architecture/patterns/cqrs)
 
 ---
+
+*Next: [Part 4 - Observability in Event-Sourced Systems](04-observability-in-event-sourced-systems.md)*
 
 *Previous: [Part 2 - Building the Event Pipeline with Hazelcast Jet](02-building-event-pipeline-with-hazelcast-jet.md)*
 
