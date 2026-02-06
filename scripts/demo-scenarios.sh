@@ -742,6 +742,407 @@ scenario_4_similar_products() {
 }
 
 # ============================================================================
+# SCENARIO 5: Saga Payment Failure (Compensation)
+# ============================================================================
+scenario_5_payment_failure() {
+    print_header "SCENARIO 5: Saga Payment Failure & Automatic Compensation"
+
+    echo "This scenario demonstrates the saga compensation mechanism:"
+    echo "  1. Create a HIGH-VALUE order (total > \$10,000)"
+    echo "  2. Saga reserves stock (Step 1 succeeds)"
+    echo "  3. Payment is DECLINED (amount exceeds limit → PaymentFailedEvent)"
+    echo "  4. Saga compensates: stock released, order cancelled"
+    echo ""
+    echo "Compensation flow:"
+    echo "  OrderCreated → StockReserved → PaymentFailed"
+    echo "                       ↓"
+    echo "  StockReleased ← Compensation triggered"
+    echo "  OrderCancelled ← Saga status: COMPENSATED"
+    wait_for_keypress
+
+    # Step 1: Create a customer (or use existing)
+    local customer_id="${ALICE_ID:-}"
+
+    if [ -z "$customer_id" ]; then
+        print_step "1" "Creating a customer for this scenario"
+        local customer_response=$(api_post "$ACCOUNT_SERVICE/api/customers" '{
+            "email": "saga.failure@example.com",
+            "name": "Saga Failure Demo",
+            "address": "789 Compensation Ave",
+            "phone": "555-SAGA"
+        }')
+        customer_id=$(extract_id "$customer_response")
+        print_success "Customer created: $customer_id"
+    else
+        print_step "1" "Using existing customer (Alice)"
+        print_success "Customer ID: $customer_id"
+    fi
+    wait_for_keypress
+
+    # Step 2: Create a high-value product
+    print_step "2" "Creating a high-value product (\$5,999.99 each)"
+    local product_response=$(api_post "$INVENTORY_SERVICE/api/products" '{
+        "sku": "SAGA-FAIL-001",
+        "name": "Premium Server Rack",
+        "description": "Enterprise server rack for saga failure demo",
+        "price": 5999.99,
+        "quantityOnHand": 20,
+        "category": "Enterprise Hardware"
+    }')
+
+    local product_id=$(extract_id "$product_response")
+
+    if [ -n "$product_id" ]; then
+        print_success "Product created: $product_id (price: \$5,999.99)"
+    else
+        print_error "Failed to create product"
+        echo "$product_response"
+        return 1
+    fi
+    wait_for_keypress
+
+    # Step 3: Check initial stock level
+    print_step "3" "Recording initial stock level"
+    local initial_product=$(api_get "$INVENTORY_SERVICE/api/products/$product_id")
+    local initial_qty=$(echo "$initial_product" | grep -oE '"quantityOnHand" *: *[0-9]+' | grep -oE '[0-9]+$')
+    local initial_reserved=$(echo "$initial_product" | grep -oE '"quantityReserved" *: *[0-9]+' | grep -oE '[0-9]+$')
+
+    echo "  Initial stock:"
+    echo "    - Quantity on hand: ${initial_qty:-0}"
+    echo "    - Quantity reserved: ${initial_reserved:-0}"
+    wait_for_keypress
+
+    # Step 4: Place a high-value order (qty 2 × $5,999.99 = $11,999.98 > $10,000 limit)
+    print_step "4" "Placing HIGH-VALUE order (2 × \$5,999.99 = \$11,999.98)"
+    echo ""
+    echo -e "  ${YELLOW}The payment service declines payments over \$10,000.${NC}"
+    echo "  This will trigger: OrderCreated → StockReserved → PaymentFailed"
+    echo ""
+
+    local order_response=$(api_post "$ORDER_SERVICE/api/orders" "{
+        \"customerId\": \"$customer_id\",
+        \"lineItems\": [
+            {
+                \"productId\": \"$product_id\",
+                \"quantity\": 2,
+                \"unitPrice\": 5999.99
+            }
+        ],
+        \"shippingAddress\": \"789 Compensation Ave\"
+    }")
+
+    local order_id=$(extract_id "$order_response")
+
+    if [ -n "$order_id" ]; then
+        print_success "Order created: $order_id (saga started)"
+        echo "  Order total: \$11,999.98 (exceeds \$10,000 payment limit)"
+    else
+        print_error "Failed to create order"
+        echo "$order_response"
+        return 1
+    fi
+    wait_for_keypress
+
+    # Step 5: Wait for saga compensation (order should reach CANCELLED)
+    print_step "5" "Waiting for saga compensation (order → CANCELLED)"
+    echo ""
+    echo "  Expected saga flow:"
+    echo "    1. OrderCreated event published"
+    echo "    2. Inventory service reserves stock (StockReserved)"
+    echo "    3. Payment service declines payment (PaymentFailed)"
+    echo "    4. Inventory service releases stock (compensation)"
+    echo "    5. Order service cancels order (compensation)"
+
+    if wait_for_order_status "$order_id" "CANCELLED" 30; then
+        print_success "Compensation complete! Order is CANCELLED"
+    else
+        # Check if order is in another state
+        local current_order=$(api_get "$ORDER_SERVICE/api/orders/$order_id")
+        local current_status=$(echo "$current_order" | grep -oE '"status" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
+        echo "  Current order status: ${current_status:-unknown}"
+        echo "  (Compensation may still be processing)"
+    fi
+    wait_for_keypress
+
+    # Step 6: Verify stock was released (back to original)
+    print_step "6" "Verifying stock was automatically released"
+    local final_product=$(api_get "$INVENTORY_SERVICE/api/products/$product_id")
+    local final_reserved=$(echo "$final_product" | grep -oE '"quantityReserved" *: *[0-9]+' | grep -oE '[0-9]+$')
+
+    echo "  Stock after compensation:"
+    echo "    - Quantity on hand: ${initial_qty:-0}"
+    echo "    - Quantity reserved: ${final_reserved:-0} (was temporarily reserved during saga)"
+
+    if [ "${final_reserved:-0}" -eq "${initial_reserved:-0}" ]; then
+        print_success "Stock correctly restored! Compensation released all reserved units."
+    else
+        echo "  Note: Stock release may take a moment via async event processing"
+    fi
+    wait_for_keypress
+
+    # Step 7: Check payment status (should show DECLINED/FAILED)
+    print_step "7" "Checking payment record"
+    print_substep "GET /api/payments/order/$order_id"
+
+    local payment_response=$(api_get "$PAYMENT_SERVICE/api/payments/order/$order_id")
+    local payment_status=$(echo "$payment_response" | grep -oE '"status" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
+
+    if [ -n "$payment_status" ]; then
+        echo "  Payment status: $payment_status"
+        print_json "$payment_response"
+    else
+        echo "  No payment record found (payment was declined before recording)"
+    fi
+    wait_for_keypress
+
+    # Step 8: Show final order state
+    print_step "8" "Final order state"
+    print_substep "GET /api/orders/$order_id"
+
+    local final_order=$(api_get "$ORDER_SERVICE/api/orders/$order_id")
+    print_json "$final_order"
+
+    echo ""
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  SCENARIO 5 COMPLETE: Saga Payment Failure & Compensation${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "Key observations:"
+    echo "  1. Payment was automatically declined (amount > \$10,000 limit)"
+    echo "  2. PaymentFailedEvent triggered automatic compensation"
+    echo "  3. Stock was released without any manual API call"
+    echo "  4. Order was cancelled as part of compensation"
+    echo "  5. All events (including compensation) are in the event store"
+    echo "  6. The saga pattern ensures data consistency across services"
+}
+
+# ============================================================================
+# SCENARIO 6: Saga Timeout (Service Unavailable)
+# ============================================================================
+scenario_6_timeout() {
+    print_header "SCENARIO 6: Saga Timeout & Automatic Recovery"
+
+    echo "This scenario demonstrates saga timeout detection:"
+    echo "  1. Stop the payment service (simulate outage)"
+    echo "  2. Place an order (saga starts, stock reserved)"
+    echo "  3. Payment step never completes (service is down)"
+    echo "  4. Saga timeout detector fires after deadline"
+    echo "  5. Automatic compensation: stock released, order cancelled"
+    echo ""
+    echo "Timeout configuration:"
+    echo "  - OrderFulfillment timeout: 60 seconds"
+    echo "  - Timeout check interval: 5 seconds"
+    echo "  - Auto-compensate: enabled"
+    echo ""
+    echo -e "${YELLOW}NOTE: This scenario will temporarily stop the payment service.${NC}"
+    echo -e "${YELLOW}      It will be restarted automatically at the end.${NC}"
+    wait_for_keypress
+
+    # Step 1: Verify payment service is currently running
+    print_step "1" "Verifying payment service is running"
+    local health_check=$(curl -s -o /dev/null -w "%{http_code}" "$PAYMENT_SERVICE/actuator/health" 2>/dev/null)
+
+    if [ "$health_check" = "200" ]; then
+        print_success "Payment service is running at $PAYMENT_SERVICE"
+    else
+        print_error "Payment service is not reachable (HTTP $health_check)"
+        echo "  Ensure services are running: ./scripts/start-docker.sh"
+        return 1
+    fi
+    wait_for_keypress
+
+    # Step 2: Create customer and product
+    local customer_id="${BOB_ID:-}"
+
+    if [ -z "$customer_id" ]; then
+        print_step "2a" "Creating a customer for this scenario"
+        local customer_response=$(api_post "$ACCOUNT_SERVICE/api/customers" '{
+            "email": "timeout.demo@example.com",
+            "name": "Timeout Demo User",
+            "address": "101 Timeout Lane",
+            "phone": "555-TIME"
+        }')
+        customer_id=$(extract_id "$customer_response")
+        print_success "Customer created: $customer_id"
+    else
+        print_step "2a" "Using existing customer (Bob)"
+        print_success "Customer ID: $customer_id"
+    fi
+
+    print_step "2b" "Creating a product for this scenario"
+    local product_response=$(api_post "$INVENTORY_SERVICE/api/products" '{
+        "sku": "TIMEOUT-DEMO-001",
+        "name": "Timeout Demo Widget",
+        "description": "Widget for timeout demo scenario",
+        "price": 199.99,
+        "quantityOnHand": 50,
+        "category": "Demo"
+    }')
+
+    local product_id=$(extract_id "$product_response")
+
+    if [ -n "$product_id" ]; then
+        print_success "Product created: $product_id"
+    else
+        print_error "Failed to create product"
+        return 1
+    fi
+
+    # Record initial stock
+    local initial_product=$(api_get "$INVENTORY_SERVICE/api/products/$product_id")
+    local initial_reserved=$(echo "$initial_product" | grep -oE '"quantityReserved" *: *[0-9]+' | grep -oE '[0-9]+$')
+    wait_for_keypress
+
+    # Step 3: Stop the payment service
+    print_step "3" "Stopping payment service (simulating outage)"
+    echo -e "  ${YELLOW}docker compose stop payment-service${NC}"
+
+    docker compose -f docker/docker-compose.yml stop payment-service 2>/dev/null ||
+        docker-compose -f docker/docker-compose.yml stop payment-service 2>/dev/null
+
+    sleep 2
+
+    # Verify it's stopped
+    local stopped_check=$(curl -s -o /dev/null -w "%{http_code}" "$PAYMENT_SERVICE/actuator/health" 2>/dev/null)
+    if [ "$stopped_check" != "200" ]; then
+        print_success "Payment service is stopped"
+    else
+        print_error "Payment service still responding - stop may have failed"
+    fi
+    wait_for_keypress
+
+    # Step 4: Place an order (saga will start but payment step will never complete)
+    print_step "4" "Placing order (saga starts, but payment step will hang)"
+    echo ""
+    echo "  Saga flow will be:"
+    echo "    Step 0: OrderCreated (order-service) ✓"
+    echo "    Step 1: StockReserved (inventory-service) ✓"
+    echo "    Step 2: PaymentProcessed (payment-service) ✗ SERVICE DOWN"
+    echo "           → Saga stalls here until timeout"
+
+    local order_response=$(api_post "$ORDER_SERVICE/api/orders" "{
+        \"customerId\": \"$customer_id\",
+        \"lineItems\": [
+            {
+                \"productId\": \"$product_id\",
+                \"quantity\": 2,
+                \"unitPrice\": 199.99
+            }
+        ],
+        \"shippingAddress\": \"101 Timeout Lane\"
+    }")
+
+    local order_id=$(extract_id "$order_response")
+
+    if [ -n "$order_id" ]; then
+        print_success "Order created: $order_id (saga started)"
+    else
+        print_error "Failed to create order"
+        # Restart payment service before returning
+        docker compose -f docker/docker-compose.yml start payment-service 2>/dev/null ||
+            docker-compose -f docker/docker-compose.yml start payment-service 2>/dev/null
+        return 1
+    fi
+    wait_for_keypress
+
+    # Step 5: Wait for timeout (60 seconds for OrderFulfillment + check interval)
+    print_step "5" "Waiting for saga timeout (up to 75 seconds)"
+    echo ""
+    echo "  The saga timeout detector checks every 5 seconds."
+    echo "  OrderFulfillment deadline: 60 seconds from saga start."
+    echo ""
+    echo -n "  Elapsed: "
+
+    local timeout_wait=75
+    local elapsed=0
+    local compensated=false
+
+    while [ $elapsed -lt $timeout_wait ]; do
+        local order_check=$(api_get "$ORDER_SERVICE/api/orders/$order_id")
+        local check_status=$(echo "$order_check" | grep -oE '"status" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
+
+        if [ "$check_status" = "CANCELLED" ]; then
+            compensated=true
+            break
+        fi
+
+        # Print progress every 5 seconds
+        if [ $((elapsed % 5)) -eq 0 ]; then
+            echo -n "${elapsed}s "
+        fi
+
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    echo ""
+
+    if [ "$compensated" = true ]; then
+        echo ""
+        print_success "Saga timed out and compensated after ~${elapsed} seconds!"
+        echo "  Order status: CANCELLED (automatic compensation)"
+    else
+        echo ""
+        echo -e "  ${YELLOW}Timeout compensation may still be processing.${NC}"
+        echo "  Current order status: ${check_status:-unknown}"
+    fi
+    wait_for_keypress
+
+    # Step 6: Verify stock was released
+    print_step "6" "Verifying stock was released (compensation)"
+    local final_product=$(api_get "$INVENTORY_SERVICE/api/products/$product_id")
+    local final_reserved=$(echo "$final_product" | grep -oE '"quantityReserved" *: *[0-9]+' | grep -oE '[0-9]+$')
+
+    echo "  Stock after timeout compensation:"
+    echo "    - Quantity reserved: ${final_reserved:-0} (initial: ${initial_reserved:-0})"
+
+    if [ "${final_reserved:-0}" -eq "${initial_reserved:-0}" ]; then
+        print_success "Stock restored to pre-order state!"
+    else
+        echo "  Note: Compensation may still be processing"
+    fi
+    wait_for_keypress
+
+    # Step 7: Restart the payment service
+    print_step "7" "Restarting payment service"
+    echo -e "  ${YELLOW}docker compose start payment-service${NC}"
+
+    docker compose -f docker/docker-compose.yml start payment-service 2>/dev/null ||
+        docker-compose -f docker/docker-compose.yml start payment-service 2>/dev/null
+
+    echo -n "  Waiting for payment service to become healthy"
+    local restart_wait=0
+    while [ $restart_wait -lt 30 ]; do
+        local restart_check=$(curl -s -o /dev/null -w "%{http_code}" "$PAYMENT_SERVICE/actuator/health" 2>/dev/null)
+        if [ "$restart_check" = "200" ]; then
+            echo ""
+            print_success "Payment service is back online!"
+            break
+        fi
+        echo -n "."
+        sleep 2
+        restart_wait=$((restart_wait + 2))
+    done
+
+    if [ $restart_wait -ge 30 ]; then
+        echo ""
+        echo -e "  ${YELLOW}Payment service may need more time to start. Check Docker logs.${NC}"
+    fi
+
+    echo ""
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  SCENARIO 6 COMPLETE: Saga Timeout & Recovery${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "Key observations:"
+    echo "  1. Payment service was unavailable → saga step 2 never completed"
+    echo "  2. SagaTimeoutDetector detected the stalled saga after 60 seconds"
+    echo "  3. Automatic compensation released reserved stock"
+    echo "  4. Order was cancelled without manual intervention"
+    echo "  5. Payment service was restarted and system recovered gracefully"
+    echo "  6. No data was lost — all events are in the event store"
+}
+
+# ============================================================================
 # Main menu
 # ============================================================================
 show_menu() {
@@ -760,10 +1161,18 @@ show_menu() {
     echo "  4) Similar Products (Vector Store)"
     echo "     Vector similarity search with Enterprise/Community fallback"
     echo ""
+    echo -e "  ${CYAN}--- Saga Patterns ---${NC}"
+    echo ""
+    echo "  5) Saga Payment Failure (Compensation)"
+    echo "     High-value order → payment declined → automatic rollback"
+    echo ""
+    echo "  6) Saga Timeout (Service Unavailable)"
+    echo "     Stop payment service → saga stalls → timeout → auto-recovery"
+    echo ""
     echo "  all) Run all scenarios"
     echo "  q) Quit"
     echo ""
-    echo -n "Select scenario [1-4, all, q]: "
+    echo -n "Select scenario [1-6, all, q]: "
 }
 
 # ============================================================================
@@ -777,6 +1186,8 @@ if [ -n "$1" ]; then
         2) scenario_2_cancellation ;;
         3) scenario_3_view_rebuild ;;
         4) scenario_4_similar_products ;;
+        5) scenario_5_payment_failure ;;
+        6) scenario_6_timeout ;;
         all)
             scenario_1_happy_path
             wait_for_keypress
@@ -785,10 +1196,14 @@ if [ -n "$1" ]; then
             scenario_3_view_rebuild
             wait_for_keypress
             scenario_4_similar_products
+            wait_for_keypress
+            scenario_5_payment_failure
+            wait_for_keypress
+            scenario_6_timeout
             ;;
         *)
             echo "Unknown scenario: $1"
-            echo "Usage: $0 [1|2|3|4|all]"
+            echo "Usage: $0 [1|2|3|4|5|6|all]"
             exit 1
             ;;
     esac
@@ -805,6 +1220,8 @@ while true; do
         2) scenario_2_cancellation ;;
         3) scenario_3_view_rebuild ;;
         4) scenario_4_similar_products ;;
+        5) scenario_5_payment_failure ;;
+        6) scenario_6_timeout ;;
         all)
             scenario_1_happy_path
             wait_for_keypress
@@ -813,13 +1230,17 @@ while true; do
             scenario_3_view_rebuild
             wait_for_keypress
             scenario_4_similar_products
+            wait_for_keypress
+            scenario_5_payment_failure
+            wait_for_keypress
+            scenario_6_timeout
             ;;
         q|Q)
             echo "Goodbye!"
             exit 0
             ;;
         *)
-            echo -e "${RED}Invalid choice. Please select 1, 2, 3, 4, all, or q.${NC}"
+            echo -e "${RED}Invalid choice. Please select 1-6, all, or q.${NC}"
             ;;
     esac
 
