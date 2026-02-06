@@ -5,6 +5,7 @@
 # Usage:
 #   ./scripts/demo-scenarios.sh           # Interactive menu
 #   ./scripts/demo-scenarios.sh 1         # Run scenario 1 directly
+#   ./scripts/demo-scenarios.sh 4         # Run scenario 4 directly
 #   ./scripts/demo-scenarios.sh all       # Run all scenarios
 #
 # Prerequisites:
@@ -627,6 +628,120 @@ scenario_3_view_rebuild() {
 }
 
 # ============================================================================
+# SCENARIO 4: Similar Products (Vector Store)
+# ============================================================================
+scenario_4_similar_products() {
+    print_header "SCENARIO 4: Similar Products (Vector Store)"
+
+    echo "This scenario demonstrates the vector store integration:"
+    echo "  1. Look up a product from sample data"
+    echo "  2. Call the similar products endpoint"
+    echo "  3. Display results (Enterprise) or fallback message (Community)"
+    echo ""
+    echo "The vector store uses cosine similarity on product embeddings."
+    echo "Community Edition returns an informational message; Enterprise returns results."
+    wait_for_keypress
+
+    # Step 1: Determine product ID
+    local product_id="${LAPTOP_ID:-}"
+
+    if [ -z "$product_id" ]; then
+        print_step "1" "Creating a product for this scenario"
+        local product_response=$(api_post "$INVENTORY_SERVICE/api/products" '{
+            "sku": "VECTOR-DEMO-001",
+            "name": "Vector Demo Laptop",
+            "description": "High-performance laptop for vector search demo",
+            "price": 1299.99,
+            "quantityOnHand": 50,
+            "category": "Electronics"
+        }')
+        product_id=$(extract_id "$product_response")
+        if [ -n "$product_id" ]; then
+            print_success "Product created: $product_id"
+        else
+            print_error "Failed to create product"
+            echo "$product_response"
+            return 1
+        fi
+    else
+        print_step "1" "Using sample data product (Laptop)"
+        print_success "Product ID: $product_id"
+    fi
+    wait_for_keypress
+
+    # Step 2: Fetch and display product details
+    print_step "2" "Fetching product details"
+    print_substep "GET /api/products/$product_id"
+
+    local product_details=$(api_get "$INVENTORY_SERVICE/api/products/$product_id")
+
+    if [ -n "$product_details" ]; then
+        print_success "Product details retrieved"
+        print_json "$product_details"
+    else
+        print_error "Failed to fetch product details"
+        return 1
+    fi
+    wait_for_keypress
+
+    # Step 3: Call similar products endpoint
+    print_step "3" "Finding similar products"
+    print_substep "GET /api/products/$product_id/similar?limit=5"
+
+    local similar_response=$(api_get "$INVENTORY_SERVICE/api/products/$product_id/similar?limit=5")
+
+    if [ -z "$similar_response" ]; then
+        print_error "No response from similar products endpoint"
+        return 1
+    fi
+
+    # Parse response fields
+    local vector_available=$(echo "$similar_response" | grep -oE '"vectorStoreAvailable" *: *(true|false)' | grep -oE '(true|false)$')
+    local implementation=$(echo "$similar_response" | grep -oE '"implementation" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
+    local message=$(echo "$similar_response" | grep -oE '"message" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
+    wait_for_keypress
+
+    # Step 4: Display results based on edition
+    print_step "4" "Results"
+
+    if [ "$vector_available" = "true" ]; then
+        print_success "Vector store is available! (Enterprise Edition)"
+        echo ""
+        echo "  Implementation: $implementation"
+        echo ""
+        echo "  Similar products:"
+        print_json "$similar_response"
+    else
+        echo -e "  ${YELLOW}Vector store is not available (Community Edition)${NC}"
+        echo ""
+        echo "  Implementation: ${implementation:-No-Op (Community Edition)}"
+        if [ -n "$message" ]; then
+            echo "  Message: $message"
+        fi
+        echo ""
+        echo "  Full response:"
+        print_json "$similar_response"
+        echo ""
+        echo -e "  ${CYAN}To enable vector similarity search:${NC}"
+        echo "    1. Obtain a Hazelcast Enterprise license"
+        echo "    2. Set the HZ_LICENSEKEY environment variable"
+        echo "    3. Restart the services"
+        echo "    4. The framework auto-detects Enterprise and enables vector store"
+    fi
+
+    echo ""
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  SCENARIO 4 COMPLETE: Similar Products (Vector Store)${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "Key observations:"
+    echo "  1. The similar products endpoint works in both editions"
+    echo "  2. Community Edition gracefully returns an informational response"
+    echo "  3. Enterprise Edition returns actual similarity results"
+    echo "  4. Edition detection is fully automatic (no code changes needed)"
+}
+
+# ============================================================================
 # Main menu
 # ============================================================================
 show_menu() {
@@ -642,10 +757,13 @@ show_menu() {
     echo "  3) View Rebuilding (Conceptual)"
     echo "     Understanding event replay and view reconstruction"
     echo ""
+    echo "  4) Similar Products (Vector Store)"
+    echo "     Vector similarity search with Enterprise/Community fallback"
+    echo ""
     echo "  all) Run all scenarios"
     echo "  q) Quit"
     echo ""
-    echo -n "Select scenario [1-3, all, q]: "
+    echo -n "Select scenario [1-4, all, q]: "
 }
 
 # ============================================================================
@@ -658,16 +776,19 @@ if [ -n "$1" ]; then
         1) scenario_1_happy_path ;;
         2) scenario_2_cancellation ;;
         3) scenario_3_view_rebuild ;;
+        4) scenario_4_similar_products ;;
         all)
             scenario_1_happy_path
             wait_for_keypress
             scenario_2_cancellation
             wait_for_keypress
             scenario_3_view_rebuild
+            wait_for_keypress
+            scenario_4_similar_products
             ;;
         *)
             echo "Unknown scenario: $1"
-            echo "Usage: $0 [1|2|3|all]"
+            echo "Usage: $0 [1|2|3|4|all]"
             exit 1
             ;;
     esac
@@ -683,19 +804,22 @@ while true; do
         1) scenario_1_happy_path ;;
         2) scenario_2_cancellation ;;
         3) scenario_3_view_rebuild ;;
+        4) scenario_4_similar_products ;;
         all)
             scenario_1_happy_path
             wait_for_keypress
             scenario_2_cancellation
             wait_for_keypress
             scenario_3_view_rebuild
+            wait_for_keypress
+            scenario_4_similar_products
             ;;
         q|Q)
             echo "Goodbye!"
             exit 0
             ;;
         *)
-            echo -e "${RED}Invalid choice. Please select 1, 2, 3, all, or q.${NC}"
+            echo -e "${RED}Invalid choice. Please select 1, 2, 3, 4, all, or q.${NC}"
             ;;
     esac
 
