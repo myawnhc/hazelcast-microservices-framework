@@ -14,12 +14,17 @@ import com.theyawns.framework.controller.SagaMetadata;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.saga.SagaCompensationConfig;
 import com.theyawns.framework.saga.SagaStateStore;
+import com.theyawns.framework.vectorstore.TextEmbeddingGenerator;
+import com.theyawns.framework.vectorstore.VectorStoreProperties;
+import com.theyawns.framework.vectorstore.VectorStoreService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -53,6 +58,8 @@ public class InventoryService implements ProductService {
     private final EventSourcingController<Product, String, DomainEvent<Product, String>> controller;
     private final SagaStateStore sagaStateStore;
     private final HazelcastInstance hazelcast;
+    private final VectorStoreService vectorStoreService;
+    private final VectorStoreProperties vectorStoreProperties;
 
     /**
      * Creates a new InventoryService.
@@ -60,14 +67,20 @@ public class InventoryService implements ProductService {
      * @param controller the event sourcing controller for product events
      * @param sagaStateStore the saga state store for tracking distributed transactions
      * @param hazelcast the Hazelcast instance
+     * @param vectorStoreService the vector store service for product embeddings
+     * @param vectorStoreProperties the vector store configuration properties
      */
     public InventoryService(
             EventSourcingController<Product, String, DomainEvent<Product, String>> controller,
             SagaStateStore sagaStateStore,
-            HazelcastInstance hazelcast) {
+            HazelcastInstance hazelcast,
+            VectorStoreService vectorStoreService,
+            VectorStoreProperties vectorStoreProperties) {
         this.controller = controller;
         this.sagaStateStore = sagaStateStore;
         this.hazelcast = hazelcast;
+        this.vectorStoreService = vectorStoreService;
+        this.vectorStoreProperties = vectorStoreProperties;
     }
 
     /**
@@ -94,7 +107,9 @@ public class InventoryService implements ProductService {
         return controller.handleEvent(event)
                 .thenApply(completionInfo -> {
                     logger.debug("Product created event processed: {}", completionInfo.getEventId());
-                    return getProductOrThrow(productId);
+                    Product product = getProductOrThrow(productId);
+                    storeProductEmbedding(product);
+                    return product;
                 });
     }
 
@@ -369,6 +384,41 @@ public class InventoryService implements ProductService {
     @Override
     public boolean productExists(String productId) {
         return controller.getViewStore().containsKey(productId);
+    }
+
+    /**
+     * Generates and stores a vector embedding for the given product.
+     *
+     * <p>Builds a text representation from the product's name, description, and category,
+     * then generates a deterministic embedding and stores it in the vector store.
+     * This is a best-effort operation — failures are logged but do not prevent
+     * product creation from succeeding.
+     *
+     * @param product the product to generate an embedding for
+     */
+    private void storeProductEmbedding(final Product product) {
+        try {
+            StringBuilder text = new StringBuilder();
+            text.append(product.getName());
+            if (product.getDescription() != null) {
+                text.append(" ").append(product.getDescription());
+            }
+            if (product.getCategory() != null) {
+                text.append(" ").append(product.getCategory());
+            }
+
+            float[] embedding = TextEmbeddingGenerator.generateEmbedding(
+                    text.toString(), vectorStoreProperties.getDimension());
+
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("name", product.getName());
+            metadata.put("category", product.getCategory());
+
+            vectorStoreService.storeEmbedding(product.getProductId(), embedding, metadata);
+            logger.debug("Stored embedding for product: {}", product.getProductId());
+        } catch (Exception e) {
+            logger.warn("Failed to store embedding for product: {} (non-fatal)", product.getProductId(), e);
+        }
     }
 
     /**

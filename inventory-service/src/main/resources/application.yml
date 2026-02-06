@@ -54,6 +54,9 @@ framework:
     log-edition-status: true
     log-feature-status: true
     expose-in-actuator: true
+  vectorstore:
+    dimension: 128
+    collection-name: product-vectors
 
 # Logging configuration
 logging:

@@ -6,12 +6,12 @@ import com.theyawns.ecommerce.inventory.exception.GlobalExceptionHandler;
 import com.theyawns.ecommerce.inventory.exception.InsufficientStockException;
 import com.theyawns.ecommerce.inventory.exception.ProductNotFoundException;
 import com.theyawns.ecommerce.inventory.service.ProductService;
+import com.theyawns.framework.vectorstore.VectorStoreService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -51,11 +51,12 @@ class InventoryControllerIntegrationTest {
     @Mock
     private ProductService productService;
 
-    @InjectMocks
-    private InventoryController inventoryController;
+    @Mock
+    private VectorStoreService vectorStoreService;
 
     @BeforeEach
     void setUp() {
+        InventoryController inventoryController = new InventoryController(productService, vectorStoreService);
         mockMvc = MockMvcBuilders.standaloneSetup(inventoryController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
