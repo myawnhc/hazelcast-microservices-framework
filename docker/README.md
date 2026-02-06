@@ -5,30 +5,31 @@ This directory contains Docker configuration for running the complete Hazelcast 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Docker Network (ecommerce-network)           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ hazelcast-1  │  │ hazelcast-2  │  │ hazelcast-3  │          │
-│  │   :5701      │  │   :5702      │  │   :5703      │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│         │                 │                 │                   │
-│         └─────────────────┴─────────────────┘                   │
-│                           │                                      │
-│         ┌─────────────────┼─────────────────┐                   │
-│         │                 │                 │                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │account-service│ │inventory-svc │  │ order-service│          │
-│  │   :8081      │  │   :8082      │  │   :8083      │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │  prometheus  │  │    jaeger    │  │  mgmt-center │          │
-│  │   :9090      │  │   :16686    │  │   :8080      │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                     Docker Network (ecommerce-network)                 │
+├───────────────────────────────────────────────────────────────────────┤
+│                                                                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                │
+│  │ hazelcast-1  │  │ hazelcast-2  │  │ hazelcast-3  │                │
+│  │   :5701      │  │   :5702      │  │   :5703      │                │
+│  └──────────────┘  └──────────────┘  └──────────────┘                │
+│         │                 │                 │                          │
+│         └─────────────────┴─────────────────┘                          │
+│                           │                                            │
+│      ┌────────────────────┼────────────────────┐                      │
+│      │          ┌─────────┴─────────┐          │                      │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐                │
+│  │ account  │ │inventory │ │  order   │ │ payment  │                │
+│  │ service  │ │ service  │ │ service  │ │ service  │                │
+│  │  :8081   │ │  :8082   │ │  :8083   │ │  :8084   │                │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘                │
+│                                                                        │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐                │
+│  │prometheus│ │  grafana │ │  jaeger  │ │mgmt-centr│                │
+│  │  :9090   │ │  :3000   │ │ :16686   │ │  :8080   │                │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘                │
+│                                                                        │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
@@ -82,10 +83,11 @@ After starting the services, you can load sample data and run interactive demo s
 # Run interactive demo scenarios
 ./scripts/demo-scenarios.sh
 
-# Run a specific scenario (1, 2, 3, or all)
+# Run a specific scenario (1, 2, 3, 4, or all)
 ./scripts/demo-scenarios.sh 1      # Happy path order flow
 ./scripts/demo-scenarios.sh 2      # Order cancellation
 ./scripts/demo-scenarios.sh 3      # View rebuilding concepts
+./scripts/demo-scenarios.sh 4      # Similar products (vector store)
 ./scripts/demo-scenarios.sh all    # All scenarios
 ```
 
@@ -94,6 +96,7 @@ After starting the services, you can load sample data and run interactive demo s
 1. **Happy Path** - Complete order lifecycle: create customer, create products, place order, reserve stock, confirm order, query enriched views
 2. **Order Cancellation** - Create order, reserve stock, cancel order, release stock, verify inventory restored
 3. **View Rebuilding** - Conceptual demonstration of event sourcing and view reconstruction
+4. **Similar Products** - Vector store similarity search; shows Enterprise results or Community Edition graceful fallback
 
 For detailed walkthrough instructions, see [docs/demo/demo-walkthrough.md](../docs/demo/demo-walkthrough.md).
 
@@ -109,6 +112,7 @@ For detailed walkthrough instructions, see [docs/demo/demo-walkthrough.md](../do
 | hazelcast-2 | 5702 | Hazelcast cluster node 2 | http://localhost:5702/hazelcast/health |
 | hazelcast-3 | 5703 | Hazelcast cluster node 3 | http://localhost:5703/hazelcast/health |
 | management-center | 8080 | Hazelcast cluster monitoring UI | http://localhost:8080 |
+| grafana | 3000 | Metrics dashboards | http://localhost:3000 |
 | prometheus | 9090 | Metrics collection | http://localhost:9090 |
 | jaeger | 16686 | Distributed tracing UI | http://localhost:16686 |
 
@@ -188,9 +192,10 @@ The stack is optimized to run on a laptop with 8GB RAM:
 | order-service | 512 MB |
 | payment-service | 512 MB |
 | management-center | 256 MB |
+| grafana | 256 MB |
 | prometheus | 256 MB |
 | jaeger | 256 MB |
-| **Total** | **~4.5 GB** |
+| **Total** | **~4.75 GB** |
 
 ## Monitoring
 
@@ -224,7 +229,7 @@ View distributed traces for event processing and saga flows across services.
 
 Check all services:
 ```bash
-for port in 8081 8082 8083; do
+for port in 8081 8082 8083 8084; do
   echo "Port $port: $(curl -s http://localhost:$port/actuator/health | jq -r .status)"
 done
 ```
@@ -256,12 +261,27 @@ curl -s http://localhost:5701/hazelcast/rest/cluster | jq
 
 ```
 docker/
-├── docker-compose.yml      # Main orchestration file
+├── docker-compose.yml           # Main orchestration file
 ├── hazelcast/
-│   └── hazelcast-docker.yaml  # Hazelcast cluster configuration
+│   └── hazelcast-docker.yaml    # Hazelcast cluster configuration
 ├── prometheus/
-│   └── prometheus.yml      # Prometheus scrape configuration
-└── README.md               # This file
+│   └── prometheus.yml           # Prometheus scrape configuration (4 services + 3 HZ nodes)
+├── grafana/
+│   ├── dashboards/
+│   │   ├── system-overview.json     # Home dashboard
+│   │   ├── event-flow.json          # Event sourcing metrics
+│   │   ├── materialized-views.json  # View update metrics
+│   │   └── saga-dashboard.json      # Saga lifecycle metrics
+│   └── provisioning/
+│       ├── datasources/
+│       │   └── datasources.yml      # Prometheus datasource
+│       ├── dashboards/
+│       │   └── dashboards.yml       # Dashboard auto-loading config
+│       └── alerting/
+│           ├── alerts.yml           # Alert rule definitions
+│           ├── contactpoints.yml    # Notification channels
+│           └── policies.yml         # Alert routing policies
+└── README.md                    # This file
 ```
 
 Management Center and Jaeger are configured via environment variables in docker-compose.yml (no separate config files needed).
@@ -272,18 +292,9 @@ Management Center and Jaeger are configured via environment variables in docker-
 
 Edit `docker-compose.yml` and comment out `hazelcast-2` and `hazelcast-3`. Update the TCP/IP member list accordingly.
 
-### Adding Grafana
+### Grafana Dashboards
 
-```yaml
-grafana:
-  image: grafana/grafana:10.2.0
-  ports:
-    - "3000:3000"
-  volumes:
-    - grafana-data:/var/lib/grafana
-  depends_on:
-    - prometheus
-```
+Grafana is included in the stack at http://localhost:3000 (login: `admin`/`admin`). Four dashboards are pre-provisioned and load automatically. See the [Dashboard Setup Guide](../docs/guides/dashboard-setup-guide.md) for details on dashboards, alerts, and custom configuration.
 
 ### Enabling TLS (requires Hazelcast Enterprise)
 

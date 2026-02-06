@@ -4,7 +4,7 @@ An event sourcing microservices framework built on Hazelcast, demonstrating mode
 
 ## Overview
 
-This project provides a production-ready event sourcing framework using Hazelcast for distributed data storage and stream processing. It includes a complete eCommerce demo with three microservices showcasing the framework's capabilities.
+This project provides a production-ready event sourcing framework using Hazelcast for distributed data storage and stream processing. It includes a complete eCommerce demo with four microservices showcasing the framework's capabilities.
 
 ### Key Features
 
@@ -16,6 +16,14 @@ This project provides a production-ready event sourcing framework using Hazelcas
 - **Saga Support**: Built-in distributed transaction patterns
 - **Observability**: Prometheus metrics and structured logging
 
+### Phase 2 Features
+
+- **Choreographed Sagas**: Order fulfillment saga coordinating across all four services — Order, Inventory, Payment, and Account — with automatic timeout detection and compensation ([Saga Pattern Guide](docs/guides/saga-pattern-guide.md))
+- **Payment Service**: Fourth microservice handling payment processing and refunds, integrated into the saga flow
+- **Vector Store** (Enterprise): Product similarity search using Hazelcast IMap-based cosine similarity; Community Edition falls back gracefully with empty results
+- **Observability Stack**: Pre-provisioned Grafana dashboards (System Overview, Event Flow, Materialized Views, Sagas), Prometheus metrics scraping across all services and Hazelcast nodes, Jaeger distributed tracing via OTLP ([Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md))
+- **Edition Detection**: Automatic Community/Enterprise edition detection with `@ConditionalOnEnterpriseFeature` and `@ConditionalOnCommunityFallback` annotations for conditional bean wiring
+
 ## Architecture
 
 ```
@@ -23,16 +31,16 @@ This project provides a production-ready event sourcing framework using Hazelcas
 │                              Client Applications                             │
 └─────────────────────────────────────────────────────────────────────────────┘
                                        │
-                    ┌──────────────────┼──────────────────┐
-                    │                  │                  │
-                    ▼                  ▼                  ▼
-            ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-            │   Account    │  │  Inventory   │  │    Order     │
-            │   Service    │  │   Service    │  │   Service    │
-            │   :8081      │  │   :8082      │  │   :8083      │
-            └──────────────┘  └──────────────┘  └──────────────┘
-                    │                  │                  │
-                    └──────────────────┼──────────────────┘
+              ┌────────────────────────┼────────────────────────┐
+              │              ┌─────────┴─────────┐              │
+              ▼              ▼                   ▼              ▼
+      ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+      │   Account    │ │  Inventory   │ │    Order     │ │   Payment    │
+      │   Service    │ │   Service    │ │   Service    │ │   Service    │
+      │   :8081      │ │   :8082      │ │   :8083      │ │   :8084      │
+      └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+              │              │                   │              │
+              └──────────────┴─────────┬─────────┴──────────────┘
                                        │
                     ┌──────────────────┴──────────────────┐
                     │         Hazelcast Cluster           │
@@ -48,6 +56,10 @@ This project provides a production-ready event sourcing framework using Hazelcas
                     │  │ Jet Pipelines               │   │
                     │  └─────────────────────────────┘   │
                     └─────────────────────────────────────┘
+              ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+              │  Prometheus  │  │   Grafana    │  │    Jaeger    │
+              │   :9090      │  │   :3000      │  │   :16686     │
+              └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
 ## Modules
@@ -59,6 +71,7 @@ This project provides a production-ready event sourcing framework using Hazelcas
 | [account-service](account-service/README.md) | Customer account management |
 | [inventory-service](inventory-service/README.md) | Product catalog and stock management |
 | [order-service](order-service/README.md) | Order lifecycle management |
+| [payment-service](payment-service/README.md) | Payment processing and refunds |
 
 ## Quick Start
 
@@ -95,6 +108,7 @@ mvn clean package -DskipTests
 curl http://localhost:8081/actuator/health  # Account Service
 curl http://localhost:8082/actuator/health  # Inventory Service
 curl http://localhost:8083/actuator/health  # Order Service
+curl http://localhost:8084/actuator/health  # Payment Service
 ```
 
 ### API Documentation
@@ -103,6 +117,7 @@ Once running, access Swagger UI:
 - Account Service: http://localhost:8081/swagger-ui.html
 - Inventory Service: http://localhost:8082/swagger-ui.html
 - Order Service: http://localhost:8083/swagger-ui.html
+- Payment Service: http://localhost:8084/swagger-ui.html
 
 ## API Examples
 
@@ -145,12 +160,42 @@ curl -X POST http://localhost:8083/api/orders \
   }'
 ```
 
+### Process a Payment
+
+```bash
+curl -X POST http://localhost:8084/api/payments \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderId": "<order-id>",
+    "customerId": "<customer-id>",
+    "amount": 999.99,
+    "currency": "USD",
+    "method": "CREDIT_CARD"
+  }'
+```
+
+### Refund a Payment
+
+```bash
+curl -X POST http://localhost:8084/api/payments/<payment-id>/refund \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "Customer requested cancellation"}'
+```
+
+### Find Similar Products (Enterprise)
+
+```bash
+curl http://localhost:8082/api/products/<product-id>/similar?limit=5
+```
+
 ## Documentation
 
 - [Setup Guide](docs/SETUP.md) - Complete installation instructions
 - [Docker Deployment](docker/README.md) - Docker Compose configuration
 - [Architecture](docs/architecture/) - System design and patterns
 - [Demo Walkthrough](docs/demo/demo-walkthrough.md) - Step-by-step demo guide
+- [Saga Pattern Guide](docs/guides/saga-pattern-guide.md) - Choreographed saga implementation
+- [Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md) - Grafana, Prometheus, and Jaeger setup
 
 ## Event Sourcing Flow
 
@@ -208,22 +253,26 @@ mvn test -Dtest=LoadTest -pl order-service
 | Build | Maven | 3.8+ |
 | Containers | Docker | 20.10+ |
 | Metrics | Micrometer/Prometheus | - |
+| Dashboards | Grafana | 10.3.x |
+| Tracing | Jaeger (OTLP) | - |
 | API Docs | OpenAPI/Swagger | 3.0 |
 
 ## Project Structure
 
 ```
 hazelcast-microservices-framework/
-├── framework-core/          # Core framework
-├── ecommerce-common/        # Shared domain
-├── account-service/         # Customer service
-├── inventory-service/       # Product service
-├── order-service/           # Order service
-├── docker/                  # Docker configuration
-├── scripts/                 # Utility scripts
+├── framework-core/          # Core framework (event sourcing, sagas, edition detection, vector store)
+├── ecommerce-common/        # Shared domain objects, events, DTOs
+├── account-service/         # Customer service (:8081)
+├── inventory-service/       # Product service (:8082)
+├── order-service/           # Order service (:8083)
+├── payment-service/         # Payment service (:8084)
+├── docker/                  # Docker Compose, Grafana dashboards, Prometheus config
+├── scripts/                 # Build, start, stop, demo scripts
 ├── docs/                    # Documentation
-│   ├── architecture/
-│   ├── demo/
+│   ├── architecture/        # ADRs and design documents
+│   ├── guides/              # Saga pattern guide, dashboard setup guide
+│   ├── demo/                # Demo walkthrough
 │   └── SETUP.md
 └── pom.xml                  # Parent POM
 ```
