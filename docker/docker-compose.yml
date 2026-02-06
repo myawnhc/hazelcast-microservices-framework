@@ -130,6 +130,7 @@ services:
       - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=account-service
+      - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -165,6 +166,7 @@ services:
       - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=inventory-service
+      - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -200,6 +202,7 @@ services:
       - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=order-service
+      - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -235,6 +238,7 @@ services:
       - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=payment-service
+      - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
     depends_on:
       hazelcast-1:
         condition: service_healthy

@@ -36,6 +36,25 @@ management:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
 
+# Edition configuration (Community/Enterprise)
+framework:
+  edition:
+    mode: ${HAZELCAST_EDITION_MODE:auto}
+    license:
+      env-var: HZ_LICENSEKEY
+      missing-behavior: warn
+  features:
+    vector-store:
+      enabled: ${FEATURE_VECTOR_STORE:auto}
+      fallback-behavior: empty-results
+    cp-subsystem:
+      enabled: ${FEATURE_CP_SUBSYSTEM:auto}
+      fallback-behavior: optimistic
+  observability:
+    log-edition-status: true
+    log-feature-status: true
+    expose-in-actuator: true
+
 # Logging configuration
 logging:
   level:

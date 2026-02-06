@@ -1,1 +1,2 @@
 com.theyawns.framework.config.FrameworkAutoConfiguration
+com.theyawns.framework.edition.EditionAutoConfiguration

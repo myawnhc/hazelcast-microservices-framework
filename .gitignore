@@ -7,3 +7,12 @@
 # Demo data (generated IDs from sample data loader)
 /demo-data/*.sh
 !/demo-data/.gitkeep
+
+# Enterprise license files
+*.license
+.env.enterprise
+.env.*.enterprise
+
+# Secrets and credentials
+**/secrets/
+**/credentials/
