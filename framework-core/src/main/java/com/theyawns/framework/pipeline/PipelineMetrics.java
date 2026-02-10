@@ -99,6 +99,21 @@ public class PipelineMetrics implements Serializable {
     }
 
     /**
+     * Records that an event was submitted to the controller for processing.
+     *
+     * @param eventType the type of event submitted
+     */
+    public void recordEventSubmitted(String eventType) {
+        String key = "events.submitted:" + eventType;
+        counterCache.computeIfAbsent(key, k ->
+                Counter.builder("eventsourcing.events.submitted")
+                        .tag("domain", domainName)
+                        .tag("eventType", eventType)
+                        .register(meterRegistry)
+        ).increment();
+    }
+
+    /**
      * Records that an event was successfully processed through the pipeline.
      *
      * @param eventType the type of event processed

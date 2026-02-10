@@ -63,6 +63,8 @@ class SagaMetricsTest {
             assertNotNull(meterRegistry.find("saga.compensated.total").gauge());
             assertNotNull(meterRegistry.find("saga.failed.total").gauge());
             assertNotNull(meterRegistry.find("saga.timedout.total").gauge());
+            assertNotNull(meterRegistry.find("sagas.active.count").gauge());
+            assertNotNull(meterRegistry.find("sagas.compensating.count").gauge());
         }
     }
 
@@ -225,6 +227,32 @@ class SagaMetricsTest {
             assertNotNull(counter);
             assertEquals(1.0, counter.count());
         }
+
+        @Test
+        @DisplayName("should record compensation completed")
+        void shouldRecordCompensationCompleted() {
+            metrics.recordCompensationCompleted(SAGA_TYPE);
+
+            Counter counter = meterRegistry.find("saga.compensation.completed")
+                    .tag("sagaType", SAGA_TYPE)
+                    .counter();
+
+            assertNotNull(counter);
+            assertEquals(1.0, counter.count());
+        }
+
+        @Test
+        @DisplayName("should record compensation failed")
+        void shouldRecordCompensationFailed() {
+            metrics.recordCompensationFailed(SAGA_TYPE);
+
+            Counter counter = meterRegistry.find("saga.compensation.failed")
+                    .tag("sagaType", SAGA_TYPE)
+                    .counter();
+
+            assertNotNull(counter);
+            assertEquals(1.0, counter.count());
+        }
     }
 
     @Nested
@@ -336,6 +364,7 @@ class SagaMetricsTest {
             metrics.recordSagaStarted(SAGA_TYPE);
             metrics.recordSagaStarted(SAGA_TYPE);
             metrics.recordSagaCompleted(SAGA_TYPE);
+            metrics.recordCompensationStarted(SAGA_TYPE);
             metrics.recordSagaCompensated(SAGA_TYPE);
             metrics.recordSagaFailed(SAGA_TYPE);
             metrics.recordSagaTimedOut(SAGA_TYPE);
@@ -352,6 +381,40 @@ class SagaMetricsTest {
             assertEquals(1.0, meterRegistry.find("saga.compensated.total").gauge().value());
             assertEquals(1.0, meterRegistry.find("saga.failed.total").gauge().value());
             assertEquals(1.0, meterRegistry.find("saga.timedout.total").gauge().value());
+        }
+
+        @Test
+        @DisplayName("should track active saga count")
+        void shouldTrackActiveSagaCount() {
+            metrics.recordSagaStarted(SAGA_TYPE);
+            metrics.recordSagaStarted(SAGA_TYPE);
+            metrics.recordSagaStarted(SAGA_TYPE);
+            assertEquals(3, metrics.getSagasActiveCount());
+
+            metrics.recordSagaCompleted(SAGA_TYPE);
+            assertEquals(2, metrics.getSagasActiveCount());
+
+            metrics.recordSagaFailed(SAGA_TYPE);
+            assertEquals(1, metrics.getSagasActiveCount());
+
+            // Active count gauge should match
+            assertEquals(1.0, meterRegistry.find("sagas.active.count").gauge().value());
+        }
+
+        @Test
+        @DisplayName("should track compensating saga count")
+        void shouldTrackCompensatingSagaCount() {
+            metrics.recordSagaStarted(SAGA_TYPE);
+            metrics.recordSagaStarted(SAGA_TYPE);
+            metrics.recordCompensationStarted(SAGA_TYPE);
+            metrics.recordCompensationStarted(SAGA_TYPE);
+            assertEquals(2, metrics.getSagasCompensatingCount());
+
+            metrics.recordSagaCompensated(SAGA_TYPE);
+            assertEquals(1, metrics.getSagasCompensatingCount());
+
+            // Compensating count gauge should match
+            assertEquals(1.0, meterRegistry.find("sagas.compensating.count").gauge().value());
         }
     }
 }

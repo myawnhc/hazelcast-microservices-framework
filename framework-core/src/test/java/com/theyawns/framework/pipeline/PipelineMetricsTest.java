@@ -61,6 +61,20 @@ class PipelineMetricsTest {
     class EventCounterTests {
 
         @Test
+        @DisplayName("should record event submitted")
+        void shouldRecordEventSubmitted() {
+            metrics.recordEventSubmitted("CustomerCreated");
+
+            Counter counter = meterRegistry.find("eventsourcing.events.submitted")
+                    .tag("domain", DOMAIN_NAME)
+                    .tag("eventType", "CustomerCreated")
+                    .counter();
+
+            assertNotNull(counter);
+            assertEquals(1.0, counter.count());
+        }
+
+        @Test
         @DisplayName("should record event processed")
         void shouldRecordEventProcessed() {
             metrics.recordEventProcessed("CustomerCreated");

@@ -56,6 +56,10 @@ public class SagaMetrics {
     private final AtomicLong sagasFailedTotal = new AtomicLong(0);
     private final AtomicLong sagasTimedOutTotal = new AtomicLong(0);
 
+    // Active saga tracking gauges
+    private final AtomicLong sagasActiveCount = new AtomicLong(0);
+    private final AtomicLong sagasCompensatingCount = new AtomicLong(0);
+
     /**
      * Creates a SagaMetrics instance.
      *
@@ -76,57 +80,70 @@ public class SagaMetrics {
         meterRegistry.gauge(PREFIX + ".compensated.total", sagasCompensatedTotal);
         meterRegistry.gauge(PREFIX + ".failed.total", sagasFailedTotal);
         meterRegistry.gauge(PREFIX + ".timedout.total", sagasTimedOutTotal);
+        meterRegistry.gauge("sagas.active.count", sagasActiveCount);
+        meterRegistry.gauge("sagas.compensating.count", sagasCompensatingCount);
     }
 
     // ========== Saga Lifecycle ==========
 
     /**
      * Records that a saga was started.
+     * Also increments the active saga count.
      *
      * @param sagaType the saga type name
      */
     public void recordSagaStarted(String sagaType) {
         sagasStartedTotal.incrementAndGet();
+        sagasActiveCount.incrementAndGet();
         getCounter("started", sagaType).increment();
     }
 
     /**
      * Records that a saga completed successfully.
+     * Decrements the active saga count.
      *
      * @param sagaType the saga type name
      */
     public void recordSagaCompleted(String sagaType) {
         sagasCompletedTotal.incrementAndGet();
+        sagasActiveCount.decrementAndGet();
         getCounter("completed", sagaType).increment();
     }
 
     /**
      * Records that a saga was compensated.
+     * Decrements the active saga count and the compensating count.
      *
      * @param sagaType the saga type name
      */
     public void recordSagaCompensated(String sagaType) {
         sagasCompensatedTotal.incrementAndGet();
+        sagasActiveCount.decrementAndGet();
+        sagasCompensatingCount.decrementAndGet();
         getCounter("compensated", sagaType).increment();
     }
 
     /**
      * Records that a saga failed.
+     * Decrements the active saga count.
      *
      * @param sagaType the saga type name
      */
     public void recordSagaFailed(String sagaType) {
         sagasFailedTotal.incrementAndGet();
+        sagasActiveCount.decrementAndGet();
         getCounter("failed", sagaType).increment();
     }
 
     /**
      * Records that a saga timed out.
+     * Decrements the active saga count.
      *
      * @param sagaType the saga type name
      */
     public void recordSagaTimedOut(String sagaType) {
         sagasTimedOutTotal.incrementAndGet();
+        sagasActiveCount.decrementAndGet();
         getCounter("timedout", sagaType).increment();
     }
 
@@ -161,11 +178,31 @@ public class SagaMetrics {
 
     /**
      * Records that compensation was started for a saga.
+     * Increments the compensating saga count.
      *
      * @param sagaType the saga type name
      */
     public void recordCompensationStarted(String sagaType) {
+        sagasCompensatingCount.incrementAndGet();
         getCounter("compensation.started", sagaType).increment();
+    }
+
+    /**
+     * Records that compensation completed successfully for a saga.
+     *
+     * @param sagaType the saga type name
+     */
+    public void recordCompensationCompleted(String sagaType) {
+        getCounter("compensation.completed", sagaType).increment();
+    }
+
+    /**
+     * Records that compensation failed for a saga.
+     *
+     * @param sagaType the saga type name
+     */
+    public void recordCompensationFailed(String sagaType) {
+        getCounter("compensation.failed", sagaType).increment();
     }
 
     // ========== Duration Metrics ==========
@@ -241,6 +278,24 @@ public class SagaMetrics {
      */
     public long getSagasTimedOutTotal() {
         return sagasTimedOutTotal.get();
+    }
+
+    /**
+     * Returns the current number of active (in-progress) sagas.
+     *
+     * @return active saga count
+     */
+    public long getSagasActiveCount() {
+        return sagasActiveCount.get();
+    }
+
+    /**
+     * Returns the current number of sagas undergoing compensation.
+     *
+     * @return compensating saga count
+     */
+    public long getSagasCompensatingCount() {
+        return sagasCompensatingCount.get();
     }
 
     /**
