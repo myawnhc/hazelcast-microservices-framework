@@ -12,11 +12,11 @@ Now we add a modern capability: **"Find me products similar to this one."**
 
 Similarity search is everywhere — Netflix recommends shows, Spotify suggests playlists, Amazon shows "customers also bought." Under the hood, these features use **vector embeddings**: numerical representations of items where similar items are close together in vector space.
 
-In this article, we'll implement vector similarity search using Hazelcast IMap, covering:
+In this article, we'll implement vector similarity search using Hazelcast Enterprise's native `VectorCollection` with HNSW indexing, covering:
 
 - How text becomes a vector embedding
-- Cosine similarity for comparing vectors
-- An IMap-based brute-force search implementation
+- HNSW indexing for O(log n) approximate nearest-neighbor search
+- Hazelcast's `VectorCollection` API for storing and searching vectors
 - The Community/Enterprise fallback pattern that lets the feature degrade gracefully
 
 ---
@@ -71,39 +71,26 @@ This generator is deterministic — the same text always produces the same vecto
 
 ---
 
-## Cosine Similarity
+## HNSW: Fast Approximate Nearest-Neighbor Search
 
-To find similar products, we need a way to measure how close two vectors are. **Cosine similarity** measures the angle between vectors, returning a value from -1.0 (opposite) to 1.0 (identical):
+A brute-force approach to similarity search compares the query vector against every stored vector — O(n) per query. That's fine for hundreds of items, but at scale you need something faster.
 
-```java
-static float cosineSimilarity(final float[] a, final float[] b) {
-    final int len = Math.min(a.length, b.length);
-    float dot = 0.0f;
-    float normA = 0.0f;
-    float normB = 0.0f;
+**HNSW** (Hierarchical Navigable Small World) is an indexing algorithm that builds a multi-layer graph over the vector space. Each layer is a "skip list" of proximity connections:
 
-    for (int i = 0; i < len; i++) {
-        dot += a[i] * b[i];
-        normA += a[i] * a[i];
-        normB += b[i] * b[i];
-    }
+- **Top layers**: Sparse, long-range connections for coarse navigation
+- **Bottom layers**: Dense, short-range connections for precise neighbors
 
-    if (normA == 0.0f || normB == 0.0f) {
-        return 0.0f;
-    }
+A search starts at the top layer, greedily navigating toward the query vector, then descends to finer layers. The result is **O(log n)** approximate nearest-neighbor search with high recall.
 
-    return dot / (float) (Math.sqrt(normA) * Math.sqrt(normB));
-}
-```
+### HNSW Parameters
 
-Why cosine similarity instead of Euclidean distance?
+| Parameter | What It Controls | Default |
+|-----------|-----------------|---------|
+| `maxDegree` (M) | Max edges per node in the graph | 16 |
+| `efConstruction` | Beam width during index build (higher = better recall, slower build) | 200 |
+| `metric` | Distance function: COSINE, DOT, or EUCLIDEAN | COSINE |
 
-| Measure | Compares | Best For |
-|---------|----------|----------|
-| **Cosine similarity** | Direction (angle between vectors) | Text, semantics, normalized data |
-| **Euclidean distance** | Absolute position in space | Spatial data, unnormalized features |
-
-Cosine similarity cares about *what* a product is (direction), not *how strongly* the signal is (magnitude). A short product description and a long one can still be highly similar if they describe the same type of product.
+Higher `maxDegree` and `efConstruction` improve recall at the cost of memory and build time. For a product catalog, the defaults work well.
 
 ---
 
@@ -134,105 +121,114 @@ public record SimilarityResult(String id, float score, Map<String, Object> metad
 
 The interface has two implementations:
 
-| Implementation | Edition | Behavior |
-|---------------|---------|----------|
-| `SimpleVectorStoreService` | Enterprise | IMap-based brute-force cosine similarity search |
-| `NoOpVectorStoreService` | Community | Returns empty results silently |
+| Implementation | Edition | Module | Behavior |
+|---------------|---------|--------|----------|
+| `HazelcastVectorStoreService` | Enterprise | `framework-enterprise` | VectorCollection with HNSW indexing |
+| `NoOpVectorStoreService` | Community | `framework-core` | Returns empty results silently |
 
 ---
 
 ## The Enterprise Implementation
 
-`SimpleVectorStoreService` stores embeddings in two Hazelcast IMaps and performs brute-force similarity search:
+`HazelcastVectorStoreService` uses Hazelcast Enterprise's native `VectorCollection` data structure, which provides built-in HNSW indexing:
 
 ```java
-@Service
-@ConditionalOnEnterpriseFeature(EnterpriseFeature.VECTOR_STORE)
-public class SimpleVectorStoreService implements VectorStoreService {
+public class HazelcastVectorStoreService implements VectorStoreService {
 
-    private final IMap<String, float[]> embeddingMap;
-    private final IMap<String, Map<String, Object>> metadataMap;
+    private final VectorCollection<String, String> collection;
+    private final String indexName;
 
-    public SimpleVectorStoreService(HazelcastInstance hazelcast,
-                                     VectorStoreProperties properties) {
-        this.embeddingMap = hazelcast.getMap(properties.getCollectionName());
-        this.metadataMap = hazelcast.getMap(properties.getCollectionName() + "-metadata");
-    }
+    public HazelcastVectorStoreService(HazelcastInstance hazelcast,
+                                       VectorStoreProperties properties) {
+        this.indexName = properties.getIndexName();
 
-    @Override
-    public void storeEmbedding(String id, float[] embedding,
-                                Map<String, Object> metadata) {
-        embeddingMap.put(id, embedding);
-        if (metadata != null && !metadata.isEmpty()) {
-            metadataMap.put(id, metadata);
-        }
-    }
+        Metric metric = Metric.valueOf(properties.getMetric().toUpperCase());
 
-    @Override
-    public List<SimilarityResult> findSimilar(float[] queryVector, int limit) {
-        // Get ALL embeddings — brute force
-        Map<String, float[]> allEmbeddings = embeddingMap.getAll(embeddingMap.keySet());
+        VectorIndexConfig indexConfig = new VectorIndexConfig()
+                .setName(indexName)
+                .setDimension(properties.getDimension())
+                .setMetric(metric)
+                .setMaxDegree(properties.getMaxConnections())
+                .setEfConstruction(properties.getEfConstruction());
 
-        List<SimilarityResult> results = new ArrayList<>(allEmbeddings.size());
+        VectorCollectionConfig collectionConfig =
+                new VectorCollectionConfig(properties.getCollectionName())
+                        .addVectorIndexConfig(indexConfig);
 
-        for (Map.Entry<String, float[]> entry : allEmbeddings.entrySet()) {
-            float score = cosineSimilarity(queryVector, entry.getValue());
-            Map<String, Object> metadata = metadataMap.get(entry.getKey());
-            results.add(new SimilarityResult(entry.getKey(), score,
-                metadata != null ? metadata : Map.of()));
-        }
+        hazelcast.getConfig().addVectorCollectionConfig(collectionConfig);
 
-        // Sort by similarity (highest first) and take top N
-        results.sort(Comparator.comparingDouble(SimilarityResult::score).reversed());
-        return results.subList(0, Math.min(limit, results.size()));
-    }
-
-    @Override
-    public List<SimilarityResult> findSimilarById(String id, int limit) {
-        float[] queryVector = embeddingMap.get(id);
-        if (queryVector == null) return List.of();
-
-        // Find limit+1 to exclude the query item itself
-        List<SimilarityResult> candidates = findSimilar(queryVector, limit + 1);
-        return candidates.stream()
-                .filter(r -> !r.id().equals(id))
-                .limit(limit)
-                .toList();
-    }
-
-    @Override
-    public boolean isAvailable() { return true; }
-
-    @Override
-    public String getImplementationType() {
-        return "IMap-Based Cosine Similarity (Enterprise)";
+        this.collection = VectorCollection.getCollection(
+                hazelcast, properties.getCollectionName());
     }
 }
 ```
 
-### How It Works
+### Storing Embeddings
 
-1. **Store**: Product embeddings go into an `IMap<String, float[]>` keyed by product ID. Metadata (name, category) goes into a separate IMap.
-2. **Search**: Load all embeddings, compute cosine similarity against the query vector, sort by score, return the top N.
-3. **Find by ID**: Look up the query product's embedding, then delegate to `findSimilar`, filtering out the query product itself.
-
-### Complexity and Scaling
-
-This is O(n) per query — every stored embedding is compared. For a product catalog of hundreds or thousands of items, this is fine. For millions, you'd need an approximate nearest-neighbor index.
-
-Hazelcast Enterprise offers `VectorCollection` with HNSW (Hierarchical Navigable Small World) indexing for O(log n) approximate search. The `VectorStoreProperties` class already reserves configuration for this:
+Documents are stored using Hazelcast's `VectorDocument` — a value (JSON metadata string) paired with a vector:
 
 ```java
-@ConfigurationProperties(prefix = "framework.vectorstore")
-public class VectorStoreProperties {
-    private String collectionName = "product-vectors";
-    private int dimension = 128;
-    private int maxConnections = 16;    // HNSW parameter (Enterprise)
-    private int efConstruction = 200;   // HNSW parameter (Enterprise)
+@Override
+public void storeEmbedding(String id, float[] embedding,
+                           Map<String, Object> metadata) {
+    String jsonMetadata = metadataToJson(metadata);
+    VectorDocument<String> document = VectorDocument.of(
+            jsonMetadata,
+            VectorValues.of(indexName, embedding)
+    );
+    collection.putAsync(id, document).toCompletableFuture().join();
 }
 ```
 
-The architecture is designed so swapping the brute-force implementation for HNSW is a single class change — the interface stays the same.
+### Searching for Similar Items
+
+Search is a single async call to the HNSW index:
+
+```java
+@Override
+public List<SimilarityResult> findSimilar(float[] queryVector, int limit) {
+    SearchResults<String, String> searchResults = collection.searchAsync(
+            VectorValues.of(indexName, queryVector),
+            SearchOptions.builder()
+                    .limit(limit)
+                    .includeValue()
+                    .build()
+    ).toCompletableFuture().join();
+
+    List<SimilarityResult> results = new ArrayList<>();
+    for (SearchResult<String, String> hit : searchResults) {
+        Map<String, Object> metadata = jsonToMetadata(hit.getValue());
+        results.add(new SimilarityResult(hit.getKey(), hit.getScore(), metadata));
+    }
+    return results;
+}
+```
+
+### Complexity Comparison
+
+| Approach | Search Complexity | Index Build | Memory |
+|----------|-------------------|-------------|--------|
+| Brute-force (IMap) | O(n) per query | O(1) | O(n) |
+| HNSW (VectorCollection) | O(log n) per query | O(n log n) | O(n * M) |
+
+For a catalog of 1,000 products, the difference is negligible. For 1,000,000 products, HNSW is orders of magnitude faster.
+
+> **Historical note:** An earlier version of this implementation used `IMap<String, float[]>` with brute-force cosine similarity. That approach is preserved on the `feature/imap-vector-store` branch for educational comparison.
+
+### Configuration
+
+All HNSW parameters are configurable via Spring properties:
+
+```yaml
+framework:
+  vectorstore:
+    collection-name: product-vectors
+    dimension: 128
+    max-connections: 16     # HNSW maxDegree (M)
+    ef-construction: 200    # HNSW build beam width
+    metric: COSINE          # COSINE, DOT, or EUCLIDEAN
+    index-name: default     # HNSW index name
+```
 
 ---
 
@@ -280,22 +276,66 @@ Embeddings are silently discarded. Searches return empty lists. The application 
 
 ---
 
+## Module Architecture
+
+The Enterprise vector store lives in its own Maven module, `framework-enterprise`, which is only built when the `-Penterprise` profile is active:
+
+```
+framework-core/                          (always built)
+  └── VectorStoreService (interface)
+  └── NoOpVectorStoreService (Community fallback)
+  └── VectorStoreAutoConfiguration (@ConditionalOnMissingBean safety net)
+
+framework-enterprise/                    (only with -Penterprise)
+  └── HazelcastVectorStoreService (Enterprise VectorCollection)
+  └── EnterpriseVectorStoreAutoConfiguration (@AutoConfigureBefore)
+```
+
+The auto-configuration ordering ensures the Enterprise bean is registered first when present:
+
+```
+Application starts
+    │
+    ├── framework-enterprise on classpath?
+    │   │
+    │   ├── YES → EnterpriseVectorStoreAutoConfiguration runs first
+    │   │         └── @ConditionalOnEnterpriseFeature matches?
+    │   │             ├── YES → HazelcastVectorStoreService created
+    │   │             └── NO  → fall through to core
+    │   │
+    │   └── NO  → skip to core
+    │
+    └── VectorStoreAutoConfiguration in framework-core
+        └── @ConditionalOnMissingBean(VectorStoreService.class)
+            ├── Bean exists → skip (Enterprise is active)
+            └── No bean → create NoOpVectorStoreService
+```
+
+### Building
+
+```bash
+# Community build (default) — framework-enterprise is NOT built
+mvn clean install
+
+# Enterprise build — includes framework-enterprise module
+mvn clean install -Penterprise
+```
+
+---
+
 ## Edition-Aware Bean Selection
 
 The magic is in two custom annotations: `@ConditionalOnEnterpriseFeature` and `@ConditionalOnCommunityFallback`. These work with the framework's `EditionDetector` to choose the right implementation at startup:
 
 ```
-Application starts
-    │
-    ▼
 EditionDetector checks for Enterprise license
     │
-    ├── License found → Enterprise features enabled
+    ├── License found + VectorCollection class on classpath
     │   └── @ConditionalOnEnterpriseFeature matches
-    │   └── SimpleVectorStoreService created
+    │   └── HazelcastVectorStoreService created
     │
-    └── No license → Community Edition
-        └── @ConditionalOnCommunityFallback matches
+    └── No license OR no Enterprise classes
+        └── @ConditionalOnMissingBean fallback
         └── NoOpVectorStoreService created
 ```
 
@@ -315,7 +355,7 @@ public class VectorStoreAutoConfiguration {
 }
 ```
 
-If neither conditional annotation matches (edge case during testing or misconfiguration), the no-op implementation is used. The application never crashes due to a missing vector store bean.
+If the enterprise module isn't on the classpath (default community build), the no-op implementation is used. The application never crashes due to a missing vector store bean.
 
 ---
 
@@ -370,7 +410,7 @@ The response includes metadata about the vector store implementation, so the cli
 {
   "productId": "prod-123",
   "vectorStoreAvailable": true,
-  "implementation": "IMap-Based Cosine Similarity (Enterprise)",
+  "implementation": "Hazelcast VectorCollection (Enterprise)",
   "message": "Found 3 similar products",
   "similarProducts": [
     {"productId": "prod-456", "name": "Gaming Desktop", "sku": "DESKTOP-001", ...},
@@ -400,16 +440,16 @@ The vector store demonstrates a pattern we use throughout the framework for Ente
 
 ```
 1. Define an interface        (VectorStoreService)
-2. Enterprise implementation  (@ConditionalOnEnterpriseFeature)
-3. Community fallback         (@ConditionalOnCommunityFallback)
-4. Auto-configuration         (@ConditionalOnMissingBean safety net)
+2. Enterprise implementation  (HazelcastVectorStoreService in framework-enterprise)
+3. Community fallback         (NoOpVectorStoreService in framework-core)
+4. Auto-configuration         (@AutoConfigureBefore + @ConditionalOnMissingBean)
 5. Runtime check              (isAvailable() in controller)
 ```
 
 This pattern ensures:
 
 - **Community Edition always works**: No crashes, no missing beans, no exceptions
-- **Enterprise features activate automatically**: Just add a license key
+- **Enterprise features activate automatically**: Add the module + license key
 - **The API is consistent**: Same endpoint, same response shape, different content
 - **Callers don't need to know**: The service layer calls `vectorStoreService.findSimilarById()` regardless of edition. The interface handles the rest.
 
@@ -448,10 +488,6 @@ Replace `TextEmbeddingGenerator` with a real embedding model for production use:
 
 The `VectorStoreService` interface doesn't care how embeddings are generated — just pass the `float[]` to `storeEmbedding()`.
 
-### HNSW Indexing
-
-For catalogs with millions of items, the brute-force O(n) search won't scale. Hazelcast Enterprise's `VectorCollection` uses HNSW indexing for O(log n) approximate nearest-neighbor search. The interface is already designed for this swap — change the implementation class, keep the same API.
-
 ### Hybrid Search
 
 Combine vector similarity with traditional filters:
@@ -460,7 +496,11 @@ Combine vector similarity with traditional filters:
 "Find products similar to this laptop, but only in the Electronics category and under $1000"
 ```
 
-This would combine a vector search for semantic similarity with IMap predicate queries for attribute filtering.
+This would combine a VectorCollection search for semantic similarity with IMap predicate queries for attribute filtering.
+
+### Multi-Index Collections
+
+Hazelcast's `VectorCollection` supports multiple named indexes on a single collection — for example, one index for text embeddings and another for image embeddings. This enables multi-modal similarity search from a single data structure.
 
 ---
 
@@ -469,12 +509,12 @@ This would combine a vector search for semantic similarity with IMap predicate q
 Vector similarity search adds a powerful capability to the microservices framework:
 
 - **Embeddings** represent products as points in high-dimensional space
-- **Cosine similarity** measures how close two product vectors are
-- **IMap storage** keeps embeddings distributed and fast
-- **Edition-aware beans** activate the feature only when Enterprise is available
+- **HNSW indexing** provides O(log n) approximate nearest-neighbor search
+- **VectorCollection** is Hazelcast Enterprise's native vector data structure
+- **Edition-aware modules** activate the feature only when Enterprise is available
 - **Graceful fallback** means Community Edition works normally with empty results
 
-The implementation demonstrates a broader pattern: how to add optional Enterprise features to a framework that must work on Community Edition. Define the interface, implement both paths, and let Spring's conditional beans handle the selection.
+The implementation demonstrates a broader pattern: how to add optional Enterprise features to a framework that must work on Community Edition. Define the interface in `framework-core`, implement the Enterprise path in `framework-enterprise`, and let Spring's auto-configuration ordering handle the selection.
 
 ---
 

@@ -52,10 +52,22 @@
                 <version>${hazelcast.version}</version>
             </dependency>
 
+            <!-- Hazelcast Enterprise (optional, for framework-enterprise module) -->
+            <dependency>
+                <groupId>com.hazelcast</groupId>
+                <artifactId>hazelcast-enterprise</artifactId>
+                <version>${hazelcast.version}</version>
+            </dependency>
+
             <!-- Internal modules -->
             <dependency>
                 <groupId>com.theyawns</groupId>
                 <artifactId>framework-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.theyawns</groupId>
+                <artifactId>framework-enterprise</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -137,6 +149,22 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <profiles>
+        <profile>
+            <id>enterprise</id>
+            <modules>
+                <module>framework-enterprise</module>
+            </modules>
+        </profile>
+    </profiles>
+
+    <repositories>
+        <repository>
+            <id>hazelcast-enterprise</id>
+            <url>https://repository.hazelcast.com/release/</url>
+        </repository>
+    </repositories>
 
     <build>
         <pluginManagement>

@@ -9,8 +9,8 @@ import java.util.Map;
  * <p>Provides a unified API for storing embeddings and performing similarity searches.
  * Two implementations exist:
  * <ul>
- *   <li>{@link SimpleVectorStoreService} — Enterprise path using {@code IMap<String, float[]>}
- *       with brute-force cosine similarity</li>
+ *   <li>{@code HazelcastVectorStoreService} (in {@code framework-enterprise} module) —
+ *       Enterprise path using Hazelcast {@code VectorCollection} with HNSW indexing</li>
  *   <li>{@link NoOpVectorStoreService} — Community fallback returning empty results</li>
  * </ul>
  *

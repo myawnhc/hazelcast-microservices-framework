@@ -70,6 +70,8 @@ class VectorStoreAutoConfigurationTest {
                         assertThat(props.getDimension()).isEqualTo(128);
                         assertThat(props.getMaxConnections()).isEqualTo(16);
                         assertThat(props.getEfConstruction()).isEqualTo(200);
+                        assertThat(props.getMetric()).isEqualTo("COSINE");
+                        assertThat(props.getIndexName()).isEqualTo("default");
                     });
         }
 
@@ -82,7 +84,9 @@ class VectorStoreAutoConfigurationTest {
                             "framework.vectorstore.collection-name=custom-vectors",
                             "framework.vectorstore.dimension=256",
                             "framework.vectorstore.max-connections=32",
-                            "framework.vectorstore.ef-construction=400"
+                            "framework.vectorstore.ef-construction=400",
+                            "framework.vectorstore.metric=DOT",
+                            "framework.vectorstore.index-name=custom-index"
                     )
                     .run(context -> {
                         final VectorStoreProperties props = context.getBean(VectorStoreProperties.class);
@@ -90,6 +94,8 @@ class VectorStoreAutoConfigurationTest {
                         assertThat(props.getDimension()).isEqualTo(256);
                         assertThat(props.getMaxConnections()).isEqualTo(32);
                         assertThat(props.getEfConstruction()).isEqualTo(400);
+                        assertThat(props.getMetric()).isEqualTo("DOT");
+                        assertThat(props.getIndexName()).isEqualTo("custom-index");
                     });
         }
     }

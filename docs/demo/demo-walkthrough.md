@@ -390,13 +390,13 @@ In a traditional CRUD system, if your view logic has a bug, you're stuck with co
 
 ## Demo Scenario 4: Similar Products (Vector Store)
 
-This scenario demonstrates the vector store integration for product similarity search. See Scenario 4 in the interactive demo script for the full walkthrough.
+This scenario demonstrates the vector store integration for product similarity search using Hazelcast Enterprise's native `VectorCollection` with HNSW indexing. See Scenario 4 in the interactive demo script for the full walkthrough.
 
 ### What You'll See
 
-1. **Edition-aware feature** - Vector store is available on Enterprise Edition, graceful fallback on Community
-2. **Cosine similarity** - Products are compared using embedding vectors
-3. **Automatic detection** - No code changes needed; the framework auto-detects the edition
+1. **Edition-aware feature** - Vector store is available on Enterprise Edition (via the `framework-enterprise` module), graceful fallback on Community
+2. **HNSW-indexed search** - Products are compared using Hazelcast's `VectorCollection` with O(log n) approximate nearest-neighbor search
+3. **Automatic detection** - No code changes needed; the framework auto-detects the edition and the `EnterpriseVectorStoreAutoConfiguration` activates when the enterprise module is on the classpath
 
 ### Quick Test
 
@@ -405,8 +405,8 @@ This scenario demonstrates the vector store integration for product similarity s
 curl "http://localhost:8082/api/products/$PRODUCT_ID/similar?limit=5" | jq
 ```
 
-- **Enterprise Edition**: Returns ranked similar products with similarity scores
-- **Community Edition**: Returns an informational message explaining the feature requires Enterprise
+- **Enterprise Edition** (built with `-Penterprise`): Returns ranked similar products using Hazelcast VectorCollection with HNSW indexing
+- **Community Edition** (default build): Returns an informational message explaining the feature requires Enterprise
 
 ---
 
