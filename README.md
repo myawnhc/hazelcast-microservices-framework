@@ -23,39 +23,39 @@ This project provides a production-ready event sourcing framework using Hazelcas
 - **Vector Store** (Enterprise): Product similarity search using Hazelcast IMap-based cosine similarity; Community Edition falls back gracefully with empty results
 - **Observability Stack**: Pre-provisioned Grafana dashboards (System Overview, Event Flow, Materialized Views, Sagas), Prometheus metrics scraping across all services and Hazelcast nodes, Jaeger distributed tracing via OTLP ([Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md))
 - **Edition Detection**: Automatic Community/Enterprise edition detection with `@ConditionalOnEnterpriseFeature` and `@ConditionalOnCommunityFallback` annotations for conditional bean wiring
+- **MCP Server**: AI assistant integration via the [Model Context Protocol](https://modelcontextprotocol.io/) — 7 tools for querying views, submitting events, inspecting sagas, checking metrics, and running demos ([MCP Server Guide](mcp-server/README.md) | [Example Conversations](docs/guides/mcp-examples.md))
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Client Applications                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-              ┌────────────────────────┼────────────────────────┐
-              │              ┌─────────┴─────────┐              │
-              ▼              ▼                   ▼              ▼
-      ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-      │   Account    │ │  Inventory   │ │    Order     │ │   Payment    │
-      │   Service    │ │   Service    │ │   Service    │ │   Service    │
-      │   :8081      │ │   :8082      │ │   :8083      │ │   :8084      │
-      └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
-              │              │                   │              │
-              └──────────────┴─────────┬─────────┴──────────────┘
-                                       │
-                    ┌──────────────────┴──────────────────┐
-                    │         Hazelcast Cluster           │
-                    │  ┌─────────┐ ┌─────────┐ ┌────────┐ │
-                    │  │  Node 1 │ │  Node 2 │ │ Node 3 │ │
-                    │  │  :5701  │ │  :5702  │ │  :5703 │ │
-                    │  └─────────┘ └─────────┘ └────────┘ │
-                    │                                     │
-                    │  ┌─────────────────────────────┐   │
-                    │  │ Event Stores (IMap)         │   │
-                    │  │ Materialized Views (IMap)   │   │
-                    │  │ Event Bus (ITopic)          │   │
-                    │  │ Jet Pipelines               │   │
-                    │  └─────────────────────────────┘   │
-                    └─────────────────────────────────────┘
+┌──────────────────────┐  ┌─────────────────────────────────────────────────┐
+│  AI Assistant        │  │              Client Applications                │
+│  (Claude, etc.)      │  └─────────────────────────────────────────────────┘
+└──────────┬───────────┘                       │
+           │ MCP            ┌──────────────────┼──────────────────┐
+           ▼                │         ┌────────┴────────┐         │
+   ┌──────────────┐         ▼         ▼                 ▼         ▼
+   │  MCP Server  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+   │   :8085      │─▶│ Account  │ │Inventory │ │  Order   │ │ Payment  │
+   └──────────────┘  │  :8081   │ │  :8082   │ │  :8083   │ │  :8084   │
+                     └──────────┘ └──────────┘ └──────────┘ └──────────┘
+                          │            │             │            │
+                          └────────────┴──────┬──────┴────────────┘
+                                              │
+                          ┌───────────────────┴───────────────────┐
+                          │          Hazelcast Cluster            │
+                          │  ┌─────────┐ ┌─────────┐ ┌────────┐  │
+                          │  │  Node 1 │ │  Node 2 │ │ Node 3 │  │
+                          │  │  :5701  │ │  :5702  │ │  :5703 │  │
+                          │  └─────────┘ └─────────┘ └────────┘  │
+                          │                                      │
+                          │  ┌──────────────────────────────┐    │
+                          │  │ Event Stores (IMap)          │    │
+                          │  │ Materialized Views (IMap)    │    │
+                          │  │ Event Bus (ITopic)           │    │
+                          │  │ Jet Pipelines                │    │
+                          │  └──────────────────────────────┘    │
+                          └──────────────────────────────────────┘
               ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
               │  Prometheus  │  │   Grafana    │  │    Jaeger    │
               │   :9090      │  │   :3000      │  │   :16686     │
@@ -72,6 +72,7 @@ This project provides a production-ready event sourcing framework using Hazelcas
 | [inventory-service](inventory-service/README.md) | Product catalog and stock management |
 | [order-service](order-service/README.md) | Order lifecycle management |
 | [payment-service](payment-service/README.md) | Payment processing and refunds |
+| [mcp-server](mcp-server/README.md) | AI assistant integration (MCP) |
 
 ## Quick Start
 
@@ -196,6 +197,8 @@ curl http://localhost:8082/api/products/<product-id>/similar?limit=5
 - [Demo Walkthrough](docs/demo/demo-walkthrough.md) - Step-by-step demo guide
 - [Saga Pattern Guide](docs/guides/saga-pattern-guide.md) - Choreographed saga implementation
 - [Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md) - Grafana, Prometheus, and Jaeger setup
+- [MCP Server Guide](mcp-server/README.md) - AI assistant integration via Model Context Protocol
+- [MCP Examples](docs/guides/mcp-examples.md) - Example AI assistant conversations
 
 ## Event Sourcing Flow
 
@@ -255,6 +258,7 @@ mvn test -Dtest=LoadTest -pl order-service
 | Metrics | Micrometer/Prometheus | - |
 | Dashboards | Grafana | 10.3.x |
 | Tracing | Jaeger (OTLP) | - |
+| AI Integration | Spring AI MCP Server | 1.0.0 |
 | API Docs | OpenAPI/Swagger | 3.0 |
 
 ## Project Structure
@@ -267,6 +271,7 @@ hazelcast-microservices-framework/
 ├── inventory-service/       # Product service (:8082)
 ├── order-service/           # Order service (:8083)
 ├── payment-service/         # Payment service (:8084)
+├── mcp-server/              # AI assistant MCP server (:8085)
 ├── docker/                  # Docker Compose, Grafana dashboards, Prometheus config
 ├── scripts/                 # Build, start, stop, demo scripts
 ├── docs/                    # Documentation

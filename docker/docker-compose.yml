@@ -11,6 +11,8 @@
 #   - account-service: Customer management (port 8081)
 #   - inventory-service: Product/stock management (port 8082)
 #   - order-service: Order management (port 8083)
+#   - payment-service: Payment processing (port 8084)
+#   - mcp-server: AI assistant MCP integration (port 8085)
 #   - prometheus: Metrics collection (port 9090)
 #   - grafana: Dashboards & visualization (port 3000)
 #
@@ -256,6 +258,47 @@ services:
       resources:
         limits:
           memory: 512M
+
+  # ============================================
+  # MCP Server (AI Assistant Integration)
+  # ============================================
+
+  mcp-server:
+    build:
+      context: ../mcp-server
+      dockerfile: Dockerfile
+    container_name: mcp-server
+    hostname: mcp-server
+    networks:
+      - ecommerce-network
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xms128m -Xmx256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+      - MCP_SERVICES_ACCOUNT_URL=http://account-service:8081
+      - MCP_SERVICES_INVENTORY_URL=http://inventory-service:8082
+      - MCP_SERVICES_ORDER_URL=http://order-service:8083
+      - MCP_SERVICES_PAYMENT_URL=http://payment-service:8084
+    depends_on:
+      account-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # ============================================
   # Monitoring

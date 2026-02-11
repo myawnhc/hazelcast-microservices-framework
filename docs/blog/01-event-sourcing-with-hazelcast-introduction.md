@@ -1,6 +1,6 @@
 # Event Sourcing with Hazelcast: A Practical Introduction
 
-*Part 1 of 6 in the "Building Event-Driven Microservices with Hazelcast" series*
+*Part 1 of 7 in the "Building Event-Driven Microservices with Hazelcast" series*
 
 ---
 

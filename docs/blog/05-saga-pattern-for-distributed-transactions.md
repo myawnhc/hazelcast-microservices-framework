@@ -1,6 +1,6 @@
 # The Saga Pattern for Distributed Transactions
 
-*Part 5 of 6 in the "Building Event-Driven Microservices with Hazelcast" series*
+*Part 5 of 7 in the "Building Event-Driven Microservices with Hazelcast" series*
 
 ---
 

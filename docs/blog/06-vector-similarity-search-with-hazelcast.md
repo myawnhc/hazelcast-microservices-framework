@@ -1,6 +1,6 @@
 # Vector Similarity Search with Hazelcast
 
-*Part 6 of 6 in the "Building Event-Driven Microservices with Hazelcast" series*
+*Part 6 of 7 in the "Building Event-Driven Microservices with Hazelcast" series*
 
 ---
 
@@ -519,5 +519,7 @@ The implementation demonstrates a broader pattern: how to add optional Enterpris
 ---
 
 *Previous: [Part 5 - The Saga Pattern for Distributed Transactions](05-saga-pattern-for-distributed-transactions.md)*
+
+*Next: [Part 7 - AI-Powered Microservices with Model Context Protocol](07-ai-powered-microservices-with-mcp.md)*
 
 *[Back to Part 1 - Event Sourcing with Hazelcast Introduction](01-event-sourcing-with-hazelcast-introduction.md)*

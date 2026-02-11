@@ -1,6 +1,6 @@
 # Observability in Event-Sourced Systems
 
-*Part 4 of 6 in the "Building Event-Driven Microservices with Hazelcast" series*
+*Part 4 of 7 in the "Building Event-Driven Microservices with Hazelcast" series*
 
 ---
 
