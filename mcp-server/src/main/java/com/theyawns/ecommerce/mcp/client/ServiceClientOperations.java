@@ -63,4 +63,28 @@ public interface ServiceClientOperations {
      * @return list of events as maps
      */
     List<Map<String, Object>> getEventHistory(String viewName, String id, int limit);
+
+    /**
+     * Retrieves saga state by ID from the order service.
+     *
+     * @param sagaId the saga identifier
+     * @return the saga state as a map
+     */
+    Map<String, Object> getSaga(String sagaId);
+
+    /**
+     * Lists sagas from the order service, optionally filtered by status.
+     *
+     * @param status optional status filter (e.g., "COMPLETED", "FAILED")
+     * @param limit the maximum number of sagas to return
+     * @return list of saga states as maps
+     */
+    List<Map<String, Object>> listSagas(String status, int limit);
+
+    /**
+     * Retrieves an aggregated metrics summary from the order service.
+     *
+     * @return the metrics summary as a map
+     */
+    Map<String, Object> getMetricsSummary();
 }

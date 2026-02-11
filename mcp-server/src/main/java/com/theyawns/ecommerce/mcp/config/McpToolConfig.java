@@ -1,7 +1,11 @@
 package com.theyawns.ecommerce.mcp.config;
 
 import com.theyawns.ecommerce.mcp.tools.GetEventHistoryTool;
+import com.theyawns.ecommerce.mcp.tools.GetMetricsTool;
+import com.theyawns.ecommerce.mcp.tools.InspectSagaTool;
+import com.theyawns.ecommerce.mcp.tools.ListSagasTool;
 import com.theyawns.ecommerce.mcp.tools.QueryViewTool;
+import com.theyawns.ecommerce.mcp.tools.RunDemoTool;
 import com.theyawns.ecommerce.mcp.tools.SubmitEventTool;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
@@ -26,14 +30,23 @@ public class McpToolConfig {
      * @param queryView the query view tool
      * @param submitEvent the submit event tool
      * @param getEventHistory the event history tool
+     * @param inspectSaga the inspect saga tool
+     * @param listSagas the list sagas tool
+     * @param getMetrics the get metrics tool
+     * @param runDemo the run demo tool
      * @return the tool callback provider
      */
     @Bean
     public ToolCallbackProvider mcpTools(QueryViewTool queryView,
                                          SubmitEventTool submitEvent,
-                                         GetEventHistoryTool getEventHistory) {
+                                         GetEventHistoryTool getEventHistory,
+                                         InspectSagaTool inspectSaga,
+                                         ListSagasTool listSagas,
+                                         GetMetricsTool getMetrics,
+                                         RunDemoTool runDemo) {
         return MethodToolCallbackProvider.builder()
-                .toolObjects(queryView, submitEvent, getEventHistory)
+                .toolObjects(queryView, submitEvent, getEventHistory,
+                        inspectSaga, listSagas, getMetrics, runDemo)
                 .build();
     }
 }

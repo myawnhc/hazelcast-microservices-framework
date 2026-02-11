@@ -216,6 +216,82 @@ public class ServiceClient implements ServiceClientOperations {
     }
 
     /**
+     * Retrieves saga state by ID from the order service.
+     *
+     * @param sagaId the saga identifier
+     * @return the saga state as a map
+     */
+    public Map<String, Object> getSaga(String sagaId) {
+        String url = properties.getOrderUrl() + "/api/sagas/" + sagaId;
+        logger.debug("GET {}", url);
+
+        try {
+            String json = restClient.get()
+                    .uri(url)
+                    .retrieve()
+                    .body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to get saga {}: {} {}", sagaId,
+                    e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "Saga not found",
+                    "sagaId", sagaId,
+                    "status", e.getStatusCode().value());
+        }
+    }
+
+    /**
+     * Lists sagas from the order service, optionally filtered by status.
+     *
+     * @param status optional status filter (e.g., "COMPLETED", "FAILED")
+     * @param limit the maximum number of sagas to return
+     * @return list of saga states as maps
+     */
+    public List<Map<String, Object>> listSagas(String status, int limit) {
+        StringBuilder urlBuilder = new StringBuilder(properties.getOrderUrl())
+                .append("/api/sagas?limit=").append(limit);
+        if (status != null && !status.isBlank()) {
+            urlBuilder.append("&status=").append(status);
+        }
+        String url = urlBuilder.toString();
+        logger.debug("GET {}", url);
+
+        try {
+            String json = restClient.get()
+                    .uri(url)
+                    .retrieve()
+                    .body(String.class);
+            return parseList(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to list sagas: {} {}", e.getStatusCode(), e.getStatusText());
+            return List.of(Map.of("error", "Failed to list sagas",
+                    "status", e.getStatusCode().value()));
+        }
+    }
+
+    /**
+     * Retrieves an aggregated metrics summary from the order service.
+     *
+     * @return the metrics summary as a map
+     */
+    public Map<String, Object> getMetricsSummary() {
+        String url = properties.getOrderUrl() + "/api/metrics/summary";
+        logger.debug("GET {}", url);
+
+        try {
+            String json = restClient.get()
+                    .uri(url)
+                    .retrieve()
+                    .body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to get metrics summary: {} {}", e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "Failed to get metrics summary",
+                    "status", e.getStatusCode().value());
+        }
+    }
+
+    /**
      * Resolves a view name to a full base URL with entity path.
      *
      * @param viewName the view name
