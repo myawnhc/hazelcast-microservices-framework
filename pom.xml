@@ -26,6 +26,7 @@
         <module>inventory-service</module>
         <module>order-service</module>
         <module>payment-service</module>
+        <module>mcp-server</module>
     </modules>
 
     <properties>
@@ -36,6 +37,7 @@
         <springdoc.version>2.3.0</springdoc.version>
         <micrometer-tracing.version>1.2.2</micrometer-tracing.version>
         <opentelemetry.version>1.34.1</opentelemetry.version>
+        <spring-ai.version>1.0.0</spring-ai.version>
     </properties>
 
     <dependencyManagement>
@@ -94,6 +96,20 @@
                 <groupId>com.theyawns</groupId>
                 <artifactId>payment-service</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.theyawns</groupId>
+                <artifactId>mcp-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Spring AI -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- Testing -->
@@ -163,6 +179,14 @@
         <repository>
             <id>hazelcast-enterprise</id>
             <url>https://repository.hazelcast.com/release/</url>
+        </repository>
+        <repository>
+            <id>spring-milestones</id>
+            <name>Spring Milestones</name>
+            <url>https://repo.spring.io/milestone</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
         </repository>
     </repositories>
 

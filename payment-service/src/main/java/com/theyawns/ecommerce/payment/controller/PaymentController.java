@@ -20,9 +20,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * REST controller for payment management.
@@ -158,6 +162,50 @@ public class PaymentController {
                             paymentId, response.getStatus());
                     return ResponseEntity.ok(response);
                 });
+    }
+
+    /**
+     * Lists all payments, up to the specified limit.
+     *
+     * @param limit the maximum number of payments to return (default: 10)
+     * @return list of payments
+     */
+    @GetMapping
+    @Operation(summary = "List payments", description = "Lists all payments from the materialized view")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Payments retrieved")
+    })
+    public ResponseEntity<List<PaymentDTO>> listPayments(
+            @Parameter(description = "Maximum number of results") @RequestParam(defaultValue = "10") int limit) {
+        logger.debug("REST: Listing payments (limit: {})", limit);
+
+        List<PaymentDTO> payments = paymentService.listAll(limit).stream()
+                .map(payment -> payment.toDTO())
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(payments);
+    }
+
+    /**
+     * Retrieves event history for a payment.
+     *
+     * @param paymentId the payment ID
+     * @param limit the maximum number of events to return (default: 20)
+     * @return list of events
+     */
+    @GetMapping("/{paymentId}/events")
+    @Operation(summary = "Get payment event history",
+            description = "Retrieves the event history for a payment from the event store")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Event history retrieved")
+    })
+    public ResponseEntity<List<Map<String, Object>>> getEventHistory(
+            @Parameter(description = "Payment ID", required = true) @PathVariable String paymentId,
+            @Parameter(description = "Maximum number of events") @RequestParam(defaultValue = "20") int limit) {
+        logger.debug("REST: Getting event history for payment: {} (limit: {})", paymentId, limit);
+
+        List<Map<String, Object>> events = paymentService.getEventHistory(paymentId, limit);
+        return ResponseEntity.ok(events);
     }
 
     /**

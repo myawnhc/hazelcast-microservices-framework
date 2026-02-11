@@ -4,6 +4,7 @@ import com.theyawns.ecommerce.common.domain.Order;
 import com.theyawns.ecommerce.common.dto.OrderDTO;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -88,4 +89,21 @@ public interface OrderOperations {
      * @return true if the order exists
      */
     boolean orderExists(String orderId);
+
+    /**
+     * Lists all orders, up to the specified limit.
+     *
+     * @param limit the maximum number of orders to return
+     * @return list of orders
+     */
+    List<Order> listAll(int limit);
+
+    /**
+     * Retrieves the event history for an order.
+     *
+     * @param orderId the order ID
+     * @param limit the maximum number of events to return
+     * @return list of events as maps
+     */
+    List<Map<String, Object>> getEventHistory(String orderId, int limit);
 }

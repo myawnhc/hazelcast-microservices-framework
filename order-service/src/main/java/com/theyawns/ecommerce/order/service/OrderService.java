@@ -10,6 +10,7 @@ import com.theyawns.ecommerce.common.dto.OrderLineItemDTO;
 import com.theyawns.ecommerce.common.events.OrderCancelledEvent;
 import com.theyawns.ecommerce.common.events.OrderConfirmedEvent;
 import com.theyawns.ecommerce.common.events.OrderCreatedEvent;
+import com.theyawns.ecommerce.common.util.GenericRecordConverter;
 import com.theyawns.ecommerce.order.exception.InvalidOrderStateException;
 import com.theyawns.ecommerce.order.exception.OrderNotFoundException;
 import com.theyawns.framework.controller.EventSourcingController;
@@ -28,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -461,6 +463,38 @@ public class OrderService implements OrderOperations {
      */
     private String generateConfirmationNumber() {
         return "CONF-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    }
+
+    /**
+     * Lists all orders from the materialized view, up to the specified limit.
+     *
+     * @param limit the maximum number of orders to return
+     * @return list of orders
+     */
+    @Override
+    public List<Order> listAll(int limit) {
+        logger.debug("Listing orders (limit: {})", limit);
+        return controller.getViewStore().values().stream()
+                .limit(limit)
+                .map(Order::fromGenericRecord)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Retrieves the event history for an order.
+     *
+     * @param orderId the order ID
+     * @param limit the maximum number of events to return
+     * @return list of events as maps
+     */
+    @Override
+    public List<Map<String, Object>> getEventHistory(String orderId, int limit) {
+        logger.debug("Getting event history for order: {} (limit: {})", orderId, limit);
+        List<GenericRecord> events = controller.getEventStore().getEventsByKey(orderId);
+        return events.stream()
+                .limit(limit)
+                .map(GenericRecordConverter::toMap)
+                .collect(Collectors.toList());
     }
 
     /**

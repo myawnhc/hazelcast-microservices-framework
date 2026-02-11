@@ -3,6 +3,8 @@ package com.theyawns.ecommerce.payment.service;
 import com.theyawns.ecommerce.common.domain.Payment;
 import com.theyawns.ecommerce.common.dto.PaymentDTO;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -83,4 +85,21 @@ public interface PaymentOperations {
      * @return true if the payment exists
      */
     boolean paymentExists(String paymentId);
+
+    /**
+     * Lists all payments, up to the specified limit.
+     *
+     * @param limit the maximum number of payments to return
+     * @return list of payments
+     */
+    List<Payment> listAll(int limit);
+
+    /**
+     * Retrieves the event history for a payment.
+     *
+     * @param paymentId the payment ID
+     * @param limit the maximum number of events to return
+     * @return list of events as maps
+     */
+    List<Map<String, Object>> getEventHistory(String paymentId, int limit);
 }

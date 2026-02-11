@@ -3,6 +3,8 @@ package com.theyawns.ecommerce.account.service;
 import com.theyawns.ecommerce.common.domain.Customer;
 import com.theyawns.ecommerce.common.dto.CustomerDTO;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -56,4 +58,21 @@ public interface CustomerService {
      * @return true if the customer exists
      */
     boolean customerExists(String customerId);
+
+    /**
+     * Lists all customers, up to the specified limit.
+     *
+     * @param limit the maximum number of customers to return
+     * @return list of customers
+     */
+    List<Customer> listAll(int limit);
+
+    /**
+     * Retrieves the event history for a customer.
+     *
+     * @param customerId the customer ID
+     * @param limit the maximum number of events to return
+     * @return list of events as maps
+     */
+    List<Map<String, Object>> getEventHistory(String customerId, int limit);
 }

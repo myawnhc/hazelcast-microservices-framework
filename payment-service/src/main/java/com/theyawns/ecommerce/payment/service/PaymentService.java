@@ -7,6 +7,7 @@ import com.theyawns.ecommerce.common.dto.PaymentDTO;
 import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.common.events.PaymentProcessedEvent;
 import com.theyawns.ecommerce.common.events.PaymentRefundedEvent;
+import com.theyawns.ecommerce.common.util.GenericRecordConverter;
 import com.theyawns.ecommerce.payment.exception.InvalidPaymentStateException;
 import com.theyawns.ecommerce.payment.exception.PaymentNotFoundException;
 import com.theyawns.framework.controller.EventSourcingController;
@@ -18,10 +19,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
+
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * Business logic service for payment management.
@@ -399,6 +405,38 @@ public class PaymentService implements PaymentOperations {
      */
     private String generateRefundTransactionId() {
         return "REF-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    }
+
+    /**
+     * Lists all payments from the materialized view, up to the specified limit.
+     *
+     * @param limit the maximum number of payments to return
+     * @return list of payments
+     */
+    @Override
+    public List<Payment> listAll(int limit) {
+        logger.debug("Listing payments (limit: {})", limit);
+        return controller.getViewStore().values().stream()
+                .limit(limit)
+                .map(Payment::fromGenericRecord)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Retrieves the event history for a payment.
+     *
+     * @param paymentId the payment ID
+     * @param limit the maximum number of events to return
+     * @return list of events as maps
+     */
+    @Override
+    public List<Map<String, Object>> getEventHistory(String paymentId, int limit) {
+        logger.debug("Getting event history for payment: {} (limit: {})", paymentId, limit);
+        List<GenericRecord> events = controller.getEventStore().getEventsByKey(paymentId);
+        return events.stream()
+                .limit(limit)
+                .map(GenericRecordConverter::toMap)
+                .collect(Collectors.toList());
     }
 
     /**

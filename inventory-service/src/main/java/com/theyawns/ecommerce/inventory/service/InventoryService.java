@@ -2,11 +2,13 @@ package com.theyawns.ecommerce.inventory.service;
 
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
+import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.ecommerce.common.domain.Product;
 import com.theyawns.ecommerce.common.dto.ProductDTO;
 import com.theyawns.ecommerce.common.events.ProductCreatedEvent;
 import com.theyawns.ecommerce.common.events.StockReleasedEvent;
 import com.theyawns.ecommerce.common.events.StockReservedEvent;
+import com.theyawns.ecommerce.common.util.GenericRecordConverter;
 import com.theyawns.ecommerce.inventory.exception.InsufficientStockException;
 import com.theyawns.ecommerce.inventory.exception.ProductNotFoundException;
 import com.theyawns.framework.controller.EventSourcingController;
@@ -28,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * Business logic service for product inventory management.
@@ -465,6 +468,38 @@ public class InventoryService implements ProductService {
         IMap<String, List<String>> reservations = hazelcast.getMap(ORDER_RESERVATIONS_MAP);
         List<String> items = reservations.get(orderId);
         return items != null ? items : new ArrayList<>();
+    }
+
+    /**
+     * Lists all products from the materialized view, up to the specified limit.
+     *
+     * @param limit the maximum number of products to return
+     * @return list of products
+     */
+    @Override
+    public List<Product> listAll(int limit) {
+        logger.debug("Listing products (limit: {})", limit);
+        return controller.getViewStore().values().stream()
+                .limit(limit)
+                .map(Product::fromGenericRecord)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Retrieves the event history for a product.
+     *
+     * @param productId the product ID
+     * @param limit the maximum number of events to return
+     * @return list of events as maps
+     */
+    @Override
+    public List<Map<String, Object>> getEventHistory(String productId, int limit) {
+        logger.debug("Getting event history for product: {} (limit: {})", productId, limit);
+        List<GenericRecord> events = controller.getEventStore().getEventsByKey(productId);
+        return events.stream()
+                .limit(limit)
+                .map(GenericRecordConverter::toMap)
+                .collect(Collectors.toList());
     }
 
     /**

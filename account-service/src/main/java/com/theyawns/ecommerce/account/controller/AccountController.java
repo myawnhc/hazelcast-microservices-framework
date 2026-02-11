@@ -22,9 +22,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * REST controller for customer account management.
@@ -163,6 +167,50 @@ public class AccountController {
                     logger.info("REST: Customer status changed: {} -> {}", customerId, request.status());
                     return ResponseEntity.ok(response);
                 });
+    }
+
+    /**
+     * Lists all customers, up to the specified limit.
+     *
+     * @param limit the maximum number of customers to return (default: 10)
+     * @return list of customers
+     */
+    @GetMapping
+    @Operation(summary = "List customers", description = "Lists all customers from the materialized view")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Customers retrieved")
+    })
+    public ResponseEntity<List<CustomerDTO>> listCustomers(
+            @Parameter(description = "Maximum number of results") @RequestParam(defaultValue = "10") int limit) {
+        logger.debug("REST: Listing customers (limit: {})", limit);
+
+        List<CustomerDTO> customers = customerService.listAll(limit).stream()
+                .map(customer -> customer.toDTO())
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(customers);
+    }
+
+    /**
+     * Retrieves event history for a customer.
+     *
+     * @param customerId the customer ID
+     * @param limit the maximum number of events to return (default: 20)
+     * @return list of events
+     */
+    @GetMapping("/{customerId}/events")
+    @Operation(summary = "Get customer event history",
+            description = "Retrieves the event history for a customer from the event store")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Event history retrieved")
+    })
+    public ResponseEntity<List<Map<String, Object>>> getEventHistory(
+            @Parameter(description = "Customer ID", required = true) @PathVariable String customerId,
+            @Parameter(description = "Maximum number of events") @RequestParam(defaultValue = "20") int limit) {
+        logger.debug("REST: Getting event history for customer: {} (limit: {})", customerId, limit);
+
+        List<Map<String, Object>> events = customerService.getEventHistory(customerId, limit);
+        return ResponseEntity.ok(events);
     }
 
     /**

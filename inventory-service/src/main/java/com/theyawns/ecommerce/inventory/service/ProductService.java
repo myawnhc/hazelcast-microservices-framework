@@ -3,6 +3,8 @@ package com.theyawns.ecommerce.inventory.service;
 import com.theyawns.ecommerce.common.domain.Product;
 import com.theyawns.ecommerce.common.dto.ProductDTO;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -105,4 +107,21 @@ public interface ProductService {
      * @return true if the product exists
      */
     boolean productExists(String productId);
+
+    /**
+     * Lists all products, up to the specified limit.
+     *
+     * @param limit the maximum number of products to return
+     * @return list of products
+     */
+    List<Product> listAll(int limit);
+
+    /**
+     * Retrieves the event history for a product.
+     *
+     * @param productId the product ID
+     * @param limit the maximum number of events to return
+     * @return list of events as maps
+     */
+    List<Map<String, Object>> getEventHistory(String productId, int limit);
 }

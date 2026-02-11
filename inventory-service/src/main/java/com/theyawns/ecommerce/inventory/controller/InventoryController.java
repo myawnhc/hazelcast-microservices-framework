@@ -29,7 +29,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * REST controller for product inventory management.
@@ -236,6 +238,50 @@ public class InventoryController {
                 similarProducts
         );
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Lists all products, up to the specified limit.
+     *
+     * @param limit the maximum number of products to return (default: 10)
+     * @return list of products
+     */
+    @GetMapping
+    @Operation(summary = "List products", description = "Lists all products from the materialized view")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Products retrieved")
+    })
+    public ResponseEntity<List<ProductDTO>> listProducts(
+            @Parameter(description = "Maximum number of results") @RequestParam(defaultValue = "10") int limit) {
+        logger.debug("REST: Listing products (limit: {})", limit);
+
+        List<ProductDTO> products = productService.listAll(limit).stream()
+                .map(product -> product.toDTO())
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(products);
+    }
+
+    /**
+     * Retrieves event history for a product.
+     *
+     * @param productId the product ID
+     * @param limit the maximum number of events to return (default: 20)
+     * @return list of events
+     */
+    @GetMapping("/{productId}/events")
+    @Operation(summary = "Get product event history",
+            description = "Retrieves the event history for a product from the event store")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Event history retrieved")
+    })
+    public ResponseEntity<List<Map<String, Object>>> getEventHistory(
+            @Parameter(description = "Product ID", required = true) @PathVariable String productId,
+            @Parameter(description = "Maximum number of events") @RequestParam(defaultValue = "20") int limit) {
+        logger.debug("REST: Getting event history for product: {} (limit: {})", productId, limit);
+
+        List<Map<String, Object>> events = productService.getEventHistory(productId, limit);
+        return ResponseEntity.ok(events);
     }
 
     /**

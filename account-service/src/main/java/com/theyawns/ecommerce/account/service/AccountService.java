@@ -7,6 +7,7 @@ import com.theyawns.ecommerce.common.dto.CustomerDTO;
 import com.theyawns.ecommerce.common.events.CustomerCreatedEvent;
 import com.theyawns.ecommerce.common.events.CustomerStatusChangedEvent;
 import com.theyawns.ecommerce.common.events.CustomerUpdatedEvent;
+import com.theyawns.ecommerce.common.util.GenericRecordConverter;
 import com.theyawns.framework.controller.CompletionInfo;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
@@ -14,9 +15,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * Business logic service for customer account management.
@@ -182,6 +186,38 @@ public class AccountService implements CustomerService {
             throw new IllegalArgumentException(
                     "Invalid status: " + status + ". Valid values are: ACTIVE, SUSPENDED, CLOSED");
         }
+    }
+
+    /**
+     * Lists all customers from the materialized view, up to the specified limit.
+     *
+     * @param limit the maximum number of customers to return
+     * @return list of customers
+     */
+    @Override
+    public List<Customer> listAll(int limit) {
+        logger.debug("Listing customers (limit: {})", limit);
+        return controller.getViewStore().values().stream()
+                .limit(limit)
+                .map(Customer::fromGenericRecord)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Retrieves the event history for a customer.
+     *
+     * @param customerId the customer ID
+     * @param limit the maximum number of events to return
+     * @return list of events as maps
+     */
+    @Override
+    public List<Map<String, Object>> getEventHistory(String customerId, int limit) {
+        logger.debug("Getting event history for customer: {} (limit: {})", customerId, limit);
+        List<GenericRecord> events = controller.getEventStore().getEventsByKey(customerId);
+        return events.stream()
+                .limit(limit)
+                .map(GenericRecordConverter::toMap)
+                .collect(Collectors.toList());
     }
 
     /**
