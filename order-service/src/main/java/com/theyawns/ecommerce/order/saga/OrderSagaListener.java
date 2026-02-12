@@ -8,6 +8,8 @@ import com.hazelcast.topic.MessageListener;
 import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.common.events.PaymentProcessedEvent;
 import com.theyawns.ecommerce.order.service.OrderOperations;
+import com.theyawns.framework.resilience.ResilienceException;
+import com.theyawns.framework.resilience.ResilientOperations;
 import com.theyawns.framework.tracing.EventSpanDecorator;
 import io.micrometer.tracing.Span;
 import jakarta.annotation.PostConstruct;
@@ -16,6 +18,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 /**
  * Saga event listener for the Order Service.
@@ -42,6 +47,7 @@ public class OrderSagaListener {
     private final OrderOperations orderService;
     private final HazelcastInstance hazelcast;
     private EventSpanDecorator eventSpanDecorator;
+    private ResilientOperations resilientServiceInvoker;
 
     /**
      * Creates a new OrderSagaListener.
@@ -63,6 +69,35 @@ public class OrderSagaListener {
     @Autowired(required = false)
     public void setEventSpanDecorator(EventSpanDecorator eventSpanDecorator) {
         this.eventSpanDecorator = eventSpanDecorator;
+    }
+
+    /**
+     * Sets the resilient service invoker for circuit breaker protection (optional).
+     *
+     * <p>When set, all saga service calls are wrapped with circuit breaker and retry
+     * decoration. When not set (e.g., resilience disabled), calls delegate directly.
+     *
+     * @param resilientServiceInvoker the resilient service invoker
+     */
+    @Autowired(required = false)
+    public void setResilientOperations(ResilientOperations resilientServiceInvoker) {
+        this.resilientServiceInvoker = resilientServiceInvoker;
+    }
+
+    /**
+     * Executes an async operation with circuit breaker protection if available.
+     *
+     * @param name the circuit breaker instance name
+     * @param operation the async operation to execute
+     * @param <T> the return type
+     * @return the CompletableFuture result
+     */
+    private <T> CompletableFuture<T> executeWithResilience(
+            final String name, final Supplier<CompletableFuture<T>> operation) {
+        if (resilientServiceInvoker != null) {
+            return resilientServiceInvoker.executeAsync(name, operation);
+        }
+        return operation.get();
     }
 
     /**
@@ -113,22 +148,29 @@ public class OrderSagaListener {
             final Span currentSpan = span;
 
             try {
-                orderService.confirmOrderForSaga(orderId, sagaId, correlationId)
-                        .whenComplete((order, error) -> {
-                            if (error != null) {
-                                logger.error("Failed to confirm order {} for saga: {}",
-                                        orderId, sagaId, error);
-                                if (eventSpanDecorator != null) {
-                                    eventSpanDecorator.recordError(currentSpan, error);
-                                }
-                            } else {
-                                logger.info("Order confirmed via saga: orderId={}, status={}, sagaId={}",
-                                        orderId, order.getStatus(), sagaId);
-                            }
-                            if (eventSpanDecorator != null) {
-                                eventSpanDecorator.endSpan(currentSpan);
-                            }
-                        });
+                executeWithResilience("order-confirmation",
+                        () -> orderService.confirmOrderForSaga(orderId, sagaId, correlationId)
+                ).whenComplete((order, error) -> {
+                    if (error != null) {
+                        if (error instanceof ResilienceException) {
+                            logger.warn("Circuit breaker open for order-confirmation, " +
+                                    "saga step deferred: orderId={}, sagaId={}",
+                                    orderId, sagaId);
+                        } else {
+                            logger.error("Failed to confirm order {} for saga: {}",
+                                    orderId, sagaId, error);
+                        }
+                        if (eventSpanDecorator != null) {
+                            eventSpanDecorator.recordError(currentSpan, error);
+                        }
+                    } else {
+                        logger.info("Order confirmed via saga: orderId={}, status={}, sagaId={}",
+                                orderId, order.getStatus(), sagaId);
+                    }
+                    if (eventSpanDecorator != null) {
+                        eventSpanDecorator.endSpan(currentSpan);
+                    }
+                });
             } catch (Exception e) {
                 logger.error("Error initiating order confirmation for saga: {} (orderId: {})",
                         sagaId, orderId, e);
@@ -174,15 +216,23 @@ public class OrderSagaListener {
             final Span currentSpan = span;
 
             try {
-                orderService.cancelOrderForSaga(
-                        orderId,
-                        "Payment failed: " + failureReason,
-                        sagaId,
-                        correlationId
+                executeWithResilience("order-cancellation",
+                        () -> orderService.cancelOrderForSaga(
+                                orderId,
+                                "Payment failed: " + failureReason,
+                                sagaId,
+                                correlationId
+                        )
                 ).whenComplete((order, error) -> {
                     if (error != null) {
-                        logger.error("Failed to cancel order {} for saga compensation: {}",
-                                orderId, sagaId, error);
+                        if (error instanceof ResilienceException) {
+                            logger.warn("Circuit breaker open for order-cancellation, " +
+                                    "saga compensation deferred: orderId={}, sagaId={}",
+                                    orderId, sagaId);
+                        } else {
+                            logger.error("Failed to cancel order {} for saga compensation: {}",
+                                    orderId, sagaId, error);
+                        }
                         if (eventSpanDecorator != null) {
                             eventSpanDecorator.recordError(currentSpan, error);
                         }

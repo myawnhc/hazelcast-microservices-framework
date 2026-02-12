@@ -9,6 +9,8 @@ import com.theyawns.ecommerce.common.domain.OrderLineItem;
 import com.theyawns.ecommerce.common.domain.Product;
 import com.theyawns.ecommerce.inventory.service.InventoryService;
 import com.theyawns.ecommerce.inventory.service.ProductService;
+import com.theyawns.framework.resilience.ResilienceException;
+import com.theyawns.framework.resilience.ResilientOperations;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -21,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -387,6 +390,243 @@ class InventorySagaListenerTest {
             listener.new PaymentFailedListener().onMessage(message);
 
             // Assert - exception was caught internally
+            verify(inventoryService).releaseStockForSaga(
+                    eq(orderId), eq(sagaId), eq(correlationId), eq("Payment failed: Timeout"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Circuit breaker behavior")
+    class CircuitBreakerTests {
+
+        @Mock
+        private ResilientOperations resilientServiceInvoker;
+
+        private InventorySagaListener resilientListener;
+
+        @BeforeEach
+        void setUp() {
+            resilientListener = new InventorySagaListener(inventoryService, hazelcast);
+            resilientListener.setResilientOperations(resilientServiceInvoker);
+        }
+
+        @Test
+        @DisplayName("should route stock reservation through circuit breaker when invoker is set")
+        @SuppressWarnings("unchecked")
+        void shouldRouteReservationThroughCircuitBreaker() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord lineItem = GenericRecordBuilder.compact("OrderLineItem")
+                    .setString("productId", "prod-1")
+                    .setString("productName", "Widget A")
+                    .setString("sku", "SKU-001")
+                    .setInt32("quantity", 2)
+                    .setString("unitPrice", "10.00")
+                    .setString("lineTotal", "20.00")
+                    .build();
+
+            GenericRecord record = GenericRecordBuilder.compact("OrderCreatedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "OrderCreated")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Order")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", orderId)
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 0)
+                    .setBoolean("isCompensating", false)
+                    .setString("customerId", "cust-1")
+                    .setString("customerName", "John Doe")
+                    .setString("customerEmail", "john@example.com")
+                    .setArrayOfGenericRecord("lineItems", new GenericRecord[]{lineItem})
+                    .setString("shippingAddress", "123 Main St")
+                    .setString("subtotal", "20.00")
+                    .setString("tax", "2.00")
+                    .setString("total", "22.00")
+                    .build();
+
+            Product mockProduct = new Product("prod-1", "SKU-001", "Widget A",
+                    new BigDecimal("10.00"), 100);
+
+            // The invoker should delegate to the actual service call
+            when(resilientServiceInvoker.executeAsync(eq("inventory-stock-reservation"), any(Supplier.class)))
+                    .thenAnswer(invocation -> {
+                        Supplier<CompletableFuture<?>> supplier = invocation.getArgument(1);
+                        return supplier.get();
+                    });
+            when(inventoryService.reserveStockForSaga(
+                    anyString(), anyInt(), anyString(), anyString(), anyString(),
+                    anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(CompletableFuture.completedFuture(mockProduct));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act
+            resilientListener.new OrderCreatedListener().onMessage(message);
+
+            // Assert - invoker was called with correct circuit breaker name
+            verify(resilientServiceInvoker).executeAsync(eq("inventory-stock-reservation"), any(Supplier.class));
+            verify(inventoryService).reserveStockForSaga(
+                    eq("prod-1"), eq(2), eq(orderId), eq(sagaId), eq(correlationId),
+                    anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("should handle circuit breaker open for stock reservation gracefully")
+        @SuppressWarnings("unchecked")
+        void shouldHandleCircuitBreakerOpenForReservation() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord lineItem = GenericRecordBuilder.compact("OrderLineItem")
+                    .setString("productId", "prod-1")
+                    .setString("productName", "Widget A")
+                    .setString("sku", "SKU-001")
+                    .setInt32("quantity", 2)
+                    .setString("unitPrice", "10.00")
+                    .setString("lineTotal", "20.00")
+                    .build();
+
+            GenericRecord record = GenericRecordBuilder.compact("OrderCreatedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "OrderCreated")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Order")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", orderId)
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 0)
+                    .setBoolean("isCompensating", false)
+                    .setString("customerId", "cust-1")
+                    .setString("customerName", "John Doe")
+                    .setString("customerEmail", "john@example.com")
+                    .setArrayOfGenericRecord("lineItems", new GenericRecord[]{lineItem})
+                    .setString("shippingAddress", "123 Main St")
+                    .setString("subtotal", "20.00")
+                    .setString("tax", "2.00")
+                    .setString("total", "22.00")
+                    .build();
+
+            // Circuit breaker is open - returns failed future
+            when(resilientServiceInvoker.executeAsync(eq("inventory-stock-reservation"), any(Supplier.class)))
+                    .thenReturn(CompletableFuture.failedFuture(
+                            new ResilienceException("Circuit breaker open", "inventory-stock-reservation")));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act - should not throw
+            resilientListener.new OrderCreatedListener().onMessage(message);
+
+            // Assert - service was NOT called (circuit breaker rejected)
+            verify(inventoryService, never()).reserveStockForSaga(
+                    anyString(), anyInt(), anyString(), anyString(), anyString(),
+                    anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("should handle circuit breaker open for stock release gracefully")
+        @SuppressWarnings("unchecked")
+        void shouldHandleCircuitBreakerOpenForRelease() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("PaymentFailedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentFailed")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Payment")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 2)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "10.00")
+                    .setString("currency", "USD")
+                    .setString("failureReason", "Timeout")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            // Circuit breaker is open - returns failed future
+            when(resilientServiceInvoker.executeAsync(eq("inventory-stock-release"), any(Supplier.class)))
+                    .thenReturn(CompletableFuture.failedFuture(
+                            new ResilienceException("Circuit breaker open", "inventory-stock-release")));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act - should not throw
+            resilientListener.new PaymentFailedListener().onMessage(message);
+
+            // Assert - service was NOT called (circuit breaker rejected)
+            verify(inventoryService, never()).releaseStockForSaga(
+                    anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("should route stock release through circuit breaker when invoker is set")
+        @SuppressWarnings("unchecked")
+        void shouldRouteReleaseThroughCircuitBreaker() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("PaymentFailedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentFailed")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Payment")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 2)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "10.00")
+                    .setString("currency", "USD")
+                    .setString("failureReason", "Timeout")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            Product mockProduct = new Product("prod-1", "SKU-001", "Widget A",
+                    new BigDecimal("10.00"), 100);
+
+            when(resilientServiceInvoker.executeAsync(eq("inventory-stock-release"), any(Supplier.class)))
+                    .thenAnswer(invocation -> {
+                        Supplier<CompletableFuture<?>> supplier = invocation.getArgument(1);
+                        return supplier.get();
+                    });
+            when(inventoryService.releaseStockForSaga(anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(CompletableFuture.completedFuture(mockProduct));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act
+            resilientListener.new PaymentFailedListener().onMessage(message);
+
+            // Assert
+            verify(resilientServiceInvoker).executeAsync(eq("inventory-stock-release"), any(Supplier.class));
             verify(inventoryService).releaseStockForSaga(
                     eq(orderId), eq(sagaId), eq(correlationId), eq("Payment failed: Timeout"));
         }

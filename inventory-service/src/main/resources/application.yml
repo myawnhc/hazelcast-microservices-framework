@@ -57,6 +57,29 @@ framework:
   vectorstore:
     dimension: 128
     collection-name: product-vectors
+  resilience:
+    enabled: true
+    circuit-breaker:
+      failure-rate-threshold: 50
+      wait-duration-in-open-state: 10s
+      sliding-window-size: 10
+      minimum-number-of-calls: 5
+    retry:
+      max-attempts: 3
+      wait-duration: 500ms
+      enable-exponential-backoff: true
+      exponential-backoff-multiplier: 2.0
+    instances:
+      inventory-stock-reservation:
+        circuit-breaker:
+          failure-rate-threshold: 60
+        retry:
+          max-attempts: 3
+      inventory-stock-release:
+        circuit-breaker:
+          failure-rate-threshold: 40
+        retry:
+          max-attempts: 5
 
 # Logging configuration
 logging:

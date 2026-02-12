@@ -8,6 +8,8 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.ecommerce.common.events.PaymentRefundedEvent;
 import com.theyawns.ecommerce.common.events.StockReservedEvent;
 import com.theyawns.ecommerce.payment.service.PaymentOperations;
+import com.theyawns.framework.resilience.ResilienceException;
+import com.theyawns.framework.resilience.ResilientOperations;
 import com.theyawns.framework.tracing.EventSpanDecorator;
 import io.micrometer.tracing.Span;
 import jakarta.annotation.PostConstruct;
@@ -16,6 +18,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 /**
  * Saga event listener for the Payment Service.
@@ -41,6 +46,7 @@ public class PaymentSagaListener {
     private final PaymentOperations paymentService;
     private final HazelcastInstance hazelcast;
     private EventSpanDecorator eventSpanDecorator;
+    private ResilientOperations resilientServiceInvoker;
 
     /**
      * Creates a new PaymentSagaListener.
@@ -62,6 +68,35 @@ public class PaymentSagaListener {
     @Autowired(required = false)
     public void setEventSpanDecorator(EventSpanDecorator eventSpanDecorator) {
         this.eventSpanDecorator = eventSpanDecorator;
+    }
+
+    /**
+     * Sets the resilient service invoker for circuit breaker protection (optional).
+     *
+     * <p>When set, all saga service calls are wrapped with circuit breaker and retry
+     * decoration. When not set (e.g., resilience disabled), calls delegate directly.
+     *
+     * @param resilientServiceInvoker the resilient service invoker
+     */
+    @Autowired(required = false)
+    public void setResilientOperations(ResilientOperations resilientServiceInvoker) {
+        this.resilientServiceInvoker = resilientServiceInvoker;
+    }
+
+    /**
+     * Executes an async operation with circuit breaker protection if available.
+     *
+     * @param name the circuit breaker instance name
+     * @param operation the async operation to execute
+     * @param <T> the return type
+     * @return the CompletableFuture result
+     */
+    private <T> CompletableFuture<T> executeWithResilience(
+            final String name, final Supplier<CompletableFuture<T>> operation) {
+        if (resilientServiceInvoker != null) {
+            return resilientServiceInvoker.executeAsync(name, operation);
+        }
+        return operation.get();
     }
 
     /**
@@ -118,18 +153,26 @@ public class PaymentSagaListener {
             String method = record.getString("method");
 
             try {
-                paymentService.processPaymentForOrder(
-                        orderId,
-                        customerId != null ? customerId : "unknown",
-                        amount != null ? amount : "0.00",
-                        currency != null ? currency : "USD",
-                        method,
-                        sagaId,
-                        correlationId
+                executeWithResilience("payment-processing",
+                        () -> paymentService.processPaymentForOrder(
+                                orderId,
+                                customerId != null ? customerId : "unknown",
+                                amount != null ? amount : "0.00",
+                                currency != null ? currency : "USD",
+                                method,
+                                sagaId,
+                                correlationId
+                        )
                 ).whenComplete((payment, error) -> {
                     if (error != null) {
-                        logger.error("Failed to process saga payment for order: {} (sagaId: {})",
-                                orderId, sagaId, error);
+                        if (error instanceof ResilienceException) {
+                            logger.warn("Circuit breaker open for payment-processing, " +
+                                    "saga step deferred: orderId={}, sagaId={}",
+                                    orderId, sagaId);
+                        } else {
+                            logger.error("Failed to process saga payment for order: {} (sagaId: {})",
+                                    orderId, sagaId, error);
+                        }
                         if (eventSpanDecorator != null) {
                             eventSpanDecorator.recordError(currentSpan, error);
                         }
@@ -168,10 +211,7 @@ public class PaymentSagaListener {
             String sagaId = record.getString("sagaId");
             String correlationId = record.getString("correlationId");
             String reason = record.getString("reason");
-
-            if (reason == null || reason.isEmpty()) {
-                reason = "Saga compensation";
-            }
+            final String finalReason = (reason == null || reason.isEmpty()) ? "Saga compensation" : reason;
 
             logger.info("Received PaymentRefundRequested: paymentId={}, sagaId={}", paymentId, sagaId);
 
@@ -183,15 +223,23 @@ public class PaymentSagaListener {
             final Span currentSpan = span;
 
             try {
-                paymentService.refundPaymentForSaga(
-                        paymentId,
-                        reason,
-                        sagaId,
-                        correlationId
+                executeWithResilience("payment-refund",
+                        () -> paymentService.refundPaymentForSaga(
+                                paymentId,
+                                finalReason,
+                                sagaId,
+                                correlationId
+                        )
                 ).whenComplete((payment, error) -> {
                     if (error != null) {
-                        logger.error("Failed to refund payment {} for saga: {}",
-                                paymentId, sagaId, error);
+                        if (error instanceof ResilienceException) {
+                            logger.warn("Circuit breaker open for payment-refund, " +
+                                    "saga compensation deferred: paymentId={}, sagaId={}",
+                                    paymentId, sagaId);
+                        } else {
+                            logger.error("Failed to refund payment {} for saga: {}",
+                                    paymentId, sagaId, error);
+                        }
                         if (eventSpanDecorator != null) {
                             eventSpanDecorator.recordError(currentSpan, error);
                         }

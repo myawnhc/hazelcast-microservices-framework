@@ -9,6 +9,8 @@ import com.theyawns.ecommerce.common.events.OrderCancelledEvent;
 import com.theyawns.ecommerce.common.events.OrderCreatedEvent;
 import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.inventory.service.ProductService;
+import com.theyawns.framework.resilience.ResilienceException;
+import com.theyawns.framework.resilience.ResilientOperations;
 import com.theyawns.framework.tracing.EventSpanDecorator;
 import io.micrometer.tracing.Span;
 import jakarta.annotation.PostConstruct;
@@ -17,6 +19,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 /**
  * Saga event listener for the Inventory Service.
@@ -43,6 +48,7 @@ public class InventorySagaListener {
     private final ProductService inventoryService;
     private final HazelcastInstance hazelcast;
     private EventSpanDecorator eventSpanDecorator;
+    private ResilientOperations resilientServiceInvoker;
 
     /**
      * Creates a new InventorySagaListener.
@@ -64,6 +70,35 @@ public class InventorySagaListener {
     @Autowired(required = false)
     public void setEventSpanDecorator(EventSpanDecorator eventSpanDecorator) {
         this.eventSpanDecorator = eventSpanDecorator;
+    }
+
+    /**
+     * Sets the resilient service invoker for circuit breaker protection (optional).
+     *
+     * <p>When set, all saga service calls are wrapped with circuit breaker and retry
+     * decoration. When not set (e.g., resilience disabled), calls delegate directly.
+     *
+     * @param resilientServiceInvoker the resilient service invoker
+     */
+    @Autowired(required = false)
+    public void setResilientOperations(ResilientOperations resilientServiceInvoker) {
+        this.resilientServiceInvoker = resilientServiceInvoker;
+    }
+
+    /**
+     * Executes an async operation with circuit breaker protection if available.
+     *
+     * @param name the circuit breaker instance name
+     * @param operation the async operation to execute
+     * @param <T> the return type
+     * @return the CompletableFuture result
+     */
+    private <T> CompletableFuture<T> executeWithResilience(
+            final String name, final Supplier<CompletableFuture<T>> operation) {
+        if (resilientServiceInvoker != null) {
+            return resilientServiceInvoker.executeAsync(name, operation);
+        }
+        return operation.get();
     }
 
     /**
@@ -139,20 +174,28 @@ public class InventorySagaListener {
                 int quantity = lineItem.getInt32("quantity");
 
                 try {
-                    inventoryService.reserveStockForSaga(
-                            productId,
-                            quantity,
-                            orderId,
-                            sagaId,
-                            correlationId,
-                            customerId,
-                            total,
-                            currency,
-                            "CREDIT_CARD" // Default payment method
+                    executeWithResilience("inventory-stock-reservation",
+                            () -> inventoryService.reserveStockForSaga(
+                                    productId,
+                                    quantity,
+                                    orderId,
+                                    sagaId,
+                                    correlationId,
+                                    customerId,
+                                    total,
+                                    currency,
+                                    "CREDIT_CARD" // Default payment method
+                            )
                     ).whenComplete((product, error) -> {
                         if (error != null) {
-                            logger.error("Failed to reserve stock for product {} in saga: {} (orderId: {})",
-                                    productId, sagaId, orderId, error);
+                            if (error instanceof ResilienceException) {
+                                logger.warn("Circuit breaker open for inventory-stock-reservation, " +
+                                        "saga step deferred: productId={}, sagaId={}, orderId={}",
+                                        productId, sagaId, orderId);
+                            } else {
+                                logger.error("Failed to reserve stock for product {} in saga: {} (orderId: {})",
+                                        productId, sagaId, orderId, error);
+                            }
                             if (eventSpanDecorator != null) {
                                 eventSpanDecorator.recordError(currentSpan, error);
                             }
@@ -209,24 +252,31 @@ public class InventorySagaListener {
             try {
                 if (sagaId != null && !sagaId.isEmpty()) {
                     // Saga cancellation path - records compensation steps
-                    inventoryService.releaseStockForSaga(orderId, sagaId, correlationId, releaseReason)
-                            .whenComplete((product, error) -> {
-                                if (error != null) {
-                                    logger.error("Failed to release stock for cancelled order: orderId={}, sagaId={}",
-                                            orderId, sagaId, error);
-                                    if (eventSpanDecorator != null) {
-                                        eventSpanDecorator.recordError(currentSpan, error);
-                                    }
-                                } else {
-                                    logger.info("Stock released for cancelled order: orderId={}, sagaId={}",
-                                            orderId, sagaId);
-                                }
-                                if (eventSpanDecorator != null) {
-                                    eventSpanDecorator.endSpan(currentSpan);
-                                }
-                            });
+                    executeWithResilience("inventory-stock-release",
+                            () -> inventoryService.releaseStockForSaga(orderId, sagaId, correlationId, releaseReason)
+                    ).whenComplete((product, error) -> {
+                        if (error != null) {
+                            if (error instanceof ResilienceException) {
+                                logger.warn("Circuit breaker open for inventory-stock-release, " +
+                                        "saga compensation deferred: orderId={}, sagaId={}",
+                                        orderId, sagaId);
+                            } else {
+                                logger.error("Failed to release stock for cancelled order: orderId={}, sagaId={}",
+                                        orderId, sagaId, error);
+                            }
+                            if (eventSpanDecorator != null) {
+                                eventSpanDecorator.recordError(currentSpan, error);
+                            }
+                        } else {
+                            logger.info("Stock released for cancelled order: orderId={}, sagaId={}",
+                                    orderId, sagaId);
+                        }
+                        if (eventSpanDecorator != null) {
+                            eventSpanDecorator.endSpan(currentSpan);
+                        }
+                    });
                 } else {
-                    // Direct cancellation path - no saga tracking
+                    // Direct cancellation path - no saga tracking, no circuit breaker needed
                     inventoryService.releaseReservedStockForOrder(orderId, releaseReason)
                             .whenComplete((product, error) -> {
                                 if (error != null) {
@@ -292,15 +342,23 @@ public class InventorySagaListener {
             String reason = "Payment failed: " + failureReason;
 
             try {
-                inventoryService.releaseStockForSaga(
-                        orderId,
-                        sagaId,
-                        correlationId,
-                        reason
+                executeWithResilience("inventory-stock-release",
+                        () -> inventoryService.releaseStockForSaga(
+                                orderId,
+                                sagaId,
+                                correlationId,
+                                reason
+                        )
                 ).whenComplete((product, error) -> {
                     if (error != null) {
-                        logger.error("Failed to release stock for saga compensation: orderId={}, sagaId={}",
-                                orderId, sagaId, error);
+                        if (error instanceof ResilienceException) {
+                            logger.warn("Circuit breaker open for inventory-stock-release, " +
+                                    "saga compensation deferred: orderId={}, sagaId={}",
+                                    orderId, sagaId);
+                        } else {
+                            logger.error("Failed to release stock for saga compensation: orderId={}, sagaId={}",
+                                    orderId, sagaId, error);
+                        }
                         if (eventSpanDecorator != null) {
                             eventSpanDecorator.recordError(currentSpan, error);
                         }

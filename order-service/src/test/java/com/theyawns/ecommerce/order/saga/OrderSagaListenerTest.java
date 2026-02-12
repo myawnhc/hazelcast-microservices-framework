@@ -6,6 +6,8 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.hazelcast.topic.Message;
 import com.theyawns.ecommerce.common.domain.Order;
 import com.theyawns.ecommerce.order.service.OrderOperations;
+import com.theyawns.framework.resilience.ResilienceException;
+import com.theyawns.framework.resilience.ResilientOperations;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -16,7 +18,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -307,6 +311,213 @@ class OrderSagaListenerTest {
             // Assert - exception was caught internally
             verify(orderService).cancelOrderForSaga(
                     eq(orderId), eq("Payment failed: Timeout"), eq(sagaId), eq(correlationId));
+        }
+    }
+
+    @Nested
+    @DisplayName("Circuit breaker behavior")
+    class CircuitBreakerTests {
+
+        @Mock
+        private ResilientOperations resilientServiceInvoker;
+
+        private OrderSagaListener resilientListener;
+
+        @BeforeEach
+        void setUp() {
+            resilientListener = new OrderSagaListener(orderService, hazelcast);
+            resilientListener.setResilientOperations(resilientServiceInvoker);
+        }
+
+        @Test
+        @DisplayName("should route order confirmation through circuit breaker when invoker is set")
+        @SuppressWarnings("unchecked")
+        void shouldRouteConfirmationThroughCircuitBreaker() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("PaymentProcessedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentProcessed")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Payment")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 2)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "22.00")
+                    .setString("currency", "USD")
+                    .setString("transactionId", "txn-123")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            Order mockOrder = mock(Order.class);
+            when(mockOrder.getStatus()).thenReturn(Order.Status.CONFIRMED);
+
+            when(resilientServiceInvoker.executeAsync(eq("order-confirmation"), any(Supplier.class)))
+                    .thenAnswer(invocation -> {
+                        Supplier<CompletableFuture<?>> supplier = invocation.getArgument(1);
+                        return supplier.get();
+                    });
+            when(orderService.confirmOrderForSaga(anyString(), anyString(), anyString()))
+                    .thenReturn(CompletableFuture.completedFuture(mockOrder));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act
+            resilientListener.new PaymentProcessedListener().onMessage(message);
+
+            // Assert
+            verify(resilientServiceInvoker).executeAsync(eq("order-confirmation"), any(Supplier.class));
+            verify(orderService).confirmOrderForSaga(eq(orderId), eq(sagaId), eq(correlationId));
+        }
+
+        @Test
+        @DisplayName("should handle circuit breaker open for order confirmation gracefully")
+        @SuppressWarnings("unchecked")
+        void shouldHandleCircuitBreakerOpenForConfirmation() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("PaymentProcessedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentProcessed")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Payment")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 2)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "22.00")
+                    .setString("currency", "USD")
+                    .setString("transactionId", "txn-123")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            when(resilientServiceInvoker.executeAsync(eq("order-confirmation"), any(Supplier.class)))
+                    .thenReturn(CompletableFuture.failedFuture(
+                            new ResilienceException("Circuit breaker open", "order-confirmation")));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act - should not throw
+            resilientListener.new PaymentProcessedListener().onMessage(message);
+
+            // Assert - service was NOT called
+            verify(orderService, never()).confirmOrderForSaga(anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("should handle circuit breaker open for order cancellation gracefully")
+        @SuppressWarnings("unchecked")
+        void shouldHandleCircuitBreakerOpenForCancellation() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("PaymentFailedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentFailed")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Payment")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 2)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "22.00")
+                    .setString("currency", "USD")
+                    .setString("failureReason", "Insufficient funds")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            when(resilientServiceInvoker.executeAsync(eq("order-cancellation"), any(Supplier.class)))
+                    .thenReturn(CompletableFuture.failedFuture(
+                            new ResilienceException("Circuit breaker open", "order-cancellation")));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act - should not throw
+            resilientListener.new PaymentFailedListener().onMessage(message);
+
+            // Assert - service was NOT called
+            verify(orderService, never()).cancelOrderForSaga(
+                    anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("should route order cancellation through circuit breaker when invoker is set")
+        @SuppressWarnings("unchecked")
+        void shouldRouteCancellationThroughCircuitBreaker() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("PaymentFailedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentFailed")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Payment")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 2)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "22.00")
+                    .setString("currency", "USD")
+                    .setString("failureReason", "Insufficient funds")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            Order mockOrder = mock(Order.class);
+            when(mockOrder.getStatus()).thenReturn(Order.Status.CANCELLED);
+
+            when(resilientServiceInvoker.executeAsync(eq("order-cancellation"), any(Supplier.class)))
+                    .thenAnswer(invocation -> {
+                        Supplier<CompletableFuture<?>> supplier = invocation.getArgument(1);
+                        return supplier.get();
+                    });
+            when(orderService.cancelOrderForSaga(anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(CompletableFuture.completedFuture(mockOrder));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act
+            resilientListener.new PaymentFailedListener().onMessage(message);
+
+            // Assert
+            verify(resilientServiceInvoker).executeAsync(eq("order-cancellation"), any(Supplier.class));
+            verify(orderService).cancelOrderForSaga(
+                    eq(orderId), eq("Payment failed: Insufficient funds"),
+                    eq(sagaId), eq(correlationId));
         }
     }
 }

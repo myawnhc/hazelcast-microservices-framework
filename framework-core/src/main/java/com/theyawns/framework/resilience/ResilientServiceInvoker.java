@@ -44,7 +44,7 @@ import java.util.function.Supplier;
  * @see ResilienceAutoConfiguration
  * @see ResilienceProperties
  */
-public class ResilientServiceInvoker {
+public class ResilientServiceInvoker implements ResilientOperations {
 
     private static final Logger logger = LoggerFactory.getLogger(ResilientServiceInvoker.class);
 

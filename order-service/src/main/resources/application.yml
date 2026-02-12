@@ -54,6 +54,29 @@ framework:
     log-edition-status: true
     log-feature-status: true
     expose-in-actuator: true
+  resilience:
+    enabled: true
+    circuit-breaker:
+      failure-rate-threshold: 50
+      wait-duration-in-open-state: 10s
+      sliding-window-size: 10
+      minimum-number-of-calls: 5
+    retry:
+      max-attempts: 3
+      wait-duration: 500ms
+      enable-exponential-backoff: true
+      exponential-backoff-multiplier: 2.0
+    instances:
+      order-confirmation:
+        circuit-breaker:
+          failure-rate-threshold: 50
+        retry:
+          max-attempts: 3
+      order-cancellation:
+        circuit-breaker:
+          failure-rate-threshold: 30
+        retry:
+          max-attempts: 5
 
 # Logging configuration
 logging:

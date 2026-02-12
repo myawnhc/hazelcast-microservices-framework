@@ -6,6 +6,8 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.hazelcast.topic.Message;
 import com.theyawns.ecommerce.common.domain.Payment;
 import com.theyawns.ecommerce.payment.service.PaymentOperations;
+import com.theyawns.framework.resilience.ResilienceException;
+import com.theyawns.framework.resilience.ResilientOperations;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -17,7 +19,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -308,6 +312,192 @@ class PaymentSagaListenerTest {
             verify(paymentService).refundPaymentForSaga(
                     eq(paymentId), eq("Timeout compensation"),
                     eq(sagaId), eq(correlationId));
+        }
+    }
+
+    @Nested
+    @DisplayName("Circuit breaker behavior")
+    class CircuitBreakerTests {
+
+        @Mock
+        private ResilientOperations resilientServiceInvoker;
+
+        private PaymentSagaListener resilientListener;
+
+        @BeforeEach
+        void setUp() {
+            resilientListener = new PaymentSagaListener(paymentService, hazelcast);
+            resilientListener.setResilientOperations(resilientServiceInvoker);
+        }
+
+        @Test
+        @DisplayName("should route payment processing through circuit breaker when invoker is set")
+        @SuppressWarnings("unchecked")
+        void shouldRoutePaymentThroughCircuitBreaker() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("StockReservedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "StockReserved")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Inventory")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 1)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "22.00")
+                    .setString("currency", "USD")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            Payment mockPayment = new Payment("pay-1", orderId, "cust-1",
+                    new BigDecimal("22.00"), "USD", Payment.PaymentMethod.CREDIT_CARD);
+            mockPayment.setStatus(Payment.PaymentStatus.CAPTURED);
+
+            when(resilientServiceInvoker.executeAsync(eq("payment-processing"), any(Supplier.class)))
+                    .thenAnswer(invocation -> {
+                        Supplier<CompletableFuture<?>> supplier = invocation.getArgument(1);
+                        return supplier.get();
+                    });
+            when(paymentService.processPaymentForOrder(
+                    anyString(), anyString(), anyString(), anyString(),
+                    anyString(), anyString(), anyString()))
+                    .thenReturn(CompletableFuture.completedFuture(mockPayment));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act
+            resilientListener.new StockReservedListener().onMessage(message);
+
+            // Assert
+            verify(resilientServiceInvoker).executeAsync(eq("payment-processing"), any(Supplier.class));
+            verify(paymentService).processPaymentForOrder(
+                    eq(orderId), eq("cust-1"), eq("22.00"), eq("USD"),
+                    eq("CREDIT_CARD"), eq(sagaId), eq(correlationId));
+        }
+
+        @Test
+        @DisplayName("should handle circuit breaker open for payment processing gracefully")
+        @SuppressWarnings("unchecked")
+        void shouldHandleCircuitBreakerOpenForPayment() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String orderId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("StockReservedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "StockReserved")
+                    .setString("eventVersion", "1.0")
+                    .setString("source", "Inventory")
+                    .setInt64("timestamp", System.currentTimeMillis())
+                    .setString("key", UUID.randomUUID().toString())
+                    .setString("correlationId", correlationId)
+                    .setString("sagaId", sagaId)
+                    .setString("sagaType", "OrderFulfillment")
+                    .setInt32("stepNumber", 1)
+                    .setBoolean("isCompensating", false)
+                    .setString("orderId", orderId)
+                    .setString("customerId", "cust-1")
+                    .setString("amount", "22.00")
+                    .setString("currency", "USD")
+                    .setString("method", "CREDIT_CARD")
+                    .build();
+
+            when(resilientServiceInvoker.executeAsync(eq("payment-processing"), any(Supplier.class)))
+                    .thenReturn(CompletableFuture.failedFuture(
+                            new ResilienceException("Circuit breaker open", "payment-processing")));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act - should not throw
+            resilientListener.new StockReservedListener().onMessage(message);
+
+            // Assert - service was NOT called
+            verify(paymentService, never()).processPaymentForOrder(
+                    anyString(), anyString(), anyString(), anyString(),
+                    anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("should handle circuit breaker open for refund gracefully")
+        @SuppressWarnings("unchecked")
+        void shouldHandleCircuitBreakerOpenForRefund() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String paymentId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("PaymentRefundRequestedEvent")
+                    .setString("paymentId", paymentId)
+                    .setString("sagaId", sagaId)
+                    .setString("correlationId", correlationId)
+                    .setString("reason", "Order cancelled")
+                    .build();
+
+            when(resilientServiceInvoker.executeAsync(eq("payment-refund"), any(Supplier.class)))
+                    .thenReturn(CompletableFuture.failedFuture(
+                            new ResilienceException("Circuit breaker open", "payment-refund")));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act - should not throw
+            resilientListener.new PaymentRefundRequestedListener().onMessage(message);
+
+            // Assert - service was NOT called
+            verify(paymentService, never()).refundPaymentForSaga(
+                    anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("should route refund through circuit breaker when invoker is set")
+        @SuppressWarnings("unchecked")
+        void shouldRouteRefundThroughCircuitBreaker() {
+            // Arrange
+            String sagaId = UUID.randomUUID().toString();
+            String paymentId = UUID.randomUUID().toString();
+            String correlationId = UUID.randomUUID().toString();
+
+            GenericRecord record = GenericRecordBuilder.compact("PaymentRefundRequestedEvent")
+                    .setString("paymentId", paymentId)
+                    .setString("sagaId", sagaId)
+                    .setString("correlationId", correlationId)
+                    .setString("reason", "Order cancelled")
+                    .build();
+
+            Payment mockPayment = new Payment(paymentId, "order-1", "cust-1",
+                    new BigDecimal("22.00"), "USD", Payment.PaymentMethod.CREDIT_CARD);
+            mockPayment.setStatus(Payment.PaymentStatus.REFUNDED);
+
+            when(resilientServiceInvoker.executeAsync(eq("payment-refund"), any(Supplier.class)))
+                    .thenAnswer(invocation -> {
+                        Supplier<CompletableFuture<?>> supplier = invocation.getArgument(1);
+                        return supplier.get();
+                    });
+            when(paymentService.refundPaymentForSaga(anyString(), anyString(), anyString(), anyString()))
+                    .thenReturn(CompletableFuture.completedFuture(mockPayment));
+
+            Message<GenericRecord> message = mock(Message.class);
+            when(message.getMessageObject()).thenReturn(record);
+
+            // Act
+            resilientListener.new PaymentRefundRequestedListener().onMessage(message);
+
+            // Assert
+            verify(resilientServiceInvoker).executeAsync(eq("payment-refund"), any(Supplier.class));
+            verify(paymentService).refundPaymentForSaga(
+                    eq(paymentId), eq("Order cancelled"), eq(sagaId), eq(correlationId));
         }
     }
 }
