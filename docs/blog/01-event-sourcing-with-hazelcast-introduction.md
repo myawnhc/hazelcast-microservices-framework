@@ -332,16 +332,29 @@ EnrichedOrderView {
 
 ## Performance Characteristics
 
-Our framework achieves impressive performance with Hazelcast:
+The framework has two distinct performance profiles depending on where you measure.
+
+**Materialized view layer** (in-memory IMap operations within the JVM):
 
 | Metric | Value |
 |--------|-------|
-| Event throughput | 100,000+ events/second |
+| View update throughput | 100,000+ ops/second |
 | P99 latency | < 1ms |
 | View read latency | < 0.5ms |
 | Event store capacity | Millions of events |
 
-This is possible because:
+This measures the raw speed of `OrderViewUpdater.update()` — the same code path Jet pipelines invoke. It bypasses HTTP and network overhead entirely.
+
+**End-to-end** (HTTP request through the full event sourcing pipeline):
+
+| Metric | Value |
+|--------|-------|
+| Throughput | ~300+ TPS (curl/bash driver) |
+| Pipeline | REST → EventStore → Jet → View → ITopic |
+
+End-to-end throughput is bounded by the full pipeline: HTTP parsing, event store write, Jet processing, view update, and topic publish. The bundled `load-test.sh` uses `curl` in bash subshells, which adds process-forking and connection-setup overhead; a purpose-built tool (e.g., `wrk`, `k6`, or `Gatling`) with connection pooling would produce higher numbers for the same path.
+
+Both profiles benefit from Hazelcast's in-memory architecture:
 - Events are written to in-memory IMaps
 - Jet pipelines process events in parallel
 - Views are pre-computed for instant queries

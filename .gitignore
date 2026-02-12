@@ -3,6 +3,9 @@
 /framework-core/target/
 /inventory-service/target/
 /order-service/target/
+/payment-service/target/
+
+.idea/
 
 # Demo data (generated IDs from sample data loader)
 /demo-data/*.sh

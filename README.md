@@ -12,7 +12,7 @@ This project provides a production-ready event sourcing framework using Hazelcas
 - **Materialized Views**: Fast query-optimized projections using Hazelcast IMap
 - **Event-Driven Architecture**: Cross-service communication via Hazelcast topics
 - **Stream Processing**: Hazelcast Jet pipelines for real-time event processing
-- **High Performance**: 100,000+ operations per second
+- **High Performance**: 100,000+ in-memory view operations per second
 - **Saga Support**: Built-in distributed transaction patterns
 - **Observability**: Prometheus metrics and structured logging
 
@@ -231,19 +231,38 @@ curl http://localhost:8082/api/products/<product-id>/similar?limit=5
 
 ## Performance
 
-Load testing results demonstrate the framework's capabilities:
+### Materialized View Layer (in-memory)
+
+The materialized view layer — where Hazelcast IMap operations power query-optimized projections — achieves the highest throughput since it bypasses HTTP and pipeline overhead:
 
 | Metric | Result |
 |--------|--------|
-| Throughput | 100,000+ TPS |
+| View update throughput | 100,000+ ops/sec |
 | P50 Latency | < 0.1 ms |
 | P99 Latency | < 1 ms |
 | Test Duration | 10 seconds |
 | Total Operations | 967,939 |
 
-Run load tests:
+This benchmark (`LoadTest.java`) measures `OrderViewUpdater.update()` directly within the JVM — the same code path that Jet pipelines invoke to maintain materialized views.
+
 ```bash
 mvn test -Dtest=LoadTest -pl order-service
+```
+
+### End-to-End (HTTP through full pipeline)
+
+The end-to-end path — HTTP request through REST controller, event store write, Jet pipeline, materialized view update, and ITopic publish — is naturally slower:
+
+| Metric | Result |
+|--------|--------|
+| End-to-end throughput | ~300 TPS (curl/bash) |
+| Workload mix | 60% orders, 25% stock reserves, 15% customer creates |
+| Concurrency | 10 workers |
+
+The bundled `load-test.sh` script uses `curl` in bash subshells, which adds significant overhead from process forking and TCP connection setup per request. A purpose-built load testing tool (e.g., `wrk`, `k6`, or `Gatling`) with connection pooling and efficient I/O would produce substantially higher numbers for the same end-to-end path.
+
+```bash
+./scripts/load-test.sh --duration 30 --concurrency 10
 ```
 
 ## Technology Stack

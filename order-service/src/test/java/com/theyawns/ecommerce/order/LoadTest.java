@@ -34,9 +34,15 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Load tests for Order Service.
+ * Load tests for the materialized view layer of Order Service.
  *
- * <p>Verifies that the system can handle 100+ transactions per second.
+ * <p>Benchmarks {@link OrderViewUpdater#update(GenericRecord)} directly — the same
+ * code path that Jet pipelines invoke to maintain materialized views. This measures
+ * in-memory IMap write throughput within a single JVM, bypassing HTTP, the Jet
+ * pipeline, event store writes, and ITopic publishing.
+ *
+ * <p>For end-to-end throughput (HTTP through the full event sourcing pipeline),
+ * use {@code scripts/load-test.sh}.
  *
  * <p>Run with: mvn test -Dtest=LoadTest -pl order-service
  *
