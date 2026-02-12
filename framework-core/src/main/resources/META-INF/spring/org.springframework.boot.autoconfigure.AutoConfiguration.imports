@@ -1,3 +1,4 @@
 com.theyawns.framework.config.FrameworkAutoConfiguration
 com.theyawns.framework.edition.EditionAutoConfiguration
 com.theyawns.framework.vectorstore.VectorStoreAutoConfiguration
+com.theyawns.framework.resilience.ResilienceAutoConfiguration
