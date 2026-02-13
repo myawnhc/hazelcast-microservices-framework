@@ -161,6 +161,155 @@ groups:
           severity: warning
 
   - orgId: 1
+    name: resilience-alerts
+    folder: Resilience Alerts
+    interval: 1m
+    rules:
+      # Alert when any circuit breaker is OPEN
+      - uid: circuit-breaker-open
+        title: Circuit Breaker Open
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: resilience4j_circuitbreaker_state == 1
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} is OPEN"
+          description: "Circuit breaker '{{ $labels.name }}' on {{ $labels.job }} has tripped open, rejecting all calls. Downstream service may be experiencing failures."
+        labels:
+          severity: warning
+
+      # Alert when DLQ has pending entries
+      - uid: dlq-entries-pending
+        title: Dead Letter Queue Has Pending Entries
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: increase(dlq_entries_added_total[5m])
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "Events added to dead letter queue"
+          description: "{{ $value }} event(s) have been added to the DLQ in the last 5 minutes. Failed events require investigation and possible replay."
+        labels:
+          severity: warning
+
+      # Alert when outbox entries are permanently failing
+      - uid: outbox-entries-failed
+        title: Outbox Delivery Failures
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: increase(outbox_entries_failed_total[5m])
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "Outbox entries permanently failed"
+          description: "{{ $value }} outbox entry(s) have exceeded max retries in the last 5 minutes. Events may not have been delivered to the shared cluster."
+        labels:
+          severity: critical
+
+      # Alert when retry exhaustion rate is high
+      - uid: high-retry-exhaustion
+        title: High Retry Exhaustion Rate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              expr: sum(increase(resilience4j_retry_calls_total{kind="failed_with_retry"}[5m]))
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 5
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 3m
+        annotations:
+          summary: "High retry exhaustion rate"
+          description: "{{ $value }} operation(s) failed after exhausting all retries in the last 5 minutes. This may indicate a sustained downstream failure."
+        labels:
+          severity: warning
+
+  - orgId: 1
     name: service-health-alerts
     folder: Service Health
     interval: 1m

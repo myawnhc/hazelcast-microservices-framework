@@ -284,6 +284,135 @@ saga:
 - Verify compensation triggers correctly when a step fails
 - Verify timeout detection works with a short deadline in tests
 
+## Resilience Patterns
+
+Saga listeners are protected by multiple resilience patterns that prevent cascade failures, guarantee delivery, and handle permanent processing failures.
+
+### Circuit Breaker + Retry
+
+Each saga step is wrapped with a circuit breaker and retry decorator via `ResilientServiceInvoker`:
+
+```java
+executeWithResilience("inventory-stock-reservation",
+        () -> inventoryService.reserveStockForSaga(productId, quantity, ...))
+.whenComplete((result, error) -> {
+    if (error != null) {
+        sendToDeadLetterQueue(record, "OrderCreated", error);
+    }
+});
+```
+
+When a service is failing:
+1. **Retry** attempts the operation up to `max-attempts` times with exponential backoff
+2. **Circuit breaker** trips OPEN when the failure rate exceeds the threshold, rejecting further calls
+3. After `wait-duration-in-open-state`, the breaker moves to HALF_OPEN and allows test calls
+4. If test calls succeed, the breaker returns to CLOSED
+
+Named circuit breakers isolate failures per saga step:
+
+| Circuit Breaker Name | Saga Step | Service |
+|---------------------|-----------|---------|
+| `inventory-stock-reservation` | Reserve stock | Inventory |
+| `inventory-stock-release` | Release stock (compensation) | Inventory |
+| `payment-processing` | Process payment | Payment |
+| `payment-refund` | Refund payment (compensation) | Payment |
+| `order-confirmation` | Confirm order | Order |
+| `order-cancellation` | Cancel order (compensation) | Order |
+
+Business exceptions (e.g., `InsufficientStockException`, `PaymentDeclinedException`) implement `NonRetryableException` and skip retry — there's no point retrying a declined credit card.
+
+### Transactional Outbox
+
+Events published from `EventSourcingController` to the shared cluster go through a durable outbox:
+
+```
+Pipeline completes → outboxStore.write(entry) → OutboxPublisher polls → publish to ITopic → mark DELIVERED
+```
+
+This guarantees at-least-once delivery even if the shared cluster is temporarily unreachable. The `OutboxPublisher` runs on a configurable schedule (default: every 1 second).
+
+### Idempotency Guard
+
+Since the outbox provides at-least-once delivery, consumers may receive duplicate events. Each saga listener checks an `IdempotencyGuard` at the top of every message handler:
+
+```java
+String eventId = record.getString("eventId");
+if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+    logger.debug("Duplicate event {} already processed, skipping", eventId);
+    return;
+}
+```
+
+The guard uses `IMap.putIfAbsent()` with a configurable TTL (default: 1 hour) for atomic, cluster-wide deduplication.
+
+### Dead Letter Queue
+
+Events that fail processing after resilience mechanisms are exhausted are captured in a Dead Letter Queue (DLQ):
+
+```java
+private void sendToDeadLetterQueue(GenericRecord record, String topicName, Throwable error) {
+    deadLetterQueue.add(DeadLetterEntry.builder()
+            .originalEventId(eventId)
+            .eventType(record.getString("eventType"))
+            .topicName(topicName)
+            .eventRecord(record)
+            .failureReason(error.getMessage())
+            .sourceService("inventory-service")
+            .sagaId(record.getString("sagaId"))
+            .build());
+}
+```
+
+DLQ entries can be inspected, replayed, or discarded via REST admin endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `GET /api/admin/dlq` | List | View pending DLQ entries |
+| `GET /api/admin/dlq/count` | Count | Number of pending entries |
+| `GET /api/admin/dlq/{id}` | Get | Single entry details |
+| `POST /api/admin/dlq/{id}/replay` | Replay | Re-publish to original topic |
+| `DELETE /api/admin/dlq/{id}` | Discard | Mark as discarded |
+
+### Resilience Configuration
+
+All resilience features are optional and configured in each service's `application.yml`:
+
+```yaml
+framework:
+  resilience:
+    enabled: true
+    circuit-breaker:
+      failure-rate-threshold: 50
+      wait-duration-in-open-state: 10s
+      sliding-window-size: 10
+    retry:
+      max-attempts: 3
+      wait-duration: 500ms
+      enable-exponential-backoff: true
+      exponential-backoff-multiplier: 2.0
+    instances:
+      payment-processing:
+        circuit-breaker:
+          failure-rate-threshold: 60
+        retry:
+          max-attempts: 5
+  outbox:
+    enabled: true
+    poll-interval: 1000
+    max-batch-size: 50
+    max-retries: 5
+  dlq:
+    enabled: true
+    max-replay-attempts: 3
+  idempotency:
+    enabled: true
+    ttl: 1h
+```
+
+All components use `@Autowired(required = false)` injection, so they degrade gracefully when disabled.
+
+---
+
 ## Monitoring
 
 ### Prometheus Metrics
