@@ -407,15 +407,15 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(saga_compensations_started_total[$__rate_interval])",
+          "expr": "rate(saga_compensation_started_total[$__rate_interval])",
           "legendFormat": "Started"
         },
         {
-          "expr": "rate(saga_compensations_completed_total[$__rate_interval])",
+          "expr": "rate(saga_compensation_completed_total[$__rate_interval])",
           "legendFormat": "Completed"
         },
         {
-          "expr": "rate(saga_compensations_failed_total[$__rate_interval])",
+          "expr": "rate(saga_compensation_failed_total[$__rate_interval])",
           "legendFormat": "Failed"
         }
       ]
