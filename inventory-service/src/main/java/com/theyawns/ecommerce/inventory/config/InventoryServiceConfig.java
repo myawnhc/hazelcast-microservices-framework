@@ -13,6 +13,7 @@ import com.theyawns.ecommerce.common.domain.Product;
 import com.theyawns.ecommerce.common.view.ProductViewUpdater;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
+import com.theyawns.framework.outbox.OutboxStore;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.store.HazelcastEventStore;
@@ -241,7 +242,9 @@ public class InventoryServiceConfig {
             HazelcastInstance hazelcastClient,
             HazelcastEventStore<Product, String, DomainEvent<Product, String>> eventStore,
             ProductViewUpdater viewUpdater,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            OutboxStore outboxStore) {
 
         controller = EventSourcingController.<Product, String, DomainEvent<Product, String>>builder()
                 .hazelcast(hazelcastInstance)
@@ -251,6 +254,7 @@ public class InventoryServiceConfig {
                 .viewUpdater(viewUpdater)
                 .viewUpdaterClass(ProductViewUpdater.class)
                 .meterRegistry(meterRegistry)
+                .outboxStore(outboxStore)
                 .build();
 
         // Start the pipeline immediately after building the controller

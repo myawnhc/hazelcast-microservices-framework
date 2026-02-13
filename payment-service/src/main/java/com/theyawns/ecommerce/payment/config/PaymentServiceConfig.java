@@ -13,6 +13,7 @@ import com.theyawns.ecommerce.common.domain.Payment;
 import com.theyawns.ecommerce.payment.domain.PaymentViewUpdater;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
+import com.theyawns.framework.outbox.OutboxStore;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.store.HazelcastEventStore;
@@ -239,7 +240,9 @@ public class PaymentServiceConfig {
             HazelcastInstance hazelcastClient,
             HazelcastEventStore<Payment, String, DomainEvent<Payment, String>> eventStore,
             PaymentViewUpdater viewUpdater,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            OutboxStore outboxStore) {
 
         controller = EventSourcingController.<Payment, String, DomainEvent<Payment, String>>builder()
                 .hazelcast(hazelcastInstance)
@@ -249,6 +252,7 @@ public class PaymentServiceConfig {
                 .viewUpdater(viewUpdater)
                 .viewUpdaterClass(PaymentViewUpdater.class)
                 .meterRegistry(meterRegistry)
+                .outboxStore(outboxStore)
                 .build();
 
         // Start the pipeline immediately after building the controller

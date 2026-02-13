@@ -8,6 +8,9 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.ecommerce.common.events.PaymentRefundedEvent;
 import com.theyawns.ecommerce.common.events.StockReservedEvent;
 import com.theyawns.ecommerce.payment.service.PaymentOperations;
+import com.theyawns.framework.dlq.DeadLetterEntry;
+import com.theyawns.framework.dlq.DeadLetterQueueOperations;
+import com.theyawns.framework.idempotency.IdempotencyGuard;
 import com.theyawns.framework.resilience.ResilienceException;
 import com.theyawns.framework.resilience.ResilientOperations;
 import com.theyawns.framework.tracing.EventSpanDecorator;
@@ -47,6 +50,8 @@ public class PaymentSagaListener {
     private final HazelcastInstance hazelcast;
     private EventSpanDecorator eventSpanDecorator;
     private ResilientOperations resilientServiceInvoker;
+    private IdempotencyGuard idempotencyGuard;
+    private DeadLetterQueueOperations deadLetterQueue;
 
     /**
      * Creates a new PaymentSagaListener.
@@ -84,6 +89,26 @@ public class PaymentSagaListener {
     }
 
     /**
+     * Sets the idempotency guard for duplicate event detection (optional).
+     *
+     * @param idempotencyGuard the idempotency guard
+     */
+    @Autowired(required = false)
+    public void setIdempotencyGuard(IdempotencyGuard idempotencyGuard) {
+        this.idempotencyGuard = idempotencyGuard;
+    }
+
+    /**
+     * Sets the dead letter queue for failed event capture (optional).
+     *
+     * @param deadLetterQueue the DLQ operations
+     */
+    @Autowired(required = false)
+    public void setDeadLetterQueue(DeadLetterQueueOperations deadLetterQueue) {
+        this.deadLetterQueue = deadLetterQueue;
+    }
+
+    /**
      * Executes an async operation with circuit breaker protection if available.
      *
      * @param name the circuit breaker instance name
@@ -116,6 +141,41 @@ public class PaymentSagaListener {
     }
 
     /**
+     * Sends a failed event to the dead letter queue if available,
+     * otherwise falls back to logging.
+     *
+     * @param record the event record that failed processing
+     * @param topicName the ITopic name
+     * @param error the failure cause
+     */
+    private void sendToDeadLetterQueue(GenericRecord record, String topicName, Throwable error) {
+        String eventId = record.getString("eventId");
+        if (deadLetterQueue != null) {
+            try {
+                deadLetterQueue.add(DeadLetterEntry.builder()
+                        .originalEventId(eventId)
+                        .eventType(record.getString("eventType"))
+                        .topicName(topicName)
+                        .eventRecord(record)
+                        .failureReason(error.getMessage())
+                        .sourceService("payment-service")
+                        .sagaId(record.getString("sagaId"))
+                        .correlationId(record.getString("correlationId"))
+                        .build());
+                logger.warn("Event {} sent to DLQ after failure: {}", eventId, error.getMessage());
+            } catch (Exception dlqError) {
+                logger.error("Failed to send event {} to DLQ: {}", eventId, dlqError.getMessage());
+            }
+        } else {
+            if (error instanceof ResilienceException) {
+                logger.warn("Circuit breaker open, saga step deferred: eventId={}", eventId);
+            } else {
+                logger.error("Failed to process event: {}", eventId, error);
+            }
+        }
+    }
+
+    /**
      * Listener for StockReserved events.
      * When stock is reserved as part of a saga, processes the payment.
      *
@@ -126,6 +186,12 @@ public class PaymentSagaListener {
         @Override
         public void onMessage(Message<GenericRecord> message) {
             GenericRecord record = message.getMessageObject();
+
+            String eventId = record.getString("eventId");
+            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+                logger.debug("Duplicate event {} already processed, skipping", eventId);
+                return;
+            }
 
             String sagaId = record.getString("sagaId");
             if (sagaId == null || sagaId.isEmpty()) {
@@ -165,14 +231,7 @@ public class PaymentSagaListener {
                         )
                 ).whenComplete((payment, error) -> {
                     if (error != null) {
-                        if (error instanceof ResilienceException) {
-                            logger.warn("Circuit breaker open for payment-processing, " +
-                                    "saga step deferred: orderId={}, sagaId={}",
-                                    orderId, sagaId);
-                        } else {
-                            logger.error("Failed to process saga payment for order: {} (sagaId: {})",
-                                    orderId, sagaId, error);
-                        }
+                        sendToDeadLetterQueue(record, "StockReserved", error);
                         if (eventSpanDecorator != null) {
                             eventSpanDecorator.recordError(currentSpan, error);
                         }
@@ -207,6 +266,12 @@ public class PaymentSagaListener {
         public void onMessage(Message<GenericRecord> message) {
             GenericRecord record = message.getMessageObject();
 
+            String eventId = record.getString("eventId");
+            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+                logger.debug("Duplicate event {} already processed, skipping", eventId);
+                return;
+            }
+
             String paymentId = record.getString("paymentId");
             String sagaId = record.getString("sagaId");
             String correlationId = record.getString("correlationId");
@@ -232,14 +297,7 @@ public class PaymentSagaListener {
                         )
                 ).whenComplete((payment, error) -> {
                     if (error != null) {
-                        if (error instanceof ResilienceException) {
-                            logger.warn("Circuit breaker open for payment-refund, " +
-                                    "saga compensation deferred: paymentId={}, sagaId={}",
-                                    paymentId, sagaId);
-                        } else {
-                            logger.error("Failed to refund payment {} for saga: {}",
-                                    paymentId, sagaId, error);
-                        }
+                        sendToDeadLetterQueue(record, "PaymentRefundRequested", error);
                         if (eventSpanDecorator != null) {
                             eventSpanDecorator.recordError(currentSpan, error);
                         }

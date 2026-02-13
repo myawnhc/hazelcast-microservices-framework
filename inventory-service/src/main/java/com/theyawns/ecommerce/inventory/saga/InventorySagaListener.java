@@ -9,6 +9,9 @@ import com.theyawns.ecommerce.common.events.OrderCancelledEvent;
 import com.theyawns.ecommerce.common.events.OrderCreatedEvent;
 import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.inventory.service.ProductService;
+import com.theyawns.framework.dlq.DeadLetterEntry;
+import com.theyawns.framework.dlq.DeadLetterQueueOperations;
+import com.theyawns.framework.idempotency.IdempotencyGuard;
 import com.theyawns.framework.resilience.ResilienceException;
 import com.theyawns.framework.resilience.ResilientOperations;
 import com.theyawns.framework.tracing.EventSpanDecorator;
@@ -49,6 +52,8 @@ public class InventorySagaListener {
     private final HazelcastInstance hazelcast;
     private EventSpanDecorator eventSpanDecorator;
     private ResilientOperations resilientServiceInvoker;
+    private IdempotencyGuard idempotencyGuard;
+    private DeadLetterQueueOperations deadLetterQueue;
 
     /**
      * Creates a new InventorySagaListener.
@@ -83,6 +88,26 @@ public class InventorySagaListener {
     @Autowired(required = false)
     public void setResilientOperations(ResilientOperations resilientServiceInvoker) {
         this.resilientServiceInvoker = resilientServiceInvoker;
+    }
+
+    /**
+     * Sets the idempotency guard for duplicate event detection (optional).
+     *
+     * @param idempotencyGuard the idempotency guard
+     */
+    @Autowired(required = false)
+    public void setIdempotencyGuard(IdempotencyGuard idempotencyGuard) {
+        this.idempotencyGuard = idempotencyGuard;
+    }
+
+    /**
+     * Sets the dead letter queue for failed event capture (optional).
+     *
+     * @param deadLetterQueue the DLQ operations
+     */
+    @Autowired(required = false)
+    public void setDeadLetterQueue(DeadLetterQueueOperations deadLetterQueue) {
+        this.deadLetterQueue = deadLetterQueue;
     }
 
     /**
@@ -121,6 +146,41 @@ public class InventorySagaListener {
     }
 
     /**
+     * Sends a failed event to the dead letter queue if available,
+     * otherwise falls back to logging.
+     *
+     * @param record the event record that failed processing
+     * @param topicName the ITopic name
+     * @param error the failure cause
+     */
+    private void sendToDeadLetterQueue(GenericRecord record, String topicName, Throwable error) {
+        String eventId = record.getString("eventId");
+        if (deadLetterQueue != null) {
+            try {
+                deadLetterQueue.add(DeadLetterEntry.builder()
+                        .originalEventId(eventId)
+                        .eventType(record.getString("eventType"))
+                        .topicName(topicName)
+                        .eventRecord(record)
+                        .failureReason(error.getMessage())
+                        .sourceService("inventory-service")
+                        .sagaId(record.getString("sagaId"))
+                        .correlationId(record.getString("correlationId"))
+                        .build());
+                logger.warn("Event {} sent to DLQ after failure: {}", eventId, error.getMessage());
+            } catch (Exception dlqError) {
+                logger.error("Failed to send event {} to DLQ: {}", eventId, dlqError.getMessage());
+            }
+        } else {
+            if (error instanceof ResilienceException) {
+                logger.warn("Circuit breaker open, saga step deferred: eventId={}", eventId);
+            } else {
+                logger.error("Failed to process event: {}", eventId, error);
+            }
+        }
+    }
+
+    /**
      * Listener for OrderCreated events.
      *
      * <p>When an order is created as part of a saga, reserves stock for each
@@ -133,6 +193,12 @@ public class InventorySagaListener {
         @Override
         public void onMessage(Message<GenericRecord> message) {
             GenericRecord record = message.getMessageObject();
+
+            String eventId = record.getString("eventId");
+            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+                logger.debug("Duplicate event {} already processed, skipping", eventId);
+                return;
+            }
 
             String sagaId = record.getString("sagaId");
             if (sagaId == null || sagaId.isEmpty()) {
@@ -188,14 +254,7 @@ public class InventorySagaListener {
                             )
                     ).whenComplete((product, error) -> {
                         if (error != null) {
-                            if (error instanceof ResilienceException) {
-                                logger.warn("Circuit breaker open for inventory-stock-reservation, " +
-                                        "saga step deferred: productId={}, sagaId={}, orderId={}",
-                                        productId, sagaId, orderId);
-                            } else {
-                                logger.error("Failed to reserve stock for product {} in saga: {} (orderId: {})",
-                                        productId, sagaId, orderId, error);
-                            }
+                            sendToDeadLetterQueue(record, "OrderCreated", error);
                             if (eventSpanDecorator != null) {
                                 eventSpanDecorator.recordError(currentSpan, error);
                             }
@@ -232,6 +291,12 @@ public class InventorySagaListener {
         public void onMessage(Message<GenericRecord> message) {
             GenericRecord record = message.getMessageObject();
 
+            String eventId = record.getString("eventId");
+            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+                logger.debug("Duplicate event {} already processed, skipping", eventId);
+                return;
+            }
+
             String orderId = record.getString("key");
             String sagaId = record.getString("sagaId");
             String correlationId = record.getString("correlationId");
@@ -256,14 +321,7 @@ public class InventorySagaListener {
                             () -> inventoryService.releaseStockForSaga(orderId, sagaId, correlationId, releaseReason)
                     ).whenComplete((product, error) -> {
                         if (error != null) {
-                            if (error instanceof ResilienceException) {
-                                logger.warn("Circuit breaker open for inventory-stock-release, " +
-                                        "saga compensation deferred: orderId={}, sagaId={}",
-                                        orderId, sagaId);
-                            } else {
-                                logger.error("Failed to release stock for cancelled order: orderId={}, sagaId={}",
-                                        orderId, sagaId, error);
-                            }
+                            sendToDeadLetterQueue(record, "OrderCancelled", error);
                             if (eventSpanDecorator != null) {
                                 eventSpanDecorator.recordError(currentSpan, error);
                             }
@@ -319,6 +377,12 @@ public class InventorySagaListener {
         public void onMessage(Message<GenericRecord> message) {
             GenericRecord record = message.getMessageObject();
 
+            String eventId = record.getString("eventId");
+            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+                logger.debug("Duplicate event {} already processed, skipping", eventId);
+                return;
+            }
+
             String sagaId = record.getString("sagaId");
             if (sagaId == null || sagaId.isEmpty()) {
                 logger.debug("PaymentFailed event without sagaId - not a saga event, ignoring");
@@ -351,14 +415,7 @@ public class InventorySagaListener {
                         )
                 ).whenComplete((product, error) -> {
                     if (error != null) {
-                        if (error instanceof ResilienceException) {
-                            logger.warn("Circuit breaker open for inventory-stock-release, " +
-                                    "saga compensation deferred: orderId={}, sagaId={}",
-                                    orderId, sagaId);
-                        } else {
-                            logger.error("Failed to release stock for saga compensation: orderId={}, sagaId={}",
-                                    orderId, sagaId, error);
-                        }
+                        sendToDeadLetterQueue(record, "PaymentFailed", error);
                         if (eventSpanDecorator != null) {
                             eventSpanDecorator.recordError(currentSpan, error);
                         }

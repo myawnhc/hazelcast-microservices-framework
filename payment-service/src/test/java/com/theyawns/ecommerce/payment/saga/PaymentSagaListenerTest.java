@@ -213,6 +213,8 @@ class PaymentSagaListenerTest {
             String correlationId = UUID.randomUUID().toString();
 
             GenericRecord refundRecord = GenericRecordBuilder.compact("PaymentRefundRequestedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentRefundRequested")
                     .setString("paymentId", paymentId)
                     .setString("sagaId", sagaId)
                     .setString("correlationId", correlationId)
@@ -252,6 +254,8 @@ class PaymentSagaListenerTest {
             String correlationId = UUID.randomUUID().toString();
 
             GenericRecord refundRecord = GenericRecordBuilder.compact("PaymentRefundRequestedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentRefundRequested")
                     .setString("paymentId", paymentId)
                     .setString("sagaId", sagaId)
                     .setString("correlationId", correlationId)
@@ -291,6 +295,8 @@ class PaymentSagaListenerTest {
             String correlationId = UUID.randomUUID().toString();
 
             GenericRecord refundRecord = GenericRecordBuilder.compact("PaymentRefundRequestedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentRefundRequested")
                     .setString("paymentId", paymentId)
                     .setString("sagaId", sagaId)
                     .setString("correlationId", correlationId)
@@ -439,6 +445,8 @@ class PaymentSagaListenerTest {
             String correlationId = UUID.randomUUID().toString();
 
             GenericRecord record = GenericRecordBuilder.compact("PaymentRefundRequestedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentRefundRequested")
                     .setString("paymentId", paymentId)
                     .setString("sagaId", sagaId)
                     .setString("correlationId", correlationId)
@@ -470,6 +478,8 @@ class PaymentSagaListenerTest {
             String correlationId = UUID.randomUUID().toString();
 
             GenericRecord record = GenericRecordBuilder.compact("PaymentRefundRequestedEvent")
+                    .setString("eventId", UUID.randomUUID().toString())
+                    .setString("eventType", "PaymentRefundRequested")
                     .setString("paymentId", paymentId)
                     .setString("sagaId", sagaId)
                     .setString("correlationId", correlationId)

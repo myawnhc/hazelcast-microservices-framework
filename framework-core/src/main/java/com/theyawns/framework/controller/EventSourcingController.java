@@ -8,6 +8,8 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.topic.ITopic;
 import com.theyawns.framework.domain.DomainObject;
 import com.theyawns.framework.event.DomainEvent;
+import com.theyawns.framework.outbox.OutboxEntry;
+import com.theyawns.framework.outbox.OutboxStore;
 import com.theyawns.framework.pipeline.EventSourcingPipeline;
 import com.theyawns.framework.pipeline.HazelcastEventBus;
 import com.theyawns.framework.pipeline.PipelineMetrics;
@@ -93,6 +95,7 @@ public class EventSourcingController<D extends DomainObject<K>,
     private final MeterRegistry meterRegistry;
     private final PipelineMetrics pipelineMetrics;
     private final EventSpanDecorator eventSpanDecorator;
+    private final OutboxStore outboxStore;
     private final EventSourcingPipeline<D, K, E> pipeline;
 
     /**
@@ -116,6 +119,7 @@ public class EventSourcingController<D extends DomainObject<K>,
         this.meterRegistry = builder.meterRegistry;
         this.pipelineMetrics = new PipelineMetrics(meterRegistry, domainName);
         this.eventSpanDecorator = builder.eventSpanDecorator;
+        this.outboxStore = builder.outboxStore;
 
         // Initialize Hazelcast structures
         this.sequenceGenerator = hazelcast.getFlakeIdGenerator(domainName + SEQUENCE_GEN_SUFFIX);
@@ -450,12 +454,25 @@ public class EventSourcingController<D extends DomainObject<K>,
         if (sharedHazelcast == null || pending.eventRecord == null || pending.eventType == null) {
             return;
         }
-        try {
-            ITopic<GenericRecord> topic = sharedHazelcast.getTopic(pending.eventType);
-            topic.publish(pending.eventRecord);
-            logger.debug("Republished event {} to shared cluster topic: {}", pending.eventType, pending.eventType);
-        } catch (Exception e) {
-            logger.warn("Failed to republish event {} to shared cluster: {}", pending.eventType, e.getMessage());
+        if (outboxStore != null) {
+            // Durable outbox path — OutboxPublisher handles actual delivery
+            OutboxEntry entry = new OutboxEntry(
+                    pending.completionInfo.getEventId(),
+                    pending.eventType,
+                    pending.eventRecord
+            );
+            outboxStore.write(entry);
+            logger.debug("Wrote event {} to outbox for deferred shared cluster delivery",
+                    pending.eventType);
+        } else {
+            // Legacy direct publish (when outbox is disabled)
+            try {
+                ITopic<GenericRecord> topic = sharedHazelcast.getTopic(pending.eventType);
+                topic.publish(pending.eventRecord);
+                logger.debug("Republished event {} to shared cluster topic: {}", pending.eventType, pending.eventType);
+            } catch (Exception e) {
+                logger.warn("Failed to republish event {} to shared cluster: {}", pending.eventType, e.getMessage());
+            }
         }
     }
 
@@ -563,6 +580,7 @@ public class EventSourcingController<D extends DomainObject<K>,
         private HazelcastEventBus<D, K> eventBus;
         private MeterRegistry meterRegistry;
         private EventSpanDecorator eventSpanDecorator;
+        private OutboxStore outboxStore;
 
         /**
          * Sets the Hazelcast instance.
@@ -667,6 +685,23 @@ public class EventSourcingController<D extends DomainObject<K>,
          */
         public Builder<D, K, E> eventSpanDecorator(EventSpanDecorator eventSpanDecorator) {
             this.eventSpanDecorator = eventSpanDecorator;
+            return this;
+        }
+
+        /**
+         * Sets the outbox store for durable cross-cluster event delivery (optional).
+         *
+         * <p>When set, the controller writes events to the outbox instead of
+         * publishing directly to the shared cluster's ITopic. The
+         * {@link OutboxPublisher} handles actual delivery with retry logic.
+         *
+         * <p>When not set, the controller falls back to direct ITopic publishing.
+         *
+         * @param outboxStore the outbox store
+         * @return this builder
+         */
+        public Builder<D, K, E> outboxStore(OutboxStore outboxStore) {
+            this.outboxStore = outboxStore;
             return this;
         }
 
