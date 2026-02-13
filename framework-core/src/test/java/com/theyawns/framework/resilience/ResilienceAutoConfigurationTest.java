@@ -47,6 +47,7 @@ class ResilienceAutoConfigurationTest {
                         assertThat(context).hasSingleBean(ResilienceProperties.class);
                         assertThat(context).hasSingleBean(TaggedCircuitBreakerMetrics.class);
                         assertThat(context).hasSingleBean(TaggedRetryMetrics.class);
+                        assertThat(context).hasSingleBean(RetryEventListener.class);
                     });
         }
 
@@ -150,6 +151,46 @@ class ResilienceAutoConfigurationTest {
     }
 
     @Nested
+    @DisplayName("Retry configuration")
+    class RetryConfiguration {
+
+        @Test
+        @DisplayName("should configure retry to ignore NonRetryableException subclasses")
+        void shouldIgnoreNonRetryableExceptions() {
+            contextRunner
+                    .withUserConfiguration(MeterRegistryConfig.class)
+                    .run(context -> {
+                        final RetryRegistry registry = context.getBean(RetryRegistry.class);
+                        final io.github.resilience4j.retry.Retry retry = registry.retry("ignoreTest");
+                        final java.util.concurrent.atomic.AtomicInteger attempts =
+                                new java.util.concurrent.atomic.AtomicInteger(0);
+
+                        try {
+                            io.github.resilience4j.retry.Retry.decorateSupplier(retry, () -> {
+                                attempts.incrementAndGet();
+                                throw new TestNonRetryableException("not retryable");
+                            }).get();
+                        } catch (TestNonRetryableException ignored) {
+                            // expected
+                        }
+
+                        // Should only have been called once — no retries
+                        assertThat(attempts.get()).isEqualTo(1);
+                    });
+        }
+
+        @Test
+        @DisplayName("should create RetryEventListener bean by default")
+        void shouldCreateRetryEventListenerBean() {
+            contextRunner
+                    .withUserConfiguration(MeterRegistryConfig.class)
+                    .run(context -> {
+                        assertThat(context).hasSingleBean(RetryEventListener.class);
+                    });
+        }
+    }
+
+    @Nested
     @DisplayName("Custom bean overrides")
     class CustomBeanOverrides {
 
@@ -208,6 +249,17 @@ class ResilienceAutoConfigurationTest {
                     CircuitBreakerRegistry.ofDefaults(),
                     RetryRegistry.ofDefaults(),
                     new ResilienceProperties());
+        }
+    }
+
+    // ========== Test Helpers ==========
+
+    /**
+     * Test exception that implements NonRetryableException for verifying retry filter config.
+     */
+    private static class TestNonRetryableException extends RuntimeException implements NonRetryableException {
+        TestNonRetryableException(final String message) {
+            super(message);
         }
     }
 }

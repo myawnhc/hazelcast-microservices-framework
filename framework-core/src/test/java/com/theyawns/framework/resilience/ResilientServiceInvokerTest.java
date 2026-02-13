@@ -215,6 +215,80 @@ class ResilientServiceInvokerTest {
     }
 
     @Nested
+    @DisplayName("NonRetryableException behavior")
+    class NonRetryableExceptionBehavior {
+
+        private ResilientServiceInvoker nonRetryableInvoker;
+
+        @BeforeEach
+        void setUpNonRetryable() {
+            final RetryConfig retryConfig = RetryConfig.custom()
+                    .maxAttempts(3)
+                    .waitDuration(Duration.ofMillis(10))
+                    .retryOnException(e -> !(e instanceof NonRetryableException))
+                    .build();
+            final RetryRegistry nonRetryableRetryRegistry = RetryRegistry.of(retryConfig);
+
+            nonRetryableInvoker = new ResilientServiceInvoker(cbRegistry, nonRetryableRetryRegistry, properties);
+        }
+
+        @Test
+        @DisplayName("should not retry non-retryable exception")
+        void shouldNotRetryNonRetryableException() {
+            final AtomicInteger attempts = new AtomicInteger(0);
+
+            assertThatThrownBy(() -> nonRetryableInvoker.execute("nonRetryable", () -> {
+                attempts.incrementAndGet();
+                throw new TestNonRetryableException("business failure");
+            }))
+                    .isInstanceOf(ResilienceException.class);
+
+            assertThat(attempts.get()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should propagate non-retryable exception as ResilienceException")
+        void shouldPropagateNonRetryableAsResilienceException() {
+            assertThatThrownBy(() -> nonRetryableInvoker.execute("nonRetryableWrap", () -> {
+                throw new TestNonRetryableException("not retryable");
+            }))
+                    .isInstanceOf(ResilienceException.class)
+                    .hasMessageContaining("nonRetryableWrap")
+                    .hasCauseInstanceOf(TestNonRetryableException.class);
+        }
+
+        @Test
+        @DisplayName("should still retry retryable exception with same config")
+        void shouldStillRetryRetryableException() {
+            final AtomicInteger attempts = new AtomicInteger(0);
+
+            final String result = nonRetryableInvoker.execute("retryableComparison", () -> {
+                if (attempts.incrementAndGet() < 3) {
+                    throw new RuntimeException("transient failure");
+                }
+                return "recovered";
+            });
+
+            assertThat(result).isEqualTo("recovered");
+            assertThat(attempts.get()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("should not retry non-retryable exception in executeRunnable")
+        void shouldNotRetryNonRetryableInRunnable() {
+            final AtomicInteger attempts = new AtomicInteger(0);
+
+            assertThatThrownBy(() -> nonRetryableInvoker.executeRunnable("nonRetryableRunnable", () -> {
+                attempts.incrementAndGet();
+                throw new TestNonRetryableException("business failure");
+            }))
+                    .isInstanceOf(ResilienceException.class);
+
+            assertThat(attempts.get()).isEqualTo(1);
+        }
+    }
+
+    @Nested
     @DisplayName("Disabled passthrough")
     class DisabledPassthrough {
 
@@ -285,6 +359,17 @@ class ResilientServiceInvokerTest {
             assertThat(invoker.isEnabled()).isTrue();
             properties.setEnabled(false);
             assertThat(invoker.isEnabled()).isFalse();
+        }
+    }
+
+    // ========== Test helpers ==========
+
+    /**
+     * Test exception that implements NonRetryableException for testing non-retry behavior.
+     */
+    private static class TestNonRetryableException extends RuntimeException implements NonRetryableException {
+        TestNonRetryableException(final String message) {
+            super(message);
         }
     }
 }

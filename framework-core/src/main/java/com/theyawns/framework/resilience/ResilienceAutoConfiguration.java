@@ -92,7 +92,8 @@ public class ResilienceAutoConfiguration {
         final ResilienceProperties.RetryProperties retryProps = properties.getRetry();
 
         final RetryConfig.Builder<?> builder = RetryConfig.custom()
-                .maxAttempts(retryProps.getMaxAttempts());
+                .maxAttempts(retryProps.getMaxAttempts())
+                .retryOnException(e -> !(e instanceof NonRetryableException));
 
         if (retryProps.isEnableExponentialBackoff()) {
             builder.intervalFunction(io.github.resilience4j.core.IntervalFunction
@@ -168,6 +169,23 @@ public class ResilienceAutoConfiguration {
         metrics.bindTo(meterRegistry);
         logger.debug("Bound retry metrics to Micrometer");
         return metrics;
+    }
+
+    /**
+     * Creates the RetryEventListener bean that hooks into the retry registry
+     * for observability logging and custom Micrometer metrics.
+     *
+     * @param retryRegistry the retry registry to observe
+     * @param meterRegistry the Micrometer meter registry
+     * @return the retry event listener
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public RetryEventListener retryEventListener(
+            final RetryRegistry retryRegistry,
+            final MeterRegistry meterRegistry) {
+        logger.info("Creating RetryEventListener bean");
+        return new RetryEventListener(retryRegistry, meterRegistry);
     }
 
     /**
