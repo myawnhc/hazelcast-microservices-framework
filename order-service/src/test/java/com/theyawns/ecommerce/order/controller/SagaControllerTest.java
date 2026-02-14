@@ -109,7 +109,7 @@ class SagaControllerTest {
             when(sagaStateStore.findSagasByStatus(SagaStatus.COMPLETED)).thenReturn(sagas);
 
             ResponseEntity<List<Map<String, Object>>> response =
-                    sagaController.listSagas("COMPLETED", 10);
+                    sagaController.listSagas("COMPLETED", null, 10);
 
             assertEquals(200, response.getStatusCode().value());
             List<Map<String, Object>> body = response.getBody();
@@ -129,7 +129,7 @@ class SagaControllerTest {
             when(sagaStateStore.findSagasByStatus(SagaStatus.FAILED)).thenReturn(sagas);
 
             ResponseEntity<List<Map<String, Object>>> response =
-                    sagaController.listSagas("FAILED", 2);
+                    sagaController.listSagas("FAILED", null, 2);
 
             List<Map<String, Object>> body = response.getBody();
             assertNotNull(body);
@@ -140,7 +140,7 @@ class SagaControllerTest {
         @DisplayName("should return 400 for invalid status")
         void shouldReturn400ForInvalidStatus() {
             ResponseEntity<List<Map<String, Object>>> response =
-                    sagaController.listSagas("INVALID_STATUS", 10);
+                    sagaController.listSagas("INVALID_STATUS", null, 10);
 
             assertEquals(400, response.getStatusCode().value());
             List<Map<String, Object>> body = response.getBody();
@@ -154,10 +154,48 @@ class SagaControllerTest {
             when(sagaStateStore.findSagasByStatus(SagaStatus.FAILED)).thenReturn(List.of());
 
             ResponseEntity<List<Map<String, Object>>> response =
-                    sagaController.listSagas("failed", 10);
+                    sagaController.listSagas("failed", null, 10);
 
             assertEquals(200, response.getStatusCode().value());
             verify(sagaStateStore).findSagasByStatus(SagaStatus.FAILED);
+        }
+
+        @Test
+        @DisplayName("should filter by type")
+        void shouldFilterByType() {
+            List<SagaState> sagas = List.of(
+                    createTestSaga("saga-orch-1", "OrderFulfillmentOrchestrated", SagaStatus.COMPLETED),
+                    createTestSaga("saga-orch-2", "OrderFulfillmentOrchestrated", SagaStatus.FAILED)
+            );
+            when(sagaStateStore.findSagasByType("OrderFulfillmentOrchestrated")).thenReturn(sagas);
+
+            ResponseEntity<List<Map<String, Object>>> response =
+                    sagaController.listSagas(null, "OrderFulfillmentOrchestrated", 10);
+
+            assertEquals(200, response.getStatusCode().value());
+            List<Map<String, Object>> body = response.getBody();
+            assertNotNull(body);
+            assertEquals(2, body.size());
+            verify(sagaStateStore).findSagasByType("OrderFulfillmentOrchestrated");
+        }
+
+        @Test
+        @DisplayName("should filter by both type and status")
+        void shouldFilterByTypeAndStatus() {
+            List<SagaState> sagas = List.of(
+                    createTestSaga("saga-orch-1", "OrderFulfillmentOrchestrated", SagaStatus.COMPLETED),
+                    createTestSaga("saga-orch-2", "OrderFulfillmentOrchestrated", SagaStatus.FAILED)
+            );
+            when(sagaStateStore.findSagasByType("OrderFulfillmentOrchestrated")).thenReturn(sagas);
+
+            ResponseEntity<List<Map<String, Object>>> response =
+                    sagaController.listSagas("COMPLETED", "OrderFulfillmentOrchestrated", 10);
+
+            assertEquals(200, response.getStatusCode().value());
+            List<Map<String, Object>> body = response.getBody();
+            assertNotNull(body);
+            assertEquals(1, body.size());
+            assertEquals("saga-orch-1", body.get(0).get("sagaId"));
         }
     }
 

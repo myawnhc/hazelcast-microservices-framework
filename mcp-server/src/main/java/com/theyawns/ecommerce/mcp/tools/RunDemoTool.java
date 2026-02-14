@@ -27,6 +27,8 @@ import java.util.UUID;
  *   <li>{@code happy_path} - Creates a customer, product, and order that completes successfully</li>
  *   <li>{@code payment_failure} - Creates an order with a high total that triggers payment failure</li>
  *   <li>{@code saga_timeout} - Creates an order designed to exceed the saga timeout deadline</li>
+ *   <li>{@code orchestrated_happy_path} - Like happy_path but uses the orchestrated saga endpoint</li>
+ *   <li>{@code orchestrated_payment_failure} - Like payment_failure but uses the orchestrated saga endpoint</li>
  *   <li>{@code load_sample_data} - Creates a set of sample customers and products for testing</li>
  * </ul>
  *
@@ -54,14 +56,18 @@ public class RunDemoTool {
     /**
      * Runs a demo scenario against the microservices.
      *
-     * @param scenario the scenario to run: happy_path, payment_failure, saga_timeout, or load_sample_data
+     * @param scenario the scenario to run
      * @return JSON string with the scenario results
      */
     @Tool(description = "Run a demo scenario. Available scenarios: "
-            + "happy_path (successful order), payment_failure (triggers payment rejection), "
-            + "saga_timeout (triggers saga timeout), load_sample_data (creates sample entities)")
+            + "happy_path (successful choreographed order), payment_failure (triggers payment rejection), "
+            + "saga_timeout (triggers saga timeout), "
+            + "orchestrated_happy_path (successful orchestrated order), "
+            + "orchestrated_payment_failure (orchestrated order with payment rejection), "
+            + "load_sample_data (creates sample entities)")
     public String runDemo(
-            @ToolParam(description = "Scenario: happy_path, payment_failure, saga_timeout, or load_sample_data")
+            @ToolParam(description = "Scenario: happy_path, payment_failure, saga_timeout, "
+                    + "orchestrated_happy_path, orchestrated_payment_failure, or load_sample_data")
             String scenario) {
 
         logger.info("MCP runDemo: scenario={}", scenario);
@@ -71,9 +77,12 @@ public class RunDemoTool {
                 case "happy_path" -> runHappyPath();
                 case "payment_failure" -> runPaymentFailure();
                 case "saga_timeout" -> runSagaTimeout();
+                case "orchestrated_happy_path" -> runOrchestratedHappyPath();
+                case "orchestrated_payment_failure" -> runOrchestratedPaymentFailure();
                 case "load_sample_data" -> runLoadSampleData();
                 default -> throw new IllegalArgumentException("Unknown scenario: " + scenario
-                        + ". Available: happy_path, payment_failure, saga_timeout, load_sample_data");
+                        + ". Available: happy_path, payment_failure, saga_timeout, "
+                        + "orchestrated_happy_path, orchestrated_payment_failure, load_sample_data");
             };
             return toJson(result);
         } catch (IllegalArgumentException e) {
@@ -226,6 +235,104 @@ public class RunDemoTool {
         result.put("steps", steps);
         result.put("expectedOutcome", "If saga timeout is configured with a short deadline, "
                 + "the saga may time out before all steps complete");
+        return result;
+    }
+
+    /**
+     * Runs the orchestrated happy path scenario: customer + product + orchestrated order.
+     */
+    private Map<String, Object> runOrchestratedHappyPath() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("scenario", "orchestrated_happy_path");
+        result.put("sagaPattern", "orchestrated");
+        result.put("description", "Creates a customer, product, and order via the orchestrated saga endpoint");
+        List<Map<String, Object>> steps = new ArrayList<>();
+
+        // Step 1: Create customer
+        Map<String, Object> customer = serviceClient.createEntity("customer", Map.of(
+                "name", "Orchestrated Customer",
+                "email", "orch-" + shortId() + "@example.com",
+                "address", "100 Orchestrated Blvd"
+        ));
+        steps.add(Map.of("step", "CreateCustomer", "result", customer));
+
+        // Step 2: Create product
+        Map<String, Object> product = serviceClient.createEntity("product", Map.of(
+                "sku", "ORCH-" + shortId(),
+                "name", "Orchestrated Widget",
+                "price", "39.99",
+                "quantityOnHand", 100
+        ));
+        steps.add(Map.of("step", "CreateProduct", "result", product));
+
+        // Step 3: Create order via orchestrated endpoint
+        String customerId = extractId(customer, "customerId");
+        String productId = extractId(product, "productId");
+        Map<String, Object> order = serviceClient.createOrchestratedOrder(Map.of(
+                "customerId", customerId,
+                "customerName", "Orchestrated Customer",
+                "shippingAddress", "100 Orchestrated Blvd",
+                "lineItems", List.of(Map.of(
+                        "productId", productId,
+                        "productName", "Orchestrated Widget",
+                        "sku", "ORCH-001",
+                        "quantity", 2,
+                        "unitPrice", 39.99
+                ))
+        ));
+        steps.add(Map.of("step", "CreateOrchestratedOrder", "result", order));
+
+        result.put("steps", steps);
+        return result;
+    }
+
+    /**
+     * Runs the orchestrated payment failure scenario: high-value orchestrated order.
+     */
+    private Map<String, Object> runOrchestratedPaymentFailure() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("scenario", "orchestrated_payment_failure");
+        result.put("sagaPattern", "orchestrated");
+        result.put("description", "Creates a high-value order via orchestrated saga that triggers payment rejection (>$10,000)");
+        List<Map<String, Object>> steps = new ArrayList<>();
+
+        // Step 1: Create customer
+        Map<String, Object> customer = serviceClient.createEntity("customer", Map.of(
+                "name", "Orchestrated Big Spender",
+                "email", "orch-spender-" + shortId() + "@example.com",
+                "address", "456 Orchestrated Ave"
+        ));
+        steps.add(Map.of("step", "CreateCustomer", "result", customer));
+
+        // Step 2: Create expensive product
+        Map<String, Object> product = serviceClient.createEntity("product", Map.of(
+                "sku", "ORCH-EXP-" + shortId(),
+                "name", "Premium Orchestrated Item",
+                "price", "5500.00",
+                "quantityOnHand", 50
+        ));
+        steps.add(Map.of("step", "CreateProduct", "result", product));
+
+        // Step 3: Create orchestrated order with total > $10,000
+        String customerId = extractId(customer, "customerId");
+        String productId = extractId(product, "productId");
+        Map<String, Object> order = serviceClient.createOrchestratedOrder(Map.of(
+                "customerId", customerId,
+                "customerName", "Orchestrated Big Spender",
+                "shippingAddress", "456 Orchestrated Ave",
+                "lineItems", List.of(Map.of(
+                        "productId", productId,
+                        "productName", "Premium Orchestrated Item",
+                        "sku", "ORCH-EXP-001",
+                        "quantity", 3,
+                        "unitPrice", 5500.00
+                ))
+        ));
+        steps.add(Map.of("step", "CreateOrchestratedOrder", "result", order));
+
+        result.put("steps", steps);
+        result.put("expectedOutcome", "Payment should be rejected (total > $10,000), "
+                + "triggering orchestrated saga compensation with stock release");
         return result;
     }
 

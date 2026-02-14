@@ -208,6 +208,20 @@ public class SagaMetrics {
     // ========== Duration Metrics ==========
 
     /**
+     * Records the duration of a single saga step.
+     *
+     * @param sagaType the saga type name
+     * @param stepName the step name
+     * @param duration the step duration
+     */
+    public void recordStepDuration(String sagaType, String stepName, Duration duration) {
+        if (duration != null) {
+            getStepTimer(sagaType, stepName)
+                    .record(duration.toNanos(), TimeUnit.NANOSECONDS);
+        }
+    }
+
+    /**
      * Records the overall duration of a completed saga.
      *
      * @param sagaType the saga type name
@@ -323,6 +337,17 @@ public class SagaMetrics {
         return timerCache.computeIfAbsent(key, k ->
                 Timer.builder(PREFIX + "." + name)
                         .tag("sagaType", sagaType)
+                        .publishPercentiles(0.5, 0.95, 0.99)
+                        .register(meterRegistry)
+        );
+    }
+
+    private Timer getStepTimer(String sagaType, String stepName) {
+        String key = "step.duration:" + sagaType + ":" + stepName;
+        return timerCache.computeIfAbsent(key, k ->
+                Timer.builder(PREFIX + ".step.duration")
+                        .tag("sagaType", sagaType)
+                        .tag("stepName", stepName)
                         .publishPercentiles(0.5, 0.95, 0.99)
                         .register(meterRegistry)
         );

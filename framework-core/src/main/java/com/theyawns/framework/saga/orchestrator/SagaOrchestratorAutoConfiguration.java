@@ -1,6 +1,8 @@
 package com.theyawns.framework.saga.orchestrator;
 
+import com.theyawns.framework.saga.SagaMetrics;
 import com.theyawns.framework.saga.SagaStateStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
@@ -54,13 +56,15 @@ public class SagaOrchestratorAutoConfiguration {
      * @param stateStore the saga state store
      * @param listeners all registered saga orchestrator listeners
      * @param scheduler the scheduler for timeouts
+     * @param sagaMetrics optional metrics collector (null if no MeterRegistry is available)
      * @return the saga orchestrator
      */
     @Bean
     public HazelcastSagaOrchestrator sagaOrchestrator(
             final SagaStateStore stateStore,
             final List<SagaOrchestratorListener> listeners,
-            final ScheduledExecutorService sagaOrchestratorScheduler) {
-        return new HazelcastSagaOrchestrator(stateStore, listeners, sagaOrchestratorScheduler);
+            final ScheduledExecutorService sagaOrchestratorScheduler,
+            @Autowired(required = false) final SagaMetrics sagaMetrics) {
+        return new HazelcastSagaOrchestrator(stateStore, listeners, sagaOrchestratorScheduler, sagaMetrics);
     }
 }

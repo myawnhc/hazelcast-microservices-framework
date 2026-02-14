@@ -241,17 +241,21 @@ public class ServiceClient implements ServiceClientOperations {
     }
 
     /**
-     * Lists sagas from the order service, optionally filtered by status.
+     * Lists sagas from the order service, optionally filtered by status and type.
      *
      * @param status optional status filter (e.g., "COMPLETED", "FAILED")
+     * @param type optional saga type filter (e.g., "OrderFulfillment", "OrderFulfillmentOrchestrated")
      * @param limit the maximum number of sagas to return
      * @return list of saga states as maps
      */
-    public List<Map<String, Object>> listSagas(String status, int limit) {
+    public List<Map<String, Object>> listSagas(String status, String type, int limit) {
         StringBuilder urlBuilder = new StringBuilder(properties.getOrderUrl())
                 .append("/api/sagas?limit=").append(limit);
         if (status != null && !status.isBlank()) {
             urlBuilder.append("&status=").append(status);
+        }
+        if (type != null && !type.isBlank()) {
+            urlBuilder.append("&type=").append(type);
         }
         String url = urlBuilder.toString();
         logger.debug("GET {}", url);
@@ -266,6 +270,32 @@ public class ServiceClient implements ServiceClientOperations {
             logger.warn("Failed to list sagas: {} {}", e.getStatusCode(), e.getStatusText());
             return List.of(Map.of("error", "Failed to list sagas",
                     "status", e.getStatusCode().value()));
+        }
+    }
+
+    /**
+     * Creates an order using the orchestrated saga pattern.
+     *
+     * @param payload the order data as a map
+     * @return the created order as a map
+     */
+    public Map<String, Object> createOrchestratedOrder(Map<String, Object> payload) {
+        String url = properties.getOrderUrl() + "/api/orders/orchestrated";
+        logger.debug("POST {}", url);
+
+        try {
+            String json = restClient.post()
+                    .uri(url)
+                    .header("Content-Type", "application/json")
+                    .body(toJson(payload))
+                    .retrieve()
+                    .body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to create orchestrated order: {} {}", e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "Failed to create orchestrated order",
+                    "status", e.getStatusCode().value(),
+                    "message", e.getResponseBodyAsString());
         }
     }
 

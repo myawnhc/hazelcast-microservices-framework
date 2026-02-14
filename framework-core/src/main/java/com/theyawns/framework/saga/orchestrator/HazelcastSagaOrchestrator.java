@@ -1,5 +1,6 @@
 package com.theyawns.framework.saga.orchestrator;
 
+import com.theyawns.framework.saga.SagaMetrics;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
 import org.slf4j.Logger;
@@ -91,12 +92,17 @@ public class HazelcastSagaOrchestrator implements SagaOrchestrator {
     private final ScheduledExecutorService scheduler;
 
     /**
+     * Optional metrics collector for per-step timing.
+     */
+    private final SagaMetrics sagaMetrics;
+
+    /**
      * Tracks in-flight saga executions by saga ID.
      */
     private final ConcurrentHashMap<String, SagaExecution> activeExecutions = new ConcurrentHashMap<>();
 
     /**
-     * Creates a new orchestrator.
+     * Creates a new orchestrator without metrics.
      *
      * @param stateStore the state store for persisting saga state (must not be null)
      * @param listeners lifecycle listeners (may be null or empty)
@@ -106,9 +112,26 @@ public class HazelcastSagaOrchestrator implements SagaOrchestrator {
     public HazelcastSagaOrchestrator(final SagaStateStore stateStore,
                                       final List<SagaOrchestratorListener> listeners,
                                       final ScheduledExecutorService scheduler) {
+        this(stateStore, listeners, scheduler, null);
+    }
+
+    /**
+     * Creates a new orchestrator with optional metrics.
+     *
+     * @param stateStore the state store for persisting saga state (must not be null)
+     * @param listeners lifecycle listeners (may be null or empty)
+     * @param scheduler scheduler for timeouts and retry delays (null creates a default)
+     * @param sagaMetrics optional metrics collector (may be null)
+     * @throws NullPointerException if stateStore is null
+     */
+    public HazelcastSagaOrchestrator(final SagaStateStore stateStore,
+                                      final List<SagaOrchestratorListener> listeners,
+                                      final ScheduledExecutorService scheduler,
+                                      final SagaMetrics sagaMetrics) {
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore must not be null");
         this.listeners = listeners != null ? new ArrayList<>(listeners) : Collections.emptyList();
         this.scheduler = scheduler != null ? scheduler : Executors.newScheduledThreadPool(2);
+        this.sagaMetrics = sagaMetrics;
     }
 
     @Override
@@ -241,6 +264,7 @@ public class HazelcastSagaOrchestrator implements SagaOrchestrator {
         final SagaStep step = exec.definition.getStep(stepIndex);
         exec.currentStepIndex = stepIndex;
         exec.currentStepName = step.getName();
+        exec.stepStartedAt = Instant.now();
 
         notifyListeners(l -> l.onStepStarted(exec.sagaId, step.getName(), stepIndex));
         logger.debug("Executing step: sagaId={}, step={}, index={}", exec.sagaId, step.getName(), stepIndex);
@@ -325,6 +349,9 @@ public class HazelcastSagaOrchestrator implements SagaOrchestrator {
      */
     private void handleStepSuccessInternal(final SagaExecution exec, final SagaStep step,
                                             final int stepIndex, final SagaStepResult result) {
+        // Record step duration metric
+        recordStepDuration(exec, step.getName());
+
         // Merge result data into context
         result.getData().forEach((k, v) -> exec.context.put(k, v));
 
@@ -344,6 +371,9 @@ public class HazelcastSagaOrchestrator implements SagaOrchestrator {
      */
     private void handleStepFailure(final SagaExecution exec, final SagaStep step,
                                     final int stepIndex, final SagaStepResult result) {
+        // Record step duration metric
+        recordStepDuration(exec, step.getName());
+
         final String reason = result.getErrorMessage().orElse("Unknown failure");
         stateStore.recordStepFailed(exec.sagaId, stepIndex, step.getName(), "orchestrator", reason);
 
@@ -358,6 +388,9 @@ public class HazelcastSagaOrchestrator implements SagaOrchestrator {
      */
     private void handleStepTimeout(final SagaExecution exec, final SagaStep step,
                                     final int stepIndex, final SagaStepResult result) {
+        // Record step duration metric
+        recordStepDuration(exec, step.getName());
+
         final String reason = result.getErrorMessage().orElse("Step timed out");
         stateStore.recordStepFailed(exec.sagaId, stepIndex, step.getName(), "orchestrator", reason);
 
@@ -574,6 +607,16 @@ public class HazelcastSagaOrchestrator implements SagaOrchestrator {
         }
     }
 
+    /**
+     * Records the duration of a step from its start time.
+     */
+    private void recordStepDuration(final SagaExecution exec, final String stepName) {
+        if (sagaMetrics != null && exec.stepStartedAt != null) {
+            final Duration stepDuration = Duration.between(exec.stepStartedAt, Instant.now());
+            sagaMetrics.recordStepDuration(exec.definition.getName(), stepName, stepDuration);
+        }
+    }
+
     // ========== Inner Class ==========
 
     /**
@@ -593,6 +636,7 @@ public class HazelcastSagaOrchestrator implements SagaOrchestrator {
         volatile String currentStepName;
         volatile CompletableFuture<SagaStepResult> pendingStepFuture;
         volatile ScheduledFuture<?> timeoutFuture;
+        volatile Instant stepStartedAt;
 
         SagaExecution(final String sagaId, final SagaDefinition definition, final SagaContext context) {
             this.sagaId = sagaId;

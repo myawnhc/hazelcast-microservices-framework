@@ -113,7 +113,7 @@ class McpToolIntegrationTest {
     void shouldExecuteListSagasEndToEnd() {
         contextRunner.run(context -> {
             ListSagasTool tool = context.getBean(ListSagasTool.class);
-            String result = tool.listSagas("COMPLETED", 5);
+            String result = tool.listSagas("COMPLETED", null, 5);
 
             Map<String, Object> parsed = parseJson(result);
             assertThat(parsed.get("status")).isEqualTo("COMPLETED");
@@ -220,7 +220,7 @@ class McpToolIntegrationTest {
                     "status", "COMPLETED",
                     "steps", List.of("StockReserved", "PaymentProcessed")
             ));
-            when(mock.listSagas(eq("COMPLETED"), eq(5))).thenReturn(List.of(
+            when(mock.listSagas(eq("COMPLETED"), any(), eq(5))).thenReturn(List.of(
                     Map.of("sagaId", "saga-123", "status", "COMPLETED")
             ));
 

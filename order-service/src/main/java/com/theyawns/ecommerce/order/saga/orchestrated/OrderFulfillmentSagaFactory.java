@@ -59,7 +59,7 @@ public class OrderFulfillmentSagaFactory {
      */
     public SagaDefinition create() {
         return SagaDefinition.builder()
-                .name("OrderFulfillment")
+                .name("OrderFulfillmentOrchestrated")
 
                 // Step 0: Create Order
                 .step("CreateOrder")

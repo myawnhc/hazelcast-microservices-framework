@@ -288,6 +288,56 @@ class SagaMetricsTest {
         }
 
         @Test
+        @DisplayName("should record step duration")
+        void shouldRecordStepDuration() {
+            metrics.recordStepDuration(SAGA_TYPE, "ReserveStock", Duration.ofMillis(150));
+
+            Timer timer = meterRegistry.find("saga.step.duration")
+                    .tag("sagaType", SAGA_TYPE)
+                    .tag("stepName", "ReserveStock")
+                    .timer();
+
+            assertNotNull(timer);
+            assertEquals(1, timer.count());
+            assertTrue(timer.totalTime(TimeUnit.MILLISECONDS) >= 150);
+        }
+
+        @Test
+        @DisplayName("should record step durations for different steps separately")
+        void shouldRecordStepDurationsForDifferentSteps() {
+            metrics.recordStepDuration(SAGA_TYPE, "ReserveStock", Duration.ofMillis(100));
+            metrics.recordStepDuration(SAGA_TYPE, "ProcessPayment", Duration.ofMillis(200));
+
+            Timer stockTimer = meterRegistry.find("saga.step.duration")
+                    .tag("sagaType", SAGA_TYPE)
+                    .tag("stepName", "ReserveStock")
+                    .timer();
+            Timer paymentTimer = meterRegistry.find("saga.step.duration")
+                    .tag("sagaType", SAGA_TYPE)
+                    .tag("stepName", "ProcessPayment")
+                    .timer();
+
+            assertNotNull(stockTimer);
+            assertNotNull(paymentTimer);
+            assertEquals(1, stockTimer.count());
+            assertEquals(1, paymentTimer.count());
+        }
+
+        @Test
+        @DisplayName("should handle null step duration gracefully")
+        void shouldHandleNullStepDurationGracefully() {
+            // Should not throw
+            metrics.recordStepDuration(SAGA_TYPE, "Step1", null);
+
+            Timer timer = meterRegistry.find("saga.step.duration")
+                    .tag("sagaType", SAGA_TYPE)
+                    .tag("stepName", "Step1")
+                    .timer();
+
+            assertNull(timer);
+        }
+
+        @Test
         @DisplayName("should handle null duration gracefully")
         void shouldHandleNullDurationGracefully() {
             // Should not throw

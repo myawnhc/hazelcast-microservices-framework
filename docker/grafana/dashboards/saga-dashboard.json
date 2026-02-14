@@ -517,6 +517,127 @@
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "id": 55,
+      "title": "Choreography vs Orchestration",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
+      "id": 56,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Duration Comparison: Choreographed vs Orchestrated",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "saga_duration_seconds{sagaType=\"OrderFulfillment\", quantile=\"0.5\"}",
+          "legendFormat": "Choreographed p50"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=\"OrderFulfillment\", quantile=\"0.95\"}",
+          "legendFormat": "Choreographed p95"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=\"OrderFulfillmentOrchestrated\", quantile=\"0.5\"}",
+          "legendFormat": "Orchestrated p50"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=\"OrderFulfillmentOrchestrated\", quantile=\"0.95\"}",
+          "legendFormat": "Orchestrated p95"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
+      "id": 57,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Orchestrated Step Timing",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "saga_step_duration_seconds{sagaType=\"OrderFulfillmentOrchestrated\", quantile=\"0.5\"}",
+          "legendFormat": "{{stepName}} p50"
+        },
+        {
+          "expr": "saga_step_duration_seconds{sagaType=\"OrderFulfillmentOrchestrated\", quantile=\"0.95\"}",
+          "legendFormat": "{{stepName}} p95"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 57 },
+      "id": 58,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Choreographed Success Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_completed_total{sagaType=\"OrderFulfillment\"}) / (sum(saga_completed_total{sagaType=\"OrderFulfillment\"}) + sum(saga_compensated_total{sagaType=\"OrderFulfillment\"}) + sum(saga_failed_total{sagaType=\"OrderFulfillment\"}) + sum(saga_timedout_total{sagaType=\"OrderFulfillment\"}))",
+          "legendFormat": "Choreographed"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 57 },
+      "id": 59,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Orchestrated Success Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_completed_total{sagaType=\"OrderFulfillmentOrchestrated\"}) / (sum(saga_completed_total{sagaType=\"OrderFulfillmentOrchestrated\"}) + sum(saga_compensated_total{sagaType=\"OrderFulfillmentOrchestrated\"}) + sum(saga_failed_total{sagaType=\"OrderFulfillmentOrchestrated\"}) + sum(saga_timedout_total{sagaType=\"OrderFulfillmentOrchestrated\"}))",
+          "legendFormat": "Orchestrated"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 63 },
       "id": 60,
       "title": "Resilience: Circuit Breakers",
       "type": "row"
@@ -537,7 +658,7 @@
           ]
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 49 },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 64 },
       "id": 61,
       "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "title": "Circuit Breaker State",
@@ -559,7 +680,7 @@
           "max": 1
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 49 },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 64 },
       "id": 62,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
       "title": "Circuit Breaker Failure Rate",
@@ -579,7 +700,7 @@
           "unit": "ops"
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 55 },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 70 },
       "id": 63,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
       "title": "Circuit Breaker Calls (per second)",
@@ -601,7 +722,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 61 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 76 },
       "id": 70,
       "title": "Resilience: Retry",
       "type": "row"
@@ -614,7 +735,7 @@
           "unit": "ops"
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 62 },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 77 },
       "id": 71,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
       "title": "Retry Outcomes (per second)",
@@ -642,7 +763,7 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 62 },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 77 },
       "id": 72,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
       "title": "Non-Retryable Exceptions (per second)",
@@ -656,7 +777,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 68 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 83 },
       "id": 80,
       "title": "Outbox & Dead Letter Queue",
       "type": "row"
@@ -675,7 +796,7 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 69 },
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 84 },
       "id": 81,
       "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "title": "Outbox Written",
@@ -699,7 +820,7 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 4, "x": 4, "y": 69 },
+      "gridPos": { "h": 6, "w": 4, "x": 4, "y": 84 },
       "id": 82,
       "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "title": "Outbox Delivered",
@@ -724,7 +845,7 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 4, "x": 8, "y": 69 },
+      "gridPos": { "h": 6, "w": 4, "x": 8, "y": 84 },
       "id": 83,
       "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "title": "Outbox Failed",
@@ -750,7 +871,7 @@
           }
         }
       },
-      "gridPos": { "h": 6, "w": 4, "x": 12, "y": 69 },
+      "gridPos": { "h": 6, "w": 4, "x": 12, "y": 84 },
       "id": 84,
       "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "title": "DLQ Pending",
@@ -770,7 +891,7 @@
           "unit": "ops"
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 69 },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 84 },
       "id": 85,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
       "title": "DLQ Operations (per second)",
@@ -798,7 +919,7 @@
           "unit": "ops"
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 75 },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 90 },
       "id": 86,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
       "title": "Idempotency Checks (per second)",
@@ -822,7 +943,7 @@
           "unit": "s"
         }
       },
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 75 },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 90 },
       "id": 87,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
       "title": "Outbox Publish Cycle Duration",

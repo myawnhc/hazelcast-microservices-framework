@@ -55,7 +55,7 @@ class OrderFulfillmentSagaFactoryTest {
         void shouldHaveCorrectSagaName() {
             SagaDefinition definition = factory.create();
 
-            assertThat(definition.getName()).isEqualTo("OrderFulfillment");
+            assertThat(definition.getName()).isEqualTo("OrderFulfillmentOrchestrated");
         }
 
         @Test

@@ -1,7 +1,10 @@
 package com.theyawns.framework.saga.orchestrator;
 
+import com.theyawns.framework.saga.SagaMetrics;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -812,6 +815,7 @@ class HazelcastSagaOrchestratorTest {
 
         @Test
         @DisplayName("should not fail when listener throws exception")
+        @SuppressWarnings("unused")
         void shouldNotFailWhenListenerThrows() throws Exception {
             final SagaOrchestratorListener throwingListener = new SagaOrchestratorListener() {
                 @Override
@@ -829,6 +833,82 @@ class HazelcastSagaOrchestratorTest {
                     .get(5, TimeUnit.SECONDS);
 
             // Saga should still complete despite listener error
+            assertThat(result.isSuccessful()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Step Duration Metrics")
+    class StepDurationMetrics {
+
+        private SimpleMeterRegistry meterRegistry;
+        private SagaMetrics sagaMetrics;
+        private HazelcastSagaOrchestrator metricsOrchestrator;
+
+        @BeforeEach
+        void setUpMetrics() {
+            meterRegistry = new SimpleMeterRegistry();
+            sagaMetrics = new SagaMetrics(meterRegistry);
+            metricsOrchestrator = new HazelcastSagaOrchestrator(
+                    stateStore, Collections.emptyList(), scheduler, sagaMetrics);
+        }
+
+        @Test
+        @DisplayName("should record step duration for successful steps")
+        void shouldRecordStepDurationForSuccessfulSteps() throws Exception {
+            metricsOrchestrator.start("saga-metrics-1", threeStepSaga(), SagaContext.create())
+                    .get(5, TimeUnit.SECONDS);
+
+            Timer step1Timer = meterRegistry.find("saga.step.duration")
+                    .tag("sagaType", "TestSaga")
+                    .tag("stepName", "Step1")
+                    .timer();
+            Timer step2Timer = meterRegistry.find("saga.step.duration")
+                    .tag("sagaType", "TestSaga")
+                    .tag("stepName", "Step2")
+                    .timer();
+            Timer step3Timer = meterRegistry.find("saga.step.duration")
+                    .tag("sagaType", "TestSaga")
+                    .tag("stepName", "Step3")
+                    .timer();
+
+            assertThat(step1Timer).isNotNull();
+            assertThat(step1Timer.count()).isEqualTo(1);
+            assertThat(step2Timer).isNotNull();
+            assertThat(step2Timer.count()).isEqualTo(1);
+            assertThat(step3Timer).isNotNull();
+            assertThat(step3Timer.count()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should record step duration for failed step")
+        void shouldRecordStepDurationForFailedStep() throws Exception {
+            final SagaDefinition def = SagaDefinition.builder()
+                    .name("FailMetricsSaga")
+                    .step("Step1").action(failAction("boom")).noCompensation()
+                        .timeout(Duration.ofSeconds(5)).build()
+                    .build();
+
+            metricsOrchestrator.start("saga-metrics-fail", def, SagaContext.create())
+                    .get(5, TimeUnit.SECONDS);
+
+            Timer failedTimer = meterRegistry.find("saga.step.duration")
+                    .tag("sagaType", "FailMetricsSaga")
+                    .tag("stepName", "Step1")
+                    .timer();
+
+            assertThat(failedTimer).isNotNull();
+            assertThat(failedTimer.count()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should work without metrics (null sagaMetrics)")
+        void shouldWorkWithoutMetrics() throws Exception {
+            // Use the 3-arg constructor (no metrics)
+            final SagaOrchestratorResult result = orchestrator.start(
+                    "saga-no-metrics", threeStepSaga(), SagaContext.create())
+                    .get(5, TimeUnit.SECONDS);
+
             assertThat(result.isSuccessful()).isTrue();
         }
     }

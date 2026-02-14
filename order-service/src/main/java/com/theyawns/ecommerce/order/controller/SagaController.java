@@ -79,14 +79,15 @@ public class SagaController {
     }
 
     /**
-     * Lists sagas filtered by status.
+     * Lists sagas filtered by status and/or type.
      *
      * @param status optional status filter (STARTED, IN_PROGRESS, COMPLETED, COMPENSATING, COMPENSATED, FAILED, TIMED_OUT)
+     * @param type optional saga type filter (e.g., "OrderFulfillment", "OrderFulfillmentOrchestrated")
      * @param limit maximum number of results (default: 10)
      * @return list of saga states
      */
     @GetMapping
-    @Operation(summary = "List sagas", description = "Lists sagas, optionally filtered by status")
+    @Operation(summary = "List sagas", description = "Lists sagas, optionally filtered by status and/or type")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Sagas retrieved"),
             @ApiResponse(responseCode = "400", description = "Invalid status value")
@@ -94,13 +95,22 @@ public class SagaController {
     public ResponseEntity<List<Map<String, Object>>> listSagas(
             @Parameter(description = "Filter by status: STARTED, IN_PROGRESS, COMPLETED, COMPENSATING, COMPENSATED, FAILED, TIMED_OUT")
             @RequestParam(required = false) String status,
+            @Parameter(description = "Filter by saga type: OrderFulfillment, OrderFulfillmentOrchestrated")
+            @RequestParam(required = false) String type,
             @Parameter(description = "Maximum number of results")
             @RequestParam(defaultValue = "10") int limit) {
-        logger.debug("REST: Listing sagas (status: {}, limit: {})", status, limit);
+        logger.debug("REST: Listing sagas (status: {}, type: {}, limit: {})", status, type, limit);
 
         try {
             List<SagaState> sagas;
-            if (status != null && !status.isBlank()) {
+            if (type != null && !type.isBlank()) {
+                // Type filter takes precedence — findSagasByType, then apply status filter if set
+                sagas = new java.util.ArrayList<>(sagaStateStore.findSagasByType(type));
+                if (status != null && !status.isBlank()) {
+                    SagaStatus sagaStatus = SagaStatus.valueOf(status.toUpperCase());
+                    sagas.removeIf(s -> s.getStatus() != sagaStatus);
+                }
+            } else if (status != null && !status.isBlank()) {
                 SagaStatus sagaStatus = SagaStatus.valueOf(status.toUpperCase());
                 sagas = sagaStateStore.findSagasByStatus(sagaStatus);
             } else {

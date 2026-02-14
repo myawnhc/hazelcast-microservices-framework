@@ -42,26 +42,31 @@ public class ListSagasTool {
     }
 
     /**
-     * Lists sagas with optional status filter and limit.
+     * Lists sagas with optional status and type filters.
      *
      * @param status optional status filter (STARTED, IN_PROGRESS, COMPLETED, COMPENSATING, COMPENSATED, FAILED, TIMED_OUT)
+     * @param type optional saga type filter (e.g., "OrderFulfillment", "OrderFulfillmentOrchestrated")
      * @param limit maximum number of results (default: 10)
      * @return JSON string with the list of sagas
      */
-    @Tool(description = "List sagas with optional status filter. "
-            + "Statuses: STARTED, IN_PROGRESS, COMPLETED, COMPENSATING, COMPENSATED, FAILED, TIMED_OUT")
+    @Tool(description = "List sagas with optional status and type filters. "
+            + "Statuses: STARTED, IN_PROGRESS, COMPLETED, COMPENSATING, COMPENSATED, FAILED, TIMED_OUT. "
+            + "Types: OrderFulfillment (choreographed), OrderFulfillmentOrchestrated (orchestrated)")
     public String listSagas(
             @ToolParam(description = "Optional status filter: STARTED, IN_PROGRESS, COMPLETED, "
                     + "COMPENSATING, COMPENSATED, FAILED, or TIMED_OUT", required = false) String status,
+            @ToolParam(description = "Optional saga type filter: OrderFulfillment or OrderFulfillmentOrchestrated",
+                    required = false) String type,
             @ToolParam(description = "Maximum results (default: 10)", required = false) Integer limit) {
 
-        logger.info("MCP listSagas: status={}, limit={}", status, limit);
+        logger.info("MCP listSagas: status={}, type={}, limit={}", status, type, limit);
 
         try {
             int effectiveLimit = (limit != null && limit > 0) ? limit : DEFAULT_LIMIT;
-            List<Map<String, Object>> sagas = serviceClient.listSagas(status, effectiveLimit);
+            List<Map<String, Object>> sagas = serviceClient.listSagas(status, type, effectiveLimit);
             return toJson(Map.of(
                     "status", status != null ? status : "ALL",
+                    "type", type != null ? type : "ALL",
                     "count", sagas.size(),
                     "sagas", sagas
             ));

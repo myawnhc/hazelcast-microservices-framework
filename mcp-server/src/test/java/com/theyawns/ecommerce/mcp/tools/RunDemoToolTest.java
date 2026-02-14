@@ -123,6 +123,52 @@ class RunDemoToolTest {
     }
 
     @Test
+    @DisplayName("should run orchestrated_happy_path scenario using orchestrated endpoint")
+    void shouldRunOrchestratedHappyPath() throws JsonProcessingException {
+        when(serviceClient.createEntity(eq("customer"), any()))
+                .thenReturn(Map.of("customerId", "c-orch1", "name", "Orchestrated Customer"));
+        when(serviceClient.createEntity(eq("product"), any()))
+                .thenReturn(Map.of("productId", "p-orch1", "name", "Orchestrated Widget"));
+        when(serviceClient.createOrchestratedOrder(any()))
+                .thenReturn(Map.of("orderId", "o-orch1", "status", "PENDING"));
+
+        String result = runDemoTool.runDemo("orchestrated_happy_path");
+
+        verify(serviceClient).createEntity(eq("customer"), any());
+        verify(serviceClient).createEntity(eq("product"), any());
+        verify(serviceClient).createOrchestratedOrder(any());
+
+        Map<String, Object> parsed = objectMapper.readValue(result, new TypeReference<>() {});
+        assertEquals("orchestrated_happy_path", parsed.get("scenario"));
+        assertEquals("orchestrated", parsed.get("sagaPattern"));
+        assertNotNull(parsed.get("steps"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) parsed.get("steps");
+        assertEquals(3, steps.size());
+    }
+
+    @Test
+    @DisplayName("should run orchestrated_payment_failure scenario with high-value orchestrated order")
+    void shouldRunOrchestratedPaymentFailure() throws JsonProcessingException {
+        when(serviceClient.createEntity(eq("customer"), any()))
+                .thenReturn(Map.of("customerId", "c-orch2", "name", "Orchestrated Big Spender"));
+        when(serviceClient.createEntity(eq("product"), any()))
+                .thenReturn(Map.of("productId", "p-orch2", "name", "Premium Orchestrated Item"));
+        when(serviceClient.createOrchestratedOrder(any()))
+                .thenReturn(Map.of("orderId", "o-orch2", "status", "PENDING"));
+
+        String result = runDemoTool.runDemo("orchestrated_payment_failure");
+
+        verify(serviceClient).createOrchestratedOrder(any());
+
+        Map<String, Object> parsed = objectMapper.readValue(result, new TypeReference<>() {});
+        assertEquals("orchestrated_payment_failure", parsed.get("scenario"));
+        assertEquals("orchestrated", parsed.get("sagaPattern"));
+        assertNotNull(parsed.get("expectedOutcome"));
+        assertTrue(parsed.get("expectedOutcome").toString().contains("$10,000"));
+    }
+
+    @Test
     @DisplayName("should return error for unknown scenario")
     void shouldReturnErrorForUnknownScenario() throws JsonProcessingException {
         String result = runDemoTool.runDemo("unknown_scenario");

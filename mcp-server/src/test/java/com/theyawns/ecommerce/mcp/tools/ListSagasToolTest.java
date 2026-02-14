@@ -48,11 +48,11 @@ class ListSagasToolTest {
                 Map.of("sagaId", "saga-1", "status", "COMPLETED"),
                 Map.of("sagaId", "saga-2", "status", "COMPLETED")
         );
-        when(serviceClient.listSagas("COMPLETED", 10)).thenReturn(sagas);
+        when(serviceClient.listSagas("COMPLETED", null, 10)).thenReturn(sagas);
 
-        String result = listSagasTool.listSagas("COMPLETED", null);
+        String result = listSagasTool.listSagas("COMPLETED", null, null);
 
-        verify(serviceClient).listSagas("COMPLETED", 10);
+        verify(serviceClient).listSagas("COMPLETED", null, 10);
         Map<String, Object> parsed = objectMapper.readValue(result, new TypeReference<>() {});
         assertEquals("COMPLETED", parsed.get("status"));
         assertEquals(2, parsed.get("count"));
@@ -62,42 +62,72 @@ class ListSagasToolTest {
     @Test
     @DisplayName("should list all sagas when status is null")
     void shouldListAllSagasWhenStatusNull() throws JsonProcessingException {
-        when(serviceClient.listSagas(null, 10)).thenReturn(List.of());
+        when(serviceClient.listSagas(null, null, 10)).thenReturn(List.of());
 
-        String result = listSagasTool.listSagas(null, null);
+        String result = listSagasTool.listSagas(null, null, null);
 
-        verify(serviceClient).listSagas(null, 10);
+        verify(serviceClient).listSagas(null, null, 10);
         Map<String, Object> parsed = objectMapper.readValue(result, new TypeReference<>() {});
         assertEquals("ALL", parsed.get("status"));
+        assertEquals("ALL", parsed.get("type"));
         assertEquals(0, parsed.get("count"));
     }
 
     @Test
     @DisplayName("should use custom limit")
     void shouldUseCustomLimit() {
-        when(serviceClient.listSagas("FAILED", 25)).thenReturn(List.of());
+        when(serviceClient.listSagas("FAILED", null, 25)).thenReturn(List.of());
 
-        listSagasTool.listSagas("FAILED", 25);
+        listSagasTool.listSagas("FAILED", null, 25);
 
-        verify(serviceClient).listSagas("FAILED", 25);
+        verify(serviceClient).listSagas("FAILED", null, 25);
     }
 
     @Test
     @DisplayName("should default to limit 10 when limit is null")
     void shouldDefaultLimit() {
-        when(serviceClient.listSagas("IN_PROGRESS", 10)).thenReturn(List.of());
+        when(serviceClient.listSagas("IN_PROGRESS", null, 10)).thenReturn(List.of());
 
-        listSagasTool.listSagas("IN_PROGRESS", null);
+        listSagasTool.listSagas("IN_PROGRESS", null, null);
 
-        verify(serviceClient).listSagas("IN_PROGRESS", 10);
+        verify(serviceClient).listSagas("IN_PROGRESS", null, 10);
+    }
+
+    @Test
+    @DisplayName("should filter by type when type parameter is provided")
+    void shouldFilterByType() throws JsonProcessingException {
+        List<Map<String, Object>> sagas = List.of(
+                Map.of("sagaId", "saga-orch-1", "sagaType", "OrderFulfillmentOrchestrated")
+        );
+        when(serviceClient.listSagas(null, "OrderFulfillmentOrchestrated", 10)).thenReturn(sagas);
+
+        String result = listSagasTool.listSagas(null, "OrderFulfillmentOrchestrated", null);
+
+        verify(serviceClient).listSagas(null, "OrderFulfillmentOrchestrated", 10);
+        Map<String, Object> parsed = objectMapper.readValue(result, new TypeReference<>() {});
+        assertEquals("OrderFulfillmentOrchestrated", parsed.get("type"));
+        assertEquals(1, parsed.get("count"));
+    }
+
+    @Test
+    @DisplayName("should filter by both status and type")
+    void shouldFilterByStatusAndType() throws JsonProcessingException {
+        when(serviceClient.listSagas("COMPLETED", "OrderFulfillment", 10)).thenReturn(List.of());
+
+        String result = listSagasTool.listSagas("COMPLETED", "OrderFulfillment", null);
+
+        verify(serviceClient).listSagas("COMPLETED", "OrderFulfillment", 10);
+        Map<String, Object> parsed = objectMapper.readValue(result, new TypeReference<>() {});
+        assertEquals("COMPLETED", parsed.get("status"));
+        assertEquals("OrderFulfillment", parsed.get("type"));
     }
 
     @Test
     @DisplayName("should return error when service client throws exception")
     void shouldReturnErrorOnException() throws JsonProcessingException {
-        when(serviceClient.listSagas(null, 10)).thenThrow(new RuntimeException("Service unavailable"));
+        when(serviceClient.listSagas(null, null, 10)).thenThrow(new RuntimeException("Service unavailable"));
 
-        String result = listSagasTool.listSagas(null, null);
+        String result = listSagasTool.listSagas(null, null, null);
 
         Map<String, Object> parsed = objectMapper.readValue(result, new TypeReference<>() {});
         assertTrue(parsed.containsKey("error"));

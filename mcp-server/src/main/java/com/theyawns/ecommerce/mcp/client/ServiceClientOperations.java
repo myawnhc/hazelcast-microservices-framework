@@ -73,13 +73,33 @@ public interface ServiceClientOperations {
     Map<String, Object> getSaga(String sagaId);
 
     /**
+     * Lists sagas from the order service, optionally filtered by status and type.
+     *
+     * @param status optional status filter (e.g., "COMPLETED", "FAILED")
+     * @param type optional saga type filter (e.g., "OrderFulfillment", "OrderFulfillmentOrchestrated")
+     * @param limit the maximum number of sagas to return
+     * @return list of saga states as maps
+     */
+    List<Map<String, Object>> listSagas(String status, String type, int limit);
+
+    /**
      * Lists sagas from the order service, optionally filtered by status.
      *
      * @param status optional status filter (e.g., "COMPLETED", "FAILED")
      * @param limit the maximum number of sagas to return
      * @return list of saga states as maps
      */
-    List<Map<String, Object>> listSagas(String status, int limit);
+    default List<Map<String, Object>> listSagas(String status, int limit) {
+        return listSagas(status, null, limit);
+    }
+
+    /**
+     * Creates an order using the orchestrated saga pattern.
+     *
+     * @param payload the order data as a map
+     * @return the created order as a map
+     */
+    Map<String, Object> createOrchestratedOrder(Map<String, Object> payload);
 
     /**
      * Retrieves an aggregated metrics summary from the order service.

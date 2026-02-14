@@ -1,8 +1,10 @@
 package com.theyawns.framework.saga.orchestrator;
 
+import com.theyawns.framework.saga.SagaMetrics;
 import com.theyawns.framework.saga.SagaState;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -88,12 +90,58 @@ class SagaOrchestratorAutoConfigurationTest {
         }
     }
 
+    @Nested
+    @DisplayName("When SagaMetrics is present")
+    class WhenSagaMetricsPresent {
+
+        @Test
+        @DisplayName("should wire SagaMetrics into orchestrator")
+        void shouldWireSagaMetricsIntoOrchestrator() {
+            contextRunner
+                    .withUserConfiguration(SagaStateStoreWithMetricsConfig.class)
+                    .run(context -> {
+                        assertThat(context).hasSingleBean(HazelcastSagaOrchestrator.class);
+                        assertThat(context).hasSingleBean(SagaMetrics.class);
+                    });
+        }
+    }
+
+    @Nested
+    @DisplayName("When SagaMetrics is absent")
+    class WhenSagaMetricsAbsent {
+
+        @Test
+        @DisplayName("should create orchestrator without SagaMetrics")
+        void shouldCreateOrchestratorWithoutSagaMetrics() {
+            contextRunner
+                    .withUserConfiguration(SagaStateStoreConfig.class)
+                    .run(context -> {
+                        assertThat(context).hasSingleBean(HazelcastSagaOrchestrator.class);
+                        assertThat(context).doesNotHaveBean(SagaMetrics.class);
+                    });
+        }
+    }
+
     @Configuration
     static class SagaStateStoreConfig {
 
         @Bean
         SagaStateStore sagaStateStore() {
             return mock(SagaStateStore.class);
+        }
+    }
+
+    @Configuration
+    static class SagaStateStoreWithMetricsConfig {
+
+        @Bean
+        SagaStateStore sagaStateStore() {
+            return mock(SagaStateStore.class);
+        }
+
+        @Bean
+        SagaMetrics sagaMetrics() {
+            return new SagaMetrics(new SimpleMeterRegistry());
         }
     }
 }
