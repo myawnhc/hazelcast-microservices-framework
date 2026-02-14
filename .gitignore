@@ -4,6 +4,10 @@
 /inventory-service/target/
 /order-service/target/
 /payment-service/target/
+/mcp-server/target/
+
+# Stray build artifacts
+/io/
 
 .idea/
 
