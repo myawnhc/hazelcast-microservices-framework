@@ -208,3 +208,114 @@ These examples show how an AI assistant uses the MCP tools to interact with the 
 > - Deluxe Gizmo - $99.99 (100 in stock)
 >
 > You can now place orders, run demos, or query these entities."
+
+---
+
+## 9. Running Orchestrated Demos
+
+**User:** "Run the orchestrated happy path demo"
+
+**Assistant:** *calls `run_demo(scenario="orchestrated_happy_path")`*
+
+> "Orchestrated demo completed successfully!
+>
+> **Steps:**
+> 1. Created customer: **Demo Customer** (c-orch-123)
+> 2. Created product: **Demo Widget** at $29.99 (p-orch-456)
+> 3. Submitted orchestrated order via `POST /api/orders/orchestrated`
+>
+> **Saga Result:**
+> - **Saga ID:** saga-orch-a1b2c3
+> - **Type:** OrderFulfillmentOrchestrated
+> - **Status:** COMPLETED
+> - **Steps:** CreateOrder → ReserveStock → ProcessPayment → ConfirmOrder
+> - **Duration:** 0.8 seconds
+>
+> Unlike the choreographed demo, this saga was driven by the orchestrator — each step executed sequentially via HTTP calls."
+
+---
+
+**User:** "Now show me an orchestrated payment failure"
+
+**Assistant:** *calls `run_demo(scenario="orchestrated_payment_failure")`*
+
+> "Orchestrated payment failure demo completed!
+>
+> **Steps:**
+> 1. Created customer: **Big Spender** (c-orch-fail-123)
+> 2. Created product: **Premium Item** at $5,500.00 (p-orch-fail-456)
+> 3. Submitted orchestrated order: 3x Premium Item = $16,500.00
+>
+> **Saga Result:**
+> - **Status:** COMPENSATED
+> - **Failed at:** ProcessPayment (amount $16,500 exceeds $10,000 limit)
+> - **Compensations executed:**
+>   - Released reserved stock via `POST /api/saga/inventory/release-stock`
+>   - Cancelled order locally
+> - **Duration:** 1.1 seconds
+>
+> The orchestrator automatically ran compensation in reverse order after the payment step failed."
+
+---
+
+## 10. Comparing Saga Patterns
+
+**User:** "Show me only orchestrated sagas"
+
+**Assistant:** *calls `list_sagas(type="OrderFulfillmentOrchestrated")`*
+
+> "Found 5 orchestrated sagas:
+>
+> | Saga ID | Status | Steps Completed | Duration |
+> |---------|--------|-----------------|----------|
+> | saga-orch-a1b2 | COMPLETED | 4/4 | 0.8s |
+> | saga-orch-c3d4 | COMPLETED | 4/4 | 0.9s |
+> | saga-orch-e5f6 | COMPENSATED | 2/4 | 1.1s |
+> | saga-orch-g7h8 | COMPLETED | 4/4 | 0.7s |
+> | saga-orch-i9j0 | COMPLETED | 4/4 | 0.8s |"
+
+---
+
+**User:** "How do the two patterns compare?"
+
+**Assistant:** *calls `get_metrics()`*
+
+> "Pattern comparison:
+>
+> | Metric | Choreographed | Orchestrated |
+> |--------|--------------|-------------|
+> | **Total sagas** | 142 | 38 |
+> | **Success rate** | 90.1% | 92.1% |
+> | **Avg duration** | 1.4s | 0.85s |
+> | **p95 duration** | 2.8s | 1.2s |
+>
+> **Orchestrated step breakdown (p50):**
+> - CreateOrder: 15ms
+> - ReserveStock: 210ms
+> - ProcessPayment: 380ms
+> - ConfirmOrder: 12ms
+>
+> The orchestrated pattern shows lower latency because steps execute synchronously via HTTP without ITopic event propagation delays. The choreographed pattern has higher throughput capacity since services process events independently."
+
+---
+
+**User:** "Investigate the compensated orchestrated saga"
+
+**Assistant:** *calls `inspect_saga(sagaId="saga-orch-e5f6")`*
+
+> "Saga saga-orch-e5f6 (orchestrated):
+>
+> | Step | Name | Status | Duration |
+> |------|------|--------|----------|
+> | 0 | CreateOrder | COMPLETED | 18ms |
+> | 1 | ReserveStock | COMPLETED | 195ms |
+> | 2 | ProcessPayment | FAILED | 320ms |
+> | 3 | ConfirmOrder | SKIPPED | — |
+>
+> **Failure:** Payment declined — amount $16,500.00 exceeds limit
+>
+> **Compensation (reverse order):**
+> 1. ReserveStock → Released stock via HTTP (45ms)
+> 2. CreateOrder → Cancelled order locally (8ms)
+>
+> **Final status:** COMPENSATED in 1.1 seconds"

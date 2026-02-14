@@ -6,24 +6,35 @@ This guide explains how the Hazelcast Microservices Framework implements the sag
 
 A **saga** is a sequence of local transactions where each service performs its own work and publishes an event to trigger the next step. If any step fails, compensation events undo the work completed so far.
 
-This framework uses **choreographed sagas** — each service reacts independently to events rather than being directed by a central orchestrator. This approach aligns naturally with the event sourcing architecture and keeps services fully decoupled.
+This framework supports **both choreographed and orchestrated sagas**:
 
-For the decision rationale, see [ADR 007: Choreographed Sagas](../architecture/adr/007-choreographed-sagas.md).
+- **Choreography**: Each service reacts independently to events — no central coordinator. Best for loosely coupled flows where services already publish events.
+- **Orchestration**: A central `SagaOrchestrator` drives steps sequentially via HTTP calls. Best for complex flows where you need the entire saga visible in one place.
+
+For the original choreography decision rationale, see [ADR 007: Choreographed Sagas](../architecture/adr/007-choreographed-sagas.md).
 
 ## Architecture
 
-### Why Choreography over Orchestration?
+### Choreography vs Orchestration
 
-| Aspect | Orchestration | Choreography (chosen) |
-|--------|--------------|----------------------|
-| Coupling | Services depend on orchestrator | Services only know about events |
-| Failure | Orchestrator is a single point of failure | No single point of failure |
-| Scalability | Orchestrator can be a bottleneck | Each service scales independently |
-| Fit with event sourcing | Requires separate coordinator | Events drive the flow naturally |
+Both patterns are fully supported. Choose based on your requirements:
+
+| Aspect | Choreography | Orchestration |
+|--------|-------------|--------------|
+| **Coupling** | Services only know about events | Steps defined in one central definition |
+| **Visibility** | Flow distributed across listeners | Entire saga readable in one `SagaDefinition` |
+| **Communication** | Hazelcast ITopic (events) | HTTP calls (synchronous per step) |
+| **Failure handling** | `CompensationRegistry` + event publishing | Orchestrator runs compensation lambdas in reverse |
+| **Single point of failure** | None | Orchestrator (mitigated by Hazelcast state persistence) |
+| **Scalability** | Each service scales independently | Orchestrator coordinates sequentially |
+| **Fit with event sourcing** | Events drive the flow naturally | Requires separate coordinator |
+| **Best for** | Loosely coupled, independently evolving services | Complex flows needing centralized control and per-step timeout/retry |
 
 ### Saga Components
 
-The framework provides 16 classes in `com.theyawns.framework.saga`:
+#### Choreography Components
+
+The framework provides 16 classes in `com.theyawns.framework.saga` for choreographed sagas:
 
 | Component | Description |
 |-----------|-------------|
@@ -42,7 +53,26 @@ The framework provides 16 classes in `com.theyawns.framework.saga`:
 | `SagaTimeoutConfig` | Configuration properties for timeout detection |
 | `SagaTimeoutAutoConfiguration` | Auto-configuration for timeout detection beans |
 | `SagaTimedOutEvent` | Spring ApplicationEvent published when a saga times out |
-| `SagaMetrics` | Micrometer-based metrics for saga operations |
+| `SagaMetrics` | Micrometer-based metrics for saga operations (shared by both patterns) |
+
+#### Orchestration Components
+
+12 classes in `com.theyawns.framework.saga.orchestrator`:
+
+| Component | Description |
+|-----------|-------------|
+| `SagaOrchestrator` | Core interface: `start()`, `handleStepResult()`, `getStatus()`, `cancel()` |
+| `HazelcastSagaOrchestrator` | State machine implementation handling sequential step execution, retry, compensation, and timeouts |
+| `SagaDefinition` | Immutable fluent builder for defining sagas as ordered step sequences |
+| `SagaStep` | Immutable step definition with action, optional compensation, timeout, max retries, and retry delay |
+| `SagaContext` | Thread-safe mutable key-value store for passing data between saga steps |
+| `SagaAction` | Functional interface: `execute(SagaContext) → CompletableFuture<SagaStepResult>` |
+| `SagaCompensation` | Functional interface for rollback actions |
+| `SagaStepResult` | Immutable result: SUCCESS, FAILURE, or TIMEOUT with optional data payload |
+| `SagaOrchestratorResult` | Saga completion result with status, timing, step counts, and failure details |
+| `SagaOrchestratorListener` | Callback interface for lifecycle events (9 default no-op methods) |
+| `LoggingSagaOrchestratorListener` | Implementation that logs all lifecycle events at INFO level |
+| `SagaOrchestratorAutoConfiguration` | Auto-configuration: creates listener, executor, and orchestrator beans |
 
 Service-level components:
 
@@ -53,9 +83,9 @@ Service-level components:
 | `InventorySagaListener` | inventory-service | Handles OrderCreated/OrderCancelled for stock reservation/release |
 | `PaymentSagaListener` | payment-service | Handles StockReserved/PaymentRefundRequested for payment processing/refunds |
 
-## Order Fulfillment Saga Flow
+## Choreographed Order Fulfillment Saga
 
-The primary saga coordinates order placement across four services:
+The choreographed saga coordinates order placement across four services via Hazelcast ITopic events:
 
 ```
                     ┌──────────────┐
@@ -150,9 +180,125 @@ registry.register("StockReserved", "StockReleased", "inventory-service");
 registry.register("PaymentProcessed", "PaymentRefunded", "payment-service");
 ```
 
+## Orchestrated Order Fulfillment Saga
+
+The orchestrated saga uses `HazelcastSagaOrchestrator` to drive the same four-step flow via synchronous HTTP calls:
+
+```
+                    ┌──────────────────────┐
+                    │   SagaOrchestrator   │
+                    │  (Order Service)     │
+                    └──────────┬───────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+    Step 0: CreateOrder   Step 1: HTTP      Step 2: HTTP
+    (local)               POST /api/saga/   POST /api/saga/
+              │           inventory/         payment/
+              │           reserve-stock      process
+              │                │                │
+              ▼                ▼                ▼
+       ┌──────────┐    ┌──────────┐    ┌──────────┐
+       │  Order   │    │Inventory │    │ Payment  │
+       │  Service │    │  Service │    │  Service │
+       └──────────┘    └──────────┘    └──────────┘
+              │                                │
+              └────────────────────────────────┘
+                               │
+                    Step 3: ConfirmOrder (local)
+                               │
+                         Saga COMPLETED
+```
+
+### Step Details
+
+| Step | Name | Action | HTTP Endpoint | Compensation |
+|------|------|--------|---------------|-------------|
+| 0 | CreateOrder | Local order creation | — (local) | Cancel order |
+| 1 | ReserveStock | Reserve stock via HTTP | `POST /api/saga/inventory/reserve-stock` | `POST /api/saga/inventory/release-stock` |
+| 2 | ProcessPayment | Charge customer via HTTP | `POST /api/saga/payment/process` | `POST /api/saga/payment/refund` |
+| 3 | ConfirmOrder | Confirm order locally | — (local) | None (terminal step) |
+
+Each step has a 15-second timeout and the overall saga has a 60-second timeout.
+
+### SagaDefinition Builder
+
+The `OrderFulfillmentSagaFactory` defines the orchestrated saga:
+
+```java
+public SagaDefinition create() {
+    return SagaDefinition.builder()
+            .name("OrderFulfillmentOrchestrated")
+
+            .step("CreateOrder")
+                .action(this::createOrderAction)
+                .compensation(this::createOrderCompensation)
+                .timeout(Duration.ofSeconds(15))
+                .build()
+
+            .step("ReserveStock")
+                .action(this::reserveStockAction)
+                .compensation(this::reserveStockCompensation)
+                .timeout(Duration.ofSeconds(15))
+                .build()
+
+            .step("ProcessPayment")
+                .action(this::processPaymentAction)
+                .compensation(this::processPaymentCompensation)
+                .timeout(Duration.ofSeconds(15))
+                .build()
+
+            .step("ConfirmOrder")
+                .action(this::confirmOrderAction)
+                .noCompensation()
+                .timeout(Duration.ofSeconds(10))
+                .build()
+
+            .sagaTimeout(Duration.ofSeconds(60))
+            .build();
+}
+```
+
+### Orchestrator State Machine
+
+The `HazelcastSagaOrchestrator` executes the definition as a state machine:
+
+1. **Start** — Creates a `SagaExecution`, records saga start in `SagaStateStore`, schedules a saga-level timeout
+2. **Execute Step** — Calls `step.getAction().execute(context)` with per-step timeout; retries on failure up to `maxRetries` with configurable delay
+3. **Step Success** — Merges result data into `SagaContext`, records step completion, advances to next step
+4. **Step Failure** — Records failure, triggers compensation
+5. **Compensate** — Iterates completed steps in reverse order, executing each step's compensation lambda; skips steps with no compensation defined
+6. **Complete** — Reports final status: `COMPLETED`, `COMPENSATED`, `FAILED`, or `TIMED_OUT`
+
+### Compensation Flow
+
+Unlike choreography (which publishes compensation events via ITopic), orchestration runs compensation lambdas directly. When step 2 (ProcessPayment) fails:
+
+```
+Step 2 FAILED → Orchestrator triggers compensation
+  ├── Compensation for Step 1 (ReserveStock): HTTP POST /api/saga/inventory/release-stock
+  ├── Compensation for Step 0 (CreateOrder): Cancel order locally
+  └── Saga finalized as COMPENSATED
+```
+
+### Why HTTP Instead of ITopic for Orchestration
+
+The orchestrator uses HTTP calls instead of Hazelcast ITopic because of the [dual-instance architecture](../architecture/adr/008-dual-instance-hazelcast-architecture.md). The orchestrator runs in the Order Service and needs synchronous request-response semantics — it must know whether each step succeeded before proceeding. ITopic is fire-and-forget, making it unsuitable for the orchestrator's sequential flow.
+
+### Saga Type Names
+
+Choreographed and orchestrated sagas coexist with distinct type names:
+
+| Pattern | Saga Type | Trigger |
+|---------|-----------|---------|
+| Choreography | `OrderFulfillment` | `POST /api/orders` |
+| Orchestration | `OrderFulfillmentOrchestrated` | `POST /api/orders/orchestrated` |
+
+Both types are stored in the same `SagaStateStore` and visible in Grafana dashboards.
+
 ## Timeout Handling
 
-Sagas can get stuck if a service becomes unavailable or an event is lost. The `SagaTimeoutDetector` handles this automatically.
+Sagas can get stuck if a service becomes unavailable or an event is lost. The `SagaTimeoutDetector` handles this automatically for choreographed sagas. Orchestrated sagas use per-step timeouts built into `HazelcastSagaOrchestrator`.
 
 ### How It Works
 
@@ -188,7 +334,7 @@ The Order Service uses a 60-second timeout for `OrderFulfillment` sagas (longer 
 - A `HazelcastInstance` bean is available
 - A `SagaStateStore` bean is available
 
-## How to Add a New Saga
+## How to Add a New Choreographed Saga
 
 ### 1. Define the Saga Steps
 
@@ -283,6 +429,107 @@ saga:
 - **Integration test** the full flow with embedded Hazelcast
 - Verify compensation triggers correctly when a step fails
 - Verify timeout detection works with a short deadline in tests
+
+## How to Add a New Orchestrated Saga
+
+### 1. Create a SagaDefinition Factory
+
+Define the saga as an ordered sequence of steps using the fluent builder:
+
+```java
+@Component
+public class MySagaFactory {
+
+    private final SagaServiceClient sagaServiceClient;
+
+    public SagaDefinition create() {
+        return SagaDefinition.builder()
+                .name("MySagaType")
+
+                .step("StepOne")
+                    .action(this::stepOneAction)
+                    .compensation(this::stepOneCompensation)
+                    .timeout(Duration.ofSeconds(15))
+                    .build()
+
+                .step("StepTwo")
+                    .action(this::stepTwoAction)
+                    .noCompensation()  // Terminal step
+                    .timeout(Duration.ofSeconds(10))
+                    .build()
+
+                .sagaTimeout(Duration.ofSeconds(60))
+                .build();
+    }
+
+    private CompletableFuture<SagaStepResult> stepOneAction(SagaContext context) {
+        // Perform local work or HTTP call
+        // Store results in context for subsequent steps
+        context.put("stepOneResult", result);
+        return CompletableFuture.completedFuture(SagaStepResult.success());
+    }
+
+    private CompletableFuture<SagaStepResult> stepOneCompensation(SagaContext context) {
+        // Undo step one's work
+        return CompletableFuture.completedFuture(SagaStepResult.success());
+    }
+}
+```
+
+### 2. Create a Controller to Trigger the Saga
+
+```java
+@RestController
+@RequestMapping("/api/my-saga")
+public class MySagaController {
+
+    private final SagaOrchestrator orchestrator;
+    private final MySagaFactory sagaFactory;
+
+    @PostMapping
+    public CompletableFuture<ResponseEntity<?>> start(@RequestBody MyDTO dto) {
+        String sagaId = UUID.randomUUID().toString();
+        SagaContext context = new SagaContext();
+        context.put("inputData", dto.getValue());
+
+        return orchestrator.start(sagaId, sagaFactory.create(), context)
+                .thenApply(result -> switch (result.getStatus()) {
+                    case COMPLETED -> ResponseEntity.status(HttpStatus.CREATED).body(result);
+                    case COMPENSATED, FAILED -> ResponseEntity.status(HttpStatus.CONFLICT).body(result);
+                    default -> ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+                });
+    }
+}
+```
+
+### 3. Add HTTP Endpoints for Remote Steps
+
+Each remote service needs saga-specific endpoints that return success/failure responses:
+
+```java
+@RestController
+@RequestMapping("/api/saga/my-service")
+public class MySagaEndpoint {
+
+    @PostMapping("/do-work")
+    public ResponseEntity<?> doWork(@RequestBody Map<String, Object> payload) {
+        try {
+            // Perform the work
+            return ResponseEntity.ok(Map.of("success", true, "resultId", id));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+}
+```
+
+### 4. Test
+
+- **Unit test** the factory to verify the definition has the correct steps and timeouts
+- **Unit test** each action/compensation lambda by mocking HTTP calls
+- **Integration test** the full orchestrated flow with a running `HazelcastSagaOrchestrator`
+- Verify compensation runs in reverse order when a step fails
+- Verify per-step timeouts trigger correctly
 
 ## Resilience Patterns
 
@@ -417,7 +664,9 @@ All components use `@Autowired(required = false)` injection, so they degrade gra
 
 ### Prometheus Metrics
 
-The `SagaMetrics` class tracks:
+The `SagaMetrics` class tracks both saga-level and step-level metrics:
+
+**Saga-level metrics** (both patterns):
 
 | Metric | Type | Description |
 |--------|------|-------------|
@@ -429,9 +678,23 @@ The `SagaMetrics` class tracks:
 | `saga_timeouts_detected_total` | Counter | Timed-out sagas detected |
 | `saga_duration_seconds` | Timer | End-to-end saga duration |
 
+**Step-level metrics** (orchestrated sagas):
+
+| Metric | Type | Tags | Description |
+|--------|------|------|-------------|
+| `saga.step.duration` | Timer | `sagaType`, `stepName` | Per-step execution duration with p50/p95/p99 percentiles |
+
+The `HazelcastSagaOrchestrator` records step duration on every step completion, failure, or timeout. This enables fine-grained performance analysis — identifying which step in the saga is the bottleneck.
+
 ### Grafana Dashboard
 
-The pre-provisioned **Saga Dashboard** (`docker/grafana/dashboards/saga-dashboard.json`) visualizes these metrics. See the [Dashboard Setup Guide](dashboard-setup-guide.md) for access instructions.
+The pre-provisioned **Saga Dashboard** (`docker/grafana/dashboards/saga-dashboard.json`) includes:
+
+- Saga lifecycle panels (start, complete, fail, compensate rates) for both patterns
+- **Choreography vs Orchestration** comparison row with side-by-side duration (p50/p95) and success rate panels
+- **Orchestrated step timing breakdown** showing per-step duration for each step in the `SagaDefinition`
+
+See the [Dashboard Setup Guide](dashboard-setup-guide.md) for access instructions.
 
 ### Alerting
 
@@ -443,6 +706,7 @@ Pre-configured alerts fire on:
 
 ## References
 
-- [ADR 007: Choreographed Sagas](../architecture/adr/007-choreographed-sagas.md) — Decision rationale
+- [ADR 007: Choreographed Sagas](../architecture/adr/007-choreographed-sagas.md) — Original choreography decision rationale
+- [ADR 008: Dual-Instance Architecture](../architecture/adr/008-dual-instance-hazelcast-architecture.md) — Why orchestration uses HTTP instead of ITopic
 - [Chris Richardson: Saga Pattern](https://microservices.io/patterns/data/saga.html) — Pattern overview
 - [Dashboard Setup Guide](dashboard-setup-guide.md) — Monitoring and observability setup

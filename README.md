@@ -16,6 +16,12 @@ This project provides a production-ready event sourcing framework using Hazelcas
 - **Saga Support**: Built-in distributed transaction patterns
 - **Observability**: Prometheus metrics and structured logging
 
+### Phase 3 Features
+
+- **Orchestrated Sagas**: Central `SagaOrchestrator` drives saga steps sequentially via HTTP with per-step timeout, retry, and automatic reverse-order compensation — choose between choreography and orchestration based on your requirements ([Saga Pattern Guide](docs/guides/saga-pattern-guide.md))
+- **Resilience**: Circuit breakers and retry with exponential backoff on all saga listeners via Resilience4j; transactional outbox for guaranteed at-least-once event delivery; dead letter queue for failed events with admin endpoints; idempotency guards for exactly-once processing
+- **Saga Observability**: Per-step duration metrics (`saga.step.duration`), Grafana comparison panels showing choreography vs orchestration side-by-side, MCP saga type filtering
+
 ### Phase 2 Features
 
 - **Choreographed Sagas**: Order fulfillment saga coordinating across all four services — Order, Inventory, Payment, and Account — with automatic timeout detection and compensation ([Saga Pattern Guide](docs/guides/saga-pattern-guide.md))
@@ -195,7 +201,7 @@ curl http://localhost:8082/api/products/<product-id>/similar?limit=5
 - [Docker Deployment](docker/README.md) - Docker Compose configuration
 - [Architecture](docs/architecture/) - System design and patterns
 - [Demo Walkthrough](docs/demo/demo-walkthrough.md) - Step-by-step demo guide
-- [Saga Pattern Guide](docs/guides/saga-pattern-guide.md) - Choreographed saga implementation
+- [Saga Pattern Guide](docs/guides/saga-pattern-guide.md) - Choreographed and orchestrated saga patterns
 - [Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md) - Grafana, Prometheus, and Jaeger setup
 - [MCP Server Guide](mcp-server/README.md) - AI assistant integration via Model Context Protocol
 - [MCP Examples](docs/guides/mcp-examples.md) - Example AI assistant conversations
