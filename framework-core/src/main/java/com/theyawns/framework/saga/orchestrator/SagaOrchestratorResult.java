@@ -151,6 +151,24 @@ public final class SagaOrchestratorResult {
     }
 
     /**
+     * Creates a result for a saga that is still in progress.
+     *
+     * <p>Used by {@link SagaOrchestrator#getStatus(String)} to report the current
+     * state of an active saga.
+     *
+     * @param sagaId the saga instance ID
+     * @param sagaName the saga definition name
+     * @param startedAt when the saga started
+     * @param stepsCompleted number of steps completed so far
+     * @return an in-progress result
+     */
+    public static SagaOrchestratorResult inProgress(final String sagaId, final String sagaName,
+                                                      final Instant startedAt, final int stepsCompleted) {
+        return new SagaOrchestratorResult(sagaId, sagaName, SagaStatus.IN_PROGRESS,
+                startedAt, Instant.now(), stepsCompleted, 0, null, null);
+    }
+
+    /**
      * Creates a result for a saga that timed out.
      *
      * @param sagaId the saga instance ID
