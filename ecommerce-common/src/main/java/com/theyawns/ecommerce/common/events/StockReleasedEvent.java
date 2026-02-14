@@ -30,7 +30,6 @@ import java.time.Instant;
 public class StockReleasedEvent extends DomainEvent<Product, String>
         implements SagaEvent<Product, String> {
 
-    private static final long serialVersionUID = 1L;
     public static final String SCHEMA_NAME = "StockReleasedEvent";
     public static final String EVENT_TYPE = "StockReleased";
 

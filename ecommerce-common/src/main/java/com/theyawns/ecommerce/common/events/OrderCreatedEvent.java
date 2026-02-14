@@ -38,7 +38,6 @@ import java.util.List;
 public class OrderCreatedEvent extends DomainEvent<Order, String>
         implements SagaEvent<Order, String> {
 
-    private static final long serialVersionUID = 1L;
     public static final String SCHEMA_NAME = "OrderCreatedEvent";
     public static final String EVENT_TYPE = "OrderCreated";
 

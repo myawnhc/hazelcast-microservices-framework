@@ -30,7 +30,6 @@ import java.time.Instant;
 public class PaymentRefundedEvent extends DomainEvent<Payment, String>
         implements SagaEvent<Payment, String> {
 
-    private static final long serialVersionUID = 1L;
     public static final String SCHEMA_NAME = "PaymentRefundedEvent";
     public static final String EVENT_TYPE = "PaymentRefunded";
 

@@ -3,7 +3,6 @@ package com.theyawns.framework.event;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.framework.domain.DomainObject;
 
-import java.io.Serializable;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.function.UnaryOperator;
@@ -26,9 +25,7 @@ import java.util.function.UnaryOperator;
  * @since 1.0
  */
 public abstract class DomainEvent<D extends DomainObject<K>, K>
-        implements UnaryOperator<GenericRecord>, Serializable {
-
-    private static final long serialVersionUID = 1L;
+        implements UnaryOperator<GenericRecord> {
 
     // Event identification
     protected String eventId;

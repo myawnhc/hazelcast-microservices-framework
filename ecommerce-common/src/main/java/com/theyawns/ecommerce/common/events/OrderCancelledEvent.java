@@ -38,7 +38,6 @@ import java.time.Instant;
 public class OrderCancelledEvent extends DomainEvent<Order, String>
         implements SagaEvent<Order, String> {
 
-    private static final long serialVersionUID = 1L;
     public static final String SCHEMA_NAME = "OrderCancelledEvent";
     public static final String EVENT_TYPE = "OrderCancelled";
 

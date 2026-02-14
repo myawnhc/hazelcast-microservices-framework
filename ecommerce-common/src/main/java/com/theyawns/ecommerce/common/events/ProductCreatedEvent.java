@@ -24,7 +24,6 @@ import java.time.Instant;
  */
 public class ProductCreatedEvent extends DomainEvent<Product, String> {
 
-    private static final long serialVersionUID = 1L;
     public static final String SCHEMA_NAME = "ProductCreatedEvent";
     public static final String EVENT_TYPE = "ProductCreated";
 

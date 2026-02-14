@@ -22,7 +22,6 @@ import java.time.Instant;
  */
 public class CustomerStatusChangedEvent extends DomainEvent<Customer, String> {
 
-    private static final long serialVersionUID = 1L;
     public static final String SCHEMA_NAME = "CustomerStatusChangedEvent";
     public static final String EVENT_TYPE = "CustomerStatusChanged";
 

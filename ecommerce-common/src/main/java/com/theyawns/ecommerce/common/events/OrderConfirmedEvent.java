@@ -24,7 +24,6 @@ import java.time.Instant;
  */
 public class OrderConfirmedEvent extends DomainEvent<Order, String> {
 
-    private static final long serialVersionUID = 1L;
     public static final String SCHEMA_NAME = "OrderConfirmedEvent";
     public static final String EVENT_TYPE = "OrderConfirmed";
 

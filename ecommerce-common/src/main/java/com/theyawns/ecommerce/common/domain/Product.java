@@ -27,7 +27,6 @@ import java.util.Objects;
  */
 public class Product implements DomainObject<String> {
 
-    private static final long serialVersionUID = 1L;
     public static final String SCHEMA_NAME = "Product";
 
     /**

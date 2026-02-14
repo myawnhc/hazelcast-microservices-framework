@@ -46,13 +46,13 @@ class DomainObjectTest {
     }
 
     @Test
-    @DisplayName("should implement Serializable interface")
-    void shouldBeSerializable() {
+    @DisplayName("should not implement Serializable - uses Compact Serialization via GenericRecord")
+    void shouldNotBeSerializable() {
         // Arrange
-        TestDomainObject obj = new TestDomainObject("key-abc", "Serializable Test");
+        TestDomainObject obj = new TestDomainObject("key-abc", "Compact Serialization Test");
 
-        // Assert
-        assertTrue(obj instanceof java.io.Serializable);
+        // Assert - DomainObject uses Hazelcast Compact Serialization, not Java Serialization
+        assertFalse(obj instanceof java.io.Serializable);
     }
 
     /**
