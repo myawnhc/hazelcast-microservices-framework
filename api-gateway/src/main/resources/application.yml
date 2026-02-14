@@ -48,6 +48,13 @@ spring:
           predicates:
             - Path=/api/saga/payment/**
 
+# Rate limiting
+gateway:
+  rate-limit:
+    enabled: true
+    read-limit: 100     # GET/HEAD requests per second per client IP
+    write-limit: 20     # POST/PUT/DELETE/PATCH requests per second per client IP
+
 server:
   port: 8080
 
