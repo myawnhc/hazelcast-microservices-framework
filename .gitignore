@@ -5,6 +5,7 @@
 /order-service/target/
 /payment-service/target/
 /mcp-server/target/
+/api-gateway/target/
 
 # Stray build artifacts
 /io/
