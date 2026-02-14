@@ -7,41 +7,144 @@ spring:
           uri: http://account-service:8081
           predicates:
             - Path=/api/customers/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: account-service
+                fallbackUri: forward:/fallback/account-service
 
         # Inventory Service
         - id: inventory-service
           uri: http://inventory-service:8082
           predicates:
             - Path=/api/products/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: inventory-service
+                fallbackUri: forward:/fallback/inventory-service
 
         - id: inventory-saga
           uri: http://inventory-service:8082
           predicates:
             - Path=/api/saga/inventory/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: inventory-service
+                fallbackUri: forward:/fallback/inventory-service
 
         # Order Service
         - id: order-service
           uri: http://order-service:8083
           predicates:
             - Path=/api/orders/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: order-service
+                fallbackUri: forward:/fallback/order-service
 
         - id: order-sagas
           uri: http://order-service:8083
           predicates:
             - Path=/api/sagas/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: order-service
+                fallbackUri: forward:/fallback/order-service
 
         - id: order-metrics
           uri: http://order-service:8083
           predicates:
             - Path=/api/metrics/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: order-service
+                fallbackUri: forward:/fallback/order-service
 
         # Payment Service
         - id: payment-service
           uri: http://payment-service:8084
           predicates:
             - Path=/api/payments/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: payment-service
+                fallbackUri: forward:/fallback/payment-service
 
         - id: payment-saga
           uri: http://payment-service:8084
           predicates:
             - Path=/api/saga/payment/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: payment-service
+                fallbackUri: forward:/fallback/payment-service
+
+      # CORS configuration for browser-based clients
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins:
+              - "http://localhost:3000"
+              - "http://localhost:5173"
+              - "http://localhost:8080"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowed-headers: "*"
+            exposed-headers:
+              - X-Correlation-ID
+              - X-Response-Time
+              - X-RateLimit-Limit
+              - X-RateLimit-Remaining
+            allow-credentials: true
+            max-age: 3600
+
+# Health check timeout
+gateway:
+  health:
+    timeout: 3s
+
+# Resilience4j circuit breaker configuration
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      account-service:
+        base-config: default
+      inventory-service:
+        base-config: default
+      order-service:
+        base-config: default
+      payment-service:
+        base-config: default
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 5s
+    instances:
+      account-service:
+        base-config: default
+      inventory-service:
+        base-config: default
+      order-service:
+        base-config: default
+      payment-service:
+        base-config: default

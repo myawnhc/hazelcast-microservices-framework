@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cloud.gateway.filter.FilterDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinitionLocator;
 
@@ -82,6 +83,26 @@ class GatewayRouteConfigTest {
     @DisplayName("should configure payment-saga route")
     void shouldConfigurePaymentSagaRoute() {
         assertRouteExists("payment-saga", "/api/saga/payment/**", "http://localhost:8084");
+    }
+
+    @Test
+    @DisplayName("should have CircuitBreaker filter on all routes")
+    void shouldHaveCircuitBreakerFilterOnAllRoutes() {
+        final List<RouteDefinition> routes = routeDefinitionLocator.getRouteDefinitions()
+                .collectList()
+                .block();
+
+        assertThat(routes).isNotNull();
+
+        for (final RouteDefinition route : routes) {
+            final boolean hasCircuitBreaker = route.getFilters().stream()
+                    .map(FilterDefinition::getName)
+                    .anyMatch("CircuitBreaker"::equals);
+
+            assertThat(hasCircuitBreaker)
+                    .as("Route '%s' should have CircuitBreaker filter", route.getId())
+                    .isTrue();
+        }
     }
 
     /**
