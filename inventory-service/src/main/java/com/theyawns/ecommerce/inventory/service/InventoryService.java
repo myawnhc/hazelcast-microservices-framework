@@ -306,6 +306,89 @@ public class InventoryService implements ProductService {
     }
 
     /**
+     * Reserves stock for an order as part of an orchestrated saga.
+     *
+     * <p>Same business logic as {@link #reserveStockForSaga} but does not set
+     * SagaMetadata on the event or record saga state. The orchestrator manages
+     * all saga state externally. Still tracks the reservation for compensation.
+     *
+     * @param productId the product ID
+     * @param quantity the quantity to reserve
+     * @param orderId the order ID
+     * @return a future that completes with the updated product
+     * @throws ProductNotFoundException if product does not exist
+     * @throws InsufficientStockException if insufficient stock available
+     */
+    public CompletableFuture<Product> reserveStockOrchestrated(
+            final String productId, final int quantity, final String orderId) {
+
+        logger.info("Reserving {} units of product {} for order {} (orchestrated)", quantity, productId, orderId);
+
+        Product product = getProductOrThrow(productId);
+
+        int available = product.getAvailableQuantity();
+        if (available < quantity) {
+            throw new InsufficientStockException(productId, quantity, available);
+        }
+
+        StockReservedEvent event = new StockReservedEvent(productId, quantity, orderId);
+
+        return controller.handleEvent(event)
+                .thenApply(completionInfo -> {
+                    logger.debug("Stock reserved event processed (orchestrated): {}", completionInfo.getEventId());
+
+                    // Track the reservation for potential compensation
+                    trackReservation(orderId, productId, quantity);
+
+                    return getProductOrThrow(productId);
+                });
+    }
+
+    /**
+     * Releases all previously reserved stock for an order as part of an orchestrated saga.
+     *
+     * <p>Same business logic as {@link #releaseStockForSaga} but does not set
+     * SagaMetadata or record saga state. The orchestrator handles compensation tracking.
+     *
+     * @param orderId the order ID whose reservations should be released
+     * @param reason the reason for releasing
+     * @return a future that completes with the last updated product (or null if no reservations)
+     */
+    public CompletableFuture<Product> releaseStockOrchestrated(
+            final String orderId, final String reason) {
+
+        logger.info("Releasing reserved stock for order {} (orchestrated compensation)", orderId);
+
+        List<String> reservationEntries = getReservations(orderId);
+        if (reservationEntries.isEmpty()) {
+            logger.warn("No tracked reservations found for order: {} (orchestrated)", orderId);
+            return CompletableFuture.completedFuture(null);
+        }
+
+        CompletableFuture<Product> lastFuture = CompletableFuture.completedFuture(null);
+
+        for (String entry : reservationEntries) {
+            String[] parts = entry.split(":");
+            String productId = parts[0];
+            int qty = Integer.parseInt(parts[1]);
+
+            logger.info("Releasing {} units of product {} for order {} (orchestrated)", qty, productId, orderId);
+
+            StockReleasedEvent releaseEvent = new StockReleasedEvent(productId, qty, orderId, reason);
+            releaseEvent.setIsCompensating(true);
+
+            lastFuture = controller.handleEvent(releaseEvent)
+                    .thenApply(completionInfo -> {
+                        logger.debug("Stock released for product {} (orchestrated, orderId: {})",
+                                productId, orderId);
+                        return getProductOrThrow(productId);
+                    });
+        }
+
+        return lastFuture;
+    }
+
+    /**
      * Releases previously reserved stock.
      *
      * @param productId the product ID

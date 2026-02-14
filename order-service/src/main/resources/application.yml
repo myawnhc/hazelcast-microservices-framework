@@ -54,6 +54,13 @@ framework:
     log-edition-status: true
     log-feature-status: true
     expose-in-actuator: true
+  saga:
+    orchestrator:
+      services:
+        inventory:
+          base-url: ${INVENTORY_SERVICE_URL:http://localhost:8082}
+        payment:
+          base-url: ${PAYMENT_SERVICE_URL:http://localhost:8084}
   resilience:
     enabled: true
     circuit-breaker:

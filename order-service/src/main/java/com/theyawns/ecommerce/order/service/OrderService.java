@@ -158,6 +158,48 @@ public class OrderService implements OrderOperations {
     }
 
     /**
+     * Creates a new order without saga metadata (for orchestrated saga use).
+     *
+     * <p>Same business logic as {@link #createOrder(OrderDTO)} but does not
+     * start a choreographed saga, set SagaMetadata on the event, or record
+     * saga state. The orchestrator manages all saga state externally.
+     *
+     * @param dto the order data
+     * @return a future that completes with the created order
+     */
+    @Override
+    public CompletableFuture<Order> createOrderPlain(OrderDTO dto) {
+        String orderId = UUID.randomUUID().toString();
+        UUID correlationId = UUID.randomUUID();
+
+        logger.info("Creating order (orchestrated) with ID: {} for customer: {}", orderId, dto.getCustomerId());
+
+        // Convert DTOs to domain objects
+        List<OrderLineItem> lineItems = dto.getLineItems().stream()
+                .map(this::toOrderLineItem)
+                .collect(Collectors.toList());
+
+        OrderCreatedEvent event = new OrderCreatedEvent(
+                orderId,
+                dto.getCustomerId(),
+                lineItems,
+                dto.getShippingAddress()
+        );
+        event.setCustomerName(dto.getCustomerName());
+        event.setCustomerEmail(dto.getCustomerEmail());
+
+        return controller.handleEvent(event, correlationId)
+                .thenApply(completionInfo -> {
+                    logger.debug("Order created event processed (orchestrated): {}", completionInfo.getEventId());
+
+                    // Index order by customer for getOrdersByCustomer
+                    indexOrderByCustomer(dto.getCustomerId(), orderId);
+
+                    return getOrderOrThrow(orderId);
+                });
+    }
+
+    /**
      * Retrieves an order by ID from the materialized view.
      *
      * @param orderId the order ID

@@ -79,6 +79,35 @@ public interface PaymentOperations {
                                                       String sagaId, String correlationId);
 
     /**
+     * Processes a payment as part of an orchestrated saga.
+     *
+     * <p>Same business logic as {@link #processPaymentForOrder} but does not set
+     * SagaMetadata or record saga state. The orchestrator manages state externally.
+     *
+     * @param orderId the order ID
+     * @param customerId the customer ID
+     * @param amount the payment amount as string
+     * @param currency the currency code
+     * @param method the payment method
+     * @return a future that completes with the processed payment
+     */
+    CompletableFuture<Payment> processPaymentOrchestrated(String orderId, String customerId,
+                                                            String amount, String currency,
+                                                            String method);
+
+    /**
+     * Refunds a payment as part of an orchestrated saga compensation.
+     *
+     * <p>Same business logic as {@link #refundPaymentForSaga} but does not set
+     * SagaMetadata or record saga state. The orchestrator handles compensation tracking.
+     *
+     * @param paymentId the payment ID
+     * @param reason the refund reason
+     * @return a future that completes with the refunded payment
+     */
+    CompletableFuture<Payment> refundPaymentOrchestrated(String paymentId, String reason);
+
+    /**
      * Checks if a payment exists.
      *
      * @param paymentId the payment ID

@@ -91,6 +91,18 @@ public interface OrderOperations {
     boolean orderExists(String orderId);
 
     /**
+     * Creates a new order without saga metadata (for orchestrated saga use).
+     *
+     * <p>Same business logic as {@link #createOrder} but does not start a
+     * choreographed saga or record saga state. The orchestrator manages
+     * all saga state externally.
+     *
+     * @param dto the order data
+     * @return a future that completes with the created order
+     */
+    CompletableFuture<Order> createOrderPlain(OrderDTO dto);
+
+    /**
      * Lists all orders, up to the specified limit.
      *
      * @param limit the maximum number of orders to return

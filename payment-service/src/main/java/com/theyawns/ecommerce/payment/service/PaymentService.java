@@ -216,6 +216,100 @@ public class PaymentService implements PaymentOperations {
     }
 
     /**
+     * Processes a payment as part of an orchestrated saga.
+     *
+     * <p>Same business logic as {@link #processPaymentForOrder} but does not set
+     * SagaMetadata on events or record saga state. The orchestrator manages all
+     * saga state externally.
+     *
+     * @param orderId the order ID
+     * @param customerId the customer ID
+     * @param amount the payment amount as string
+     * @param currency the currency code
+     * @param method the payment method
+     * @return a future that completes with the processed payment
+     */
+    @Override
+    public CompletableFuture<Payment> processPaymentOrchestrated(String orderId, String customerId,
+                                                                    String amount, String currency,
+                                                                    String method) {
+        String paymentId = UUID.randomUUID().toString();
+        logger.info("Processing payment (orchestrated) with ID: {} for order: {}", paymentId, orderId);
+
+        BigDecimal amountDecimal = new BigDecimal(amount);
+        String paymentMethod = method != null ? method : Payment.PaymentMethod.CREDIT_CARD.name();
+
+        boolean paymentSucceeded = simulatePaymentProcessing(amountDecimal, paymentMethod);
+
+        if (paymentSucceeded) {
+            String transactionId = generateTransactionId();
+
+            PaymentProcessedEvent event = new PaymentProcessedEvent(
+                    paymentId, orderId, customerId,
+                    amountDecimal, currency, transactionId, paymentMethod
+            );
+
+            return controller.handleEvent(event)
+                    .thenApply(completionInfo -> {
+                        logger.info("Payment processed (orchestrated): paymentId={}, orderId={}",
+                                paymentId, orderId);
+                        indexPaymentByOrder(orderId, paymentId);
+                        return getPaymentOrThrow(paymentId);
+                    });
+        } else {
+            PaymentFailedEvent event = new PaymentFailedEvent(
+                    paymentId, orderId, customerId,
+                    amountDecimal, currency, "Payment declined by processor", paymentMethod
+            );
+
+            return controller.handleEvent(event)
+                    .thenApply(completionInfo -> {
+                        logger.warn("Payment failed (orchestrated): paymentId={}, orderId={}",
+                                paymentId, orderId);
+                        return getPaymentOrThrow(paymentId);
+                    });
+        }
+    }
+
+    /**
+     * Refunds a payment as part of an orchestrated saga compensation.
+     *
+     * <p>Same business logic as {@link #refundPaymentForSaga} but does not set
+     * SagaMetadata or record saga state. The orchestrator handles compensation tracking.
+     *
+     * @param paymentId the payment ID
+     * @param reason the refund reason
+     * @return a future that completes with the refunded payment
+     */
+    @Override
+    public CompletableFuture<Payment> refundPaymentOrchestrated(String paymentId, String reason) {
+        logger.info("Refunding payment (orchestrated): {} (reason: {})", paymentId, reason);
+
+        Payment payment = getPaymentOrThrow(paymentId);
+
+        if (!payment.canRefund()) {
+            throw new InvalidPaymentStateException(paymentId, payment.getStatus().name(), "refund");
+        }
+
+        String refundTransactionId = generateRefundTransactionId();
+
+        PaymentRefundedEvent event = new PaymentRefundedEvent(
+                paymentId,
+                payment.getOrderId(),
+                payment.getAmount() != null ? payment.getAmount().toString() : null,
+                reason,
+                refundTransactionId
+        );
+        event.setIsCompensating(true);
+
+        return controller.handleEvent(event)
+                .thenApply(completionInfo -> {
+                    logger.info("Payment refunded (orchestrated): paymentId={}", paymentId);
+                    return getPaymentOrThrow(paymentId);
+                });
+    }
+
+    /**
      * Retrieves a payment by ID from the materialized view.
      *
      * @param paymentId the payment ID
