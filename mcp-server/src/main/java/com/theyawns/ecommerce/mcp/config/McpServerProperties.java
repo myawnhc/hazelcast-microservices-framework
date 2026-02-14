@@ -36,6 +36,19 @@ public class McpServerProperties {
      */
     private String paymentUrl = "http://localhost:8084";
 
+    /**
+     * Whether to route requests through the API Gateway instead of directly
+     * to individual services. When enabled, all service URLs are ignored and
+     * the {@code gatewayUrl} is used as the base URL for all requests.
+     */
+    private boolean gatewayEnabled = false;
+
+    /**
+     * Base URL for the API Gateway (default: http://localhost:8080).
+     * Only used when {@code gatewayEnabled} is true.
+     */
+    private String gatewayUrl = "http://localhost:8080";
+
     public String getAccountUrl() {
         return accountUrl;
     }
@@ -66,5 +79,33 @@ public class McpServerProperties {
 
     public void setPaymentUrl(String paymentUrl) {
         this.paymentUrl = paymentUrl;
+    }
+
+    public boolean isGatewayEnabled() {
+        return gatewayEnabled;
+    }
+
+    public void setGatewayEnabled(boolean gatewayEnabled) {
+        this.gatewayEnabled = gatewayEnabled;
+    }
+
+    public String getGatewayUrl() {
+        return gatewayUrl;
+    }
+
+    public void setGatewayUrl(String gatewayUrl) {
+        this.gatewayUrl = gatewayUrl;
+    }
+
+    /**
+     * Returns the effective base URL for the given service. When gateway
+     * routing is enabled, returns the gateway URL; otherwise returns the
+     * direct service URL.
+     *
+     * @param directUrl the direct service URL
+     * @return the effective base URL
+     */
+    public String resolveBaseUrl(String directUrl) {
+        return gatewayEnabled ? gatewayUrl : directUrl;
     }
 }

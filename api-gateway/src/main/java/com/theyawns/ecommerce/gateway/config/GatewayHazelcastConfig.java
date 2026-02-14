@@ -29,10 +29,10 @@ public class GatewayHazelcastConfig {
      *
      * @return a standalone HazelcastInstance for rate limit state
      */
-    @Bean
+    @Bean(destroyMethod = "shutdown")
     public HazelcastInstance hazelcastInstance() {
         final Config config = new Config();
-        config.setInstanceName("gateway-hazelcast");
+        config.setInstanceName("gateway-hazelcast-" + System.identityHashCode(this));
         config.setClusterName("gateway-rate-limit");
 
         // Standalone — no cluster join

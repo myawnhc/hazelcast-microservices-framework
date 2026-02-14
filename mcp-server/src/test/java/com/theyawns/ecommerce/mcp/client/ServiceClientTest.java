@@ -91,6 +91,42 @@ class ServiceClientTest {
     }
 
     @Nested
+    @DisplayName("Gateway Routing")
+    class GatewayRoutingTests {
+
+        @Test
+        @DisplayName("should route through gateway when enabled")
+        void shouldRouteThoughGatewayWhenEnabled() {
+            properties.setGatewayEnabled(true);
+            properties.setGatewayUrl("http://gateway:8080");
+
+            assertEquals("http://gateway:8080/api/customers", serviceClient.resolveUrl("customer"));
+            assertEquals("http://gateway:8080/api/products", serviceClient.resolveUrl("product"));
+            assertEquals("http://gateway:8080/api/orders", serviceClient.resolveUrl("order"));
+            assertEquals("http://gateway:8080/api/payments", serviceClient.resolveUrl("payment"));
+        }
+
+        @Test
+        @DisplayName("should use direct URLs when gateway is disabled")
+        void shouldUseDirectUrlsWhenGatewayDisabled() {
+            properties.setGatewayEnabled(false);
+
+            assertEquals("http://localhost:8081/api/customers", serviceClient.resolveUrl("customer"));
+            assertEquals("http://localhost:8082/api/products", serviceClient.resolveUrl("product"));
+            assertEquals("http://localhost:8083/api/orders", serviceClient.resolveUrl("order"));
+            assertEquals("http://localhost:8084/api/payments", serviceClient.resolveUrl("payment"));
+        }
+
+        @Test
+        @DisplayName("should default to gateway disabled")
+        void shouldDefaultToGatewayDisabled() {
+            McpServerProperties freshProperties = new McpServerProperties();
+            assertEquals(false, freshProperties.isGatewayEnabled());
+            assertEquals("http://localhost:8080", freshProperties.getGatewayUrl());
+        }
+    }
+
+    @Nested
     @DisplayName("Saga and Metrics Methods")
     class SagaAndMetricsTests {
 

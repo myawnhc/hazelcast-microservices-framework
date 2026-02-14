@@ -222,7 +222,7 @@ public class ServiceClient implements ServiceClientOperations {
      * @return the saga state as a map
      */
     public Map<String, Object> getSaga(String sagaId) {
-        String url = properties.getOrderUrl() + "/api/sagas/" + sagaId;
+        String url = orderBaseUrl() + "/api/sagas/" + sagaId;
         logger.debug("GET {}", url);
 
         try {
@@ -249,7 +249,7 @@ public class ServiceClient implements ServiceClientOperations {
      * @return list of saga states as maps
      */
     public List<Map<String, Object>> listSagas(String status, String type, int limit) {
-        StringBuilder urlBuilder = new StringBuilder(properties.getOrderUrl())
+        StringBuilder urlBuilder = new StringBuilder(orderBaseUrl())
                 .append("/api/sagas?limit=").append(limit);
         if (status != null && !status.isBlank()) {
             urlBuilder.append("&status=").append(status);
@@ -280,7 +280,7 @@ public class ServiceClient implements ServiceClientOperations {
      * @return the created order as a map
      */
     public Map<String, Object> createOrchestratedOrder(Map<String, Object> payload) {
-        String url = properties.getOrderUrl() + "/api/orders/orchestrated";
+        String url = orderBaseUrl() + "/api/orders/orchestrated";
         logger.debug("POST {}", url);
 
         try {
@@ -305,7 +305,7 @@ public class ServiceClient implements ServiceClientOperations {
      * @return the metrics summary as a map
      */
     public Map<String, Object> getMetricsSummary() {
-        String url = properties.getOrderUrl() + "/api/metrics/summary";
+        String url = orderBaseUrl() + "/api/metrics/summary";
         logger.debug("GET {}", url);
 
         try {
@@ -330,13 +330,20 @@ public class ServiceClient implements ServiceClientOperations {
      */
     String resolveUrl(String viewName) {
         return switch (viewName.toLowerCase()) {
-            case "customer" -> properties.getAccountUrl() + "/api/customers";
-            case "product" -> properties.getInventoryUrl() + "/api/products";
-            case "order" -> properties.getOrderUrl() + "/api/orders";
-            case "payment" -> properties.getPaymentUrl() + "/api/payments";
+            case "customer" -> properties.resolveBaseUrl(properties.getAccountUrl()) + "/api/customers";
+            case "product" -> properties.resolveBaseUrl(properties.getInventoryUrl()) + "/api/products";
+            case "order" -> properties.resolveBaseUrl(properties.getOrderUrl()) + "/api/orders";
+            case "payment" -> properties.resolveBaseUrl(properties.getPaymentUrl()) + "/api/payments";
             default -> throw new IllegalArgumentException("Unknown view: " + viewName
                     + ". Available views: customer, product, order, payment");
         };
+    }
+
+    /**
+     * Returns the effective order service base URL (gateway or direct).
+     */
+    private String orderBaseUrl() {
+        return properties.resolveBaseUrl(properties.getOrderUrl());
     }
 
     private Map<String, Object> parseMap(String json) {

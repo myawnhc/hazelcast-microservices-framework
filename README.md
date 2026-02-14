@@ -20,6 +20,7 @@ This project provides a production-ready event sourcing framework using Hazelcas
 
 - **Orchestrated Sagas**: Central `SagaOrchestrator` drives saga steps sequentially via HTTP with per-step timeout, retry, and automatic reverse-order compensation — choose between choreography and orchestration based on your requirements ([Saga Pattern Guide](docs/guides/saga-pattern-guide.md))
 - **Resilience**: Circuit breakers and retry with exponential backoff on all saga listeners via Resilience4j; transactional outbox for guaranteed at-least-once event delivery; dead letter queue for failed events with admin endpoints; idempotency guards for exactly-once processing
+- **API Gateway**: Spring Cloud Gateway single entry point with path-based routing, Hazelcast-backed per-IP rate limiting, correlation ID propagation, per-route circuit breakers, CORS, aggregated health checks, and consistent JSON error responses ([API Gateway](api-gateway/README.md))
 - **Saga Observability**: Per-step duration metrics (`saga.step.duration`), Grafana comparison panels showing choreography vs orchestration side-by-side, MCP saga type filtering
 
 ### Phase 2 Features
@@ -38,34 +39,40 @@ This project provides a production-ready event sourcing framework using Hazelcas
 │  AI Assistant        │  │              Client Applications                │
 │  (Claude, etc.)      │  └─────────────────────────────────────────────────┘
 └──────────┬───────────┘                       │
-           │ MCP            ┌──────────────────┼──────────────────┐
-           ▼                │         ┌────────┴────────┐         │
-   ┌──────────────┐         ▼         ▼                 ▼         ▼
-   │  MCP Server  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
-   │   :8085      │─▶│ Account  │ │Inventory │ │  Order   │ │ Payment  │
-   └──────────────┘  │  :8081   │ │  :8082   │ │  :8083   │ │  :8084   │
-                     └──────────┘ └──────────┘ └──────────┘ └──────────┘
-                          │            │             │            │
-                          └────────────┴──────┬──────┴────────────┘
-                                              │
-                          ┌───────────────────┴───────────────────┐
-                          │          Hazelcast Cluster            │
-                          │  ┌─────────┐ ┌─────────┐ ┌────────┐  │
-                          │  │  Node 1 │ │  Node 2 │ │ Node 3 │  │
-                          │  │  :5701  │ │  :5702  │ │  :5703 │  │
-                          │  └─────────┘ └─────────┘ └────────┘  │
-                          │                                      │
-                          │  ┌──────────────────────────────┐    │
-                          │  │ Event Stores (IMap)          │    │
-                          │  │ Materialized Views (IMap)    │    │
-                          │  │ Event Bus (ITopic)           │    │
-                          │  │ Jet Pipelines                │    │
-                          │  └──────────────────────────────┘    │
-                          └──────────────────────────────────────┘
-              ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-              │  Prometheus  │  │   Grafana    │  │    Jaeger    │
-              │   :9090      │  │   :3000      │  │   :16686     │
-              └──────────────┘  └──────────────┘  └──────────────┘
+           │ MCP                               ▼
+           ▼                        ┌─────────────────────┐
+   ┌──────────────┐                 │    API Gateway      │
+   │  MCP Server  │────────────────▶│      :8080          │
+   │   :8085      │                 │  Rate Limit ● CORS  │
+   └──────────────┘                 │  Circuit Breaker    │
+                                    └─────────┬───────────┘
+                       ┌────────┬─────────────┼──────────┬────────┐
+                       ▼        ▼             ▼          ▼        ▼
+                 ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+                 │ Account  │ │Inventory │ │  Order   │ │ Payment  │
+                 │  :8081   │ │  :8082   │ │  :8083   │ │  :8084   │
+                 └──────────┘ └──────────┘ └──────────┘ └──────────┘
+                      │            │             │            │
+                      └────────────┴──────┬──────┴────────────┘
+                                          │
+                      ┌───────────────────┴───────────────────┐
+                      │          Hazelcast Cluster            │
+                      │  ┌─────────┐ ┌─────────┐ ┌────────┐  │
+                      │  │  Node 1 │ │  Node 2 │ │ Node 3 │  │
+                      │  │  :5701  │ │  :5702  │ │  :5703 │  │
+                      │  └─────────┘ └─────────┘ └────────┘  │
+                      │                                      │
+                      │  ┌──────────────────────────────┐    │
+                      │  │ Event Stores (IMap)          │    │
+                      │  │ Materialized Views (IMap)    │    │
+                      │  │ Event Bus (ITopic)           │    │
+                      │  │ Jet Pipelines                │    │
+                      │  └──────────────────────────────┘    │
+                      └──────────────────────────────────────┘
+          ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+          │  Prometheus  │  │   Grafana    │  │    Jaeger    │
+          │   :9090      │  │   :3000      │  │   :16686     │
+          └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
 ## Modules
@@ -78,6 +85,7 @@ This project provides a production-ready event sourcing framework using Hazelcas
 | [inventory-service](inventory-service/README.md) | Product catalog and stock management |
 | [order-service](order-service/README.md) | Order lifecycle management |
 | [payment-service](payment-service/README.md) | Payment processing and refunds |
+| [api-gateway](api-gateway/README.md) | API Gateway (routing, rate limiting, circuit breakers) |
 | [mcp-server](mcp-server/README.md) | AI assistant integration (MCP) |
 
 ## Quick Start
@@ -111,7 +119,10 @@ mvn clean package -DskipTests
 ### Verify Services
 
 ```bash
-# Check health
+# Check gateway health (aggregates all downstream services)
+curl http://localhost:8080/actuator/health  # API Gateway
+
+# Or check individual services directly
 curl http://localhost:8081/actuator/health  # Account Service
 curl http://localhost:8082/actuator/health  # Inventory Service
 curl http://localhost:8083/actuator/health  # Order Service
@@ -202,6 +213,7 @@ curl http://localhost:8082/api/products/<product-id>/similar?limit=5
 - [Architecture](docs/architecture/) - System design and patterns
 - [Demo Walkthrough](docs/demo/demo-walkthrough.md) - Step-by-step demo guide
 - [Saga Pattern Guide](docs/guides/saga-pattern-guide.md) - Choreographed and orchestrated saga patterns
+- [API Gateway](api-gateway/README.md) - Routing, rate limiting, circuit breakers, and CORS
 - [Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md) - Grafana, Prometheus, and Jaeger setup
 - [MCP Server Guide](mcp-server/README.md) - AI assistant integration via Model Context Protocol
 - [MCP Examples](docs/guides/mcp-examples.md) - Example AI assistant conversations
@@ -283,6 +295,7 @@ The bundled `load-test.sh` script uses `curl` in bash subshells, which adds sign
 | Metrics | Micrometer/Prometheus | - |
 | Dashboards | Grafana | 10.3.x |
 | Tracing | Jaeger (OTLP) | - |
+| API Gateway | Spring Cloud Gateway | 2023.0.x |
 | AI Integration | Spring AI MCP Server | 1.0.0 |
 | API Docs | OpenAPI/Swagger | 3.0 |
 
@@ -296,6 +309,7 @@ hazelcast-microservices-framework/
 ├── inventory-service/       # Product service (:8082)
 ├── order-service/           # Order service (:8083)
 ├── payment-service/         # Payment service (:8084)
+├── api-gateway/             # Spring Cloud Gateway (:8080)
 ├── mcp-server/              # AI assistant MCP server (:8085)
 ├── docker/                  # Docker Compose, Grafana dashboards, Prometheus config
 ├── scripts/                 # Build, start, stop, demo scripts
