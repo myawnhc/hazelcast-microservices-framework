@@ -374,7 +374,7 @@ spring:
 ### Day 12: Rate Limiting & Request Logging
 
 **Tasks**:
-1. Add Redis-backed rate limiting (or in-memory for demo)
+1. Add Hazelcast-backed rate limiting using IMap with sliding-window token bucket
 2. Configure rate limits per route (e.g., 100 req/s for reads, 20 req/s for writes)
 3. Add request/response logging filter
 4. Add correlation ID propagation filter (inject if missing, forward if present)

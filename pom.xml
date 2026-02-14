@@ -27,6 +27,7 @@
         <module>order-service</module>
         <module>payment-service</module>
         <module>mcp-server</module>
+        <module>api-gateway</module>
     </modules>
 
     <properties>
@@ -39,6 +40,7 @@
         <opentelemetry.version>1.34.1</opentelemetry.version>
         <spring-ai.version>1.0.0</spring-ai.version>
         <resilience4j.version>2.2.0</resilience4j.version>
+        <spring-cloud.version>2023.0.0</spring-cloud.version>
     </properties>
 
     <dependencyManagement>
@@ -102,6 +104,20 @@
                 <groupId>com.theyawns</groupId>
                 <artifactId>mcp-server</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.theyawns</groupId>
+                <artifactId>api-gateway</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Spring Cloud -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- Resilience4j -->
