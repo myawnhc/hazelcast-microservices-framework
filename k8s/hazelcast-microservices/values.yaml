@@ -45,10 +45,10 @@ account-service:
   #   enabled: true
   resources:
     requests:
-      memory: "256Mi"
+      memory: "384Mi"
       cpu: "250m"
     limits:
-      memory: "512Mi"
+      memory: "1Gi"
       cpu: "1000m"
 
 # ----------------------------------------------
@@ -71,10 +71,10 @@ inventory-service:
   #   enabled: true
   resources:
     requests:
-      memory: "256Mi"
+      memory: "384Mi"
       cpu: "250m"
     limits:
-      memory: "512Mi"
+      memory: "1Gi"
       cpu: "1000m"
 
 # ----------------------------------------------
@@ -97,10 +97,10 @@ order-service:
   #   enabled: true
   resources:
     requests:
-      memory: "256Mi"
+      memory: "384Mi"
       cpu: "250m"
     limits:
-      memory: "512Mi"
+      memory: "1Gi"
       cpu: "1000m"
 
 # ----------------------------------------------
@@ -123,10 +123,10 @@ payment-service:
   #   enabled: true
   resources:
     requests:
-      memory: "256Mi"
+      memory: "384Mi"
       cpu: "250m"
     limits:
-      memory: "512Mi"
+      memory: "1Gi"
       cpu: "1000m"
 
 # ----------------------------------------------

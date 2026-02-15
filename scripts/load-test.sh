@@ -148,7 +148,7 @@ create_order() {
         -d "{
             \"customerId\": \"$CUSTOMER_ID\",
             \"lineItems\": [
-                {\"productId\": \"$PRODUCT_ID\", \"quantity\": 1}
+                {\"productId\": \"$PRODUCT_ID\", \"quantity\": 1, \"unitPrice\": \"10.00\"}
             ],
             \"shippingAddress\": \"$((RANDOM % 999)) Load Test St\"
         }")
