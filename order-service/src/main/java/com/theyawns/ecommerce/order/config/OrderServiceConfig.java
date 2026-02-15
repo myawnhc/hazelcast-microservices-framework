@@ -233,7 +233,7 @@ public class OrderServiceConfig {
     /**
      * Creates the view updater that applies order events to the view.
      *
-     * @param viewStore the view store
+     * @param orderViewStore the view store
      * @return the view updater
      */
     @Bean
@@ -347,7 +347,7 @@ public class OrderServiceConfig {
     /**
      * Creates the saga state store for saga tracking.
      *
-     * @param hazelcast the Hazelcast instance
+     * @param hazelcastInstance the Hazelcast instance
      * @param meterRegistry the metrics registry
      * @return the saga state store
      */
@@ -366,7 +366,7 @@ public class OrderServiceConfig {
     /**
      * Creates the event sourcing controller for order operations.
      *
-     * @param hazelcast the Hazelcast instance
+     * @param hazelcastInstance the Hazelcast instance
      * @param eventStore the event store
      * @param viewUpdater the view updater
      * @param meterRegistry the metrics registry
