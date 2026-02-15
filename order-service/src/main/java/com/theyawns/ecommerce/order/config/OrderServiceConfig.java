@@ -61,6 +61,9 @@ public class OrderServiceConfig {
     private static final String ENRICHED_ORDER_NAME = "EnrichedOrder";
     private static final String CUSTOMER_ORDER_SUMMARY_NAME = "CustomerOrderSummary";
 
+    @Value("${hazelcast.embedded.cluster-name:order-local}")
+    private String embeddedClusterName;
+
     @Value("${hazelcast.cluster.name:ecommerce-cluster}")
     private String clusterName;
 
@@ -75,6 +78,9 @@ public class OrderServiceConfig {
     /**
      * Creates the Hazelcast instance for the Order Service.
      *
+     * <p>Uses a service-specific cluster name (default: {@code order-local}) to distinguish
+     * this embedded instance from the shared cluster in Management Center.
+     *
      * @return the configured Hazelcast instance
      */
     @Primary
@@ -82,24 +88,22 @@ public class OrderServiceConfig {
     public HazelcastInstance hazelcastInstance() {
         Config config = new Config();
 
-        // Resolve cluster name: @Value → env var → default
-        String effectiveClusterName = clusterName;
-        if (effectiveClusterName == null || effectiveClusterName.isEmpty()) {
-            effectiveClusterName = System.getenv("HAZELCAST_CLUSTER_NAME");
+        // Resolve embedded cluster name: @Value → env var → default
+        String effectiveEmbeddedName = embeddedClusterName;
+        if (effectiveEmbeddedName == null || effectiveEmbeddedName.isEmpty()) {
+            effectiveEmbeddedName = System.getenv("HAZELCAST_EMBEDDED_CLUSTER_NAME");
         }
-        if (effectiveClusterName == null || effectiveClusterName.isEmpty()) {
-            effectiveClusterName = "ecommerce-cluster";
+        if (effectiveEmbeddedName == null || effectiveEmbeddedName.isEmpty()) {
+            effectiveEmbeddedName = "order-local";
         }
+        config.setClusterName(effectiveEmbeddedName);
+        logger.info("Embedded cluster name: '{}'", effectiveEmbeddedName);
 
         // Resolve cluster members: @Value → env var → empty
         String effectiveClusterMembers = clusterMembers;
         if (effectiveClusterMembers == null || effectiveClusterMembers.isEmpty()) {
             effectiveClusterMembers = System.getenv("HAZELCAST_CLUSTER_MEMBERS");
         }
-
-        logger.info("Cluster name: '{}', members: '{}'", effectiveClusterName,
-                effectiveClusterMembers != null ? effectiveClusterMembers : "none");
-        config.setClusterName(effectiveClusterName);
 
         // Enable event journal for pending events map (required for Jet streaming)
         int effectiveCapacity = eventJournalCapacity > 0 ? eventJournalCapacity : 10000;
@@ -156,7 +160,7 @@ public class OrderServiceConfig {
         config.getJetConfig().setResourceUploadEnabled(true);
 
         logger.info("Creating standalone Hazelcast instance for local Jet processing (cluster: {})",
-                effectiveClusterName);
+                embeddedClusterName);
         return Hazelcast.newHazelcastInstance(config);
     }
 

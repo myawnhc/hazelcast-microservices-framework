@@ -49,6 +49,9 @@ public class PaymentServiceConfig {
 
     private static final String DOMAIN_NAME = "Payment";
 
+    @Value("${hazelcast.embedded.cluster-name:payment-local}")
+    private String embeddedClusterName;
+
     @Value("${hazelcast.cluster.name:ecommerce-cluster}")
     private String clusterName;
 
@@ -63,6 +66,9 @@ public class PaymentServiceConfig {
     /**
      * Creates the Hazelcast instance for the Payment Service.
      *
+     * <p>Uses a service-specific cluster name (default: {@code payment-local}) to distinguish
+     * this embedded instance from the shared cluster in Management Center.
+     *
      * @return the configured Hazelcast instance
      */
     @Primary
@@ -70,24 +76,22 @@ public class PaymentServiceConfig {
     public HazelcastInstance hazelcastInstance() {
         Config config = new Config();
 
-        // Resolve cluster name: @Value → env var → default
-        String effectiveClusterName = clusterName;
-        if (effectiveClusterName == null || effectiveClusterName.isEmpty()) {
-            effectiveClusterName = System.getenv("HAZELCAST_CLUSTER_NAME");
+        // Resolve embedded cluster name: @Value → env var → default
+        String effectiveEmbeddedName = embeddedClusterName;
+        if (effectiveEmbeddedName == null || effectiveEmbeddedName.isEmpty()) {
+            effectiveEmbeddedName = System.getenv("HAZELCAST_EMBEDDED_CLUSTER_NAME");
         }
-        if (effectiveClusterName == null || effectiveClusterName.isEmpty()) {
-            effectiveClusterName = "ecommerce-cluster";
+        if (effectiveEmbeddedName == null || effectiveEmbeddedName.isEmpty()) {
+            effectiveEmbeddedName = "payment-local";
         }
+        config.setClusterName(effectiveEmbeddedName);
+        logger.info("Embedded cluster name: '{}'", effectiveEmbeddedName);
 
         // Resolve cluster members: @Value → env var → empty
         String effectiveClusterMembers = clusterMembers;
         if (effectiveClusterMembers == null || effectiveClusterMembers.isEmpty()) {
             effectiveClusterMembers = System.getenv("HAZELCAST_CLUSTER_MEMBERS");
         }
-
-        logger.info("Cluster name: '{}', members: '{}'", effectiveClusterName,
-                effectiveClusterMembers != null ? effectiveClusterMembers : "none");
-        config.setClusterName(effectiveClusterName);
 
         // Enable event journal for pending events map (required for Jet streaming)
         int effectiveCapacity = eventJournalCapacity > 0 ? eventJournalCapacity : 10000;
@@ -121,7 +125,7 @@ public class PaymentServiceConfig {
         config.getJetConfig().setResourceUploadEnabled(true);
 
         logger.info("Creating standalone Hazelcast instance for local Jet processing (cluster: {})",
-                effectiveClusterName);
+                embeddedClusterName);
         return Hazelcast.newHazelcastInstance(config);
     }
 
@@ -195,7 +199,7 @@ public class PaymentServiceConfig {
     /**
      * Creates the view updater that applies payment events to the view.
      *
-     * @param viewStore the view store
+     * @param paymentViewStore the view store
      * @return the view updater
      */
     @Bean
@@ -206,7 +210,7 @@ public class PaymentServiceConfig {
     /**
      * Creates the saga state store for saga tracking.
      *
-     * @param hazelcast the Hazelcast instance
+     * @param hazelcastInstance the Hazelcast instance
      * @param meterRegistry the metrics registry
      * @return the saga state store
      */

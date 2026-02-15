@@ -357,6 +357,7 @@ services:
     environment:
       - MC_DEFAULT_CLUSTER=ecommerce-cluster
       - MC_DEFAULT_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
+      - MC_INIT_CMD=/opt/hazelcast/management-center/bin/mc-conf.sh cluster add -cn=account-local -ma=account-service:5701 -H /data -l && /opt/hazelcast/management-center/bin/mc-conf.sh cluster add -cn=inventory-local -ma=inventory-service:5701 -H /data -l && /opt/hazelcast/management-center/bin/mc-conf.sh cluster add -cn=order-local -ma=order-service:5701 -H /data -l && /opt/hazelcast/management-center/bin/mc-conf.sh cluster add -cn=payment-local -ma=payment-service:5701 -H /data -l
     depends_on:
       hazelcast-1:
         condition: service_healthy

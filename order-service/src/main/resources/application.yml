@@ -7,6 +7,8 @@ server:
 
 # Hazelcast configuration
 hazelcast:
+  embedded:
+    cluster-name: ${HAZELCAST_EMBEDDED_CLUSTER_NAME:order-local}
   cluster:
     name: ${HAZELCAST_CLUSTER_NAME:ecommerce-cluster}
     members: ${HAZELCAST_CLUSTER_MEMBERS:}
