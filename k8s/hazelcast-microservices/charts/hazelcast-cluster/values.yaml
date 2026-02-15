@@ -1,0 +1,67 @@
+# Number of Hazelcast cluster members
+replicaCount: 3
+
+image:
+  repository: hazelcast/hazelcast
+  tag: "5.6.0"
+  pullPolicy: IfNotPresent
+
+# Hazelcast cluster name — must match what microservices connect to
+clusterName: "ecommerce-cluster"
+
+# JVM settings
+jvm:
+  xms: "256m"
+  xmx: "512m"
+
+# Kubernetes resource requests and limits
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+  limits:
+    memory: "512Mi"
+    cpu: "1000m"
+
+# Service configuration
+service:
+  # Port for client connections
+  port: 5701
+
+# Health probe configuration (matches Docker Compose healthcheck)
+probes:
+  startup:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 6
+    timeoutSeconds: 10
+  liveness:
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    failureThreshold: 5
+    timeoutSeconds: 10
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 5
+    timeoutSeconds: 10
+
+# Optional PersistentVolumeClaim for Hazelcast hot restart (Enterprise only)
+persistence:
+  enabled: false
+  size: 2Gi
+  storageClass: ""
+
+# ServiceAccount for Hazelcast pods
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Pod-level settings
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image:
+  repository: hazelcast-microservices/api-gateway
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "250m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hazelcast-cluster.fullname" . }}-config
+  labels:
+    {{- include "hazelcast-cluster.labels" . | nindent 4 }}
+data:
+  hazelcast.yaml: |
+    hazelcast:
+      cluster-name: {{ .Values.clusterName }}
+
+      network:
+        port:
+          auto-increment: true
+          port: {{ .Values.service.port }}
+
+        join:
+          multicast:
+            enabled: false
+          kubernetes:
+            enabled: true
+            service-dns: {{ include "hazelcast-cluster.headlessFQDN" . }}
+
+        rest-api:
+          enabled: true
+          endpoint-groups:
+            CLUSTER_READ:
+              enabled: true
+            CLUSTER_WRITE:
+              enabled: true
+            HEALTH_CHECK:
+              enabled: true
+
+      jet:
+        enabled: true
+
+      map:
+        "*_PENDING":
+          backup-count: 1
+          event-journal:
+            enabled: true
+            capacity: 10000
+
+        "*_ES":
+          backup-count: 1
+          eviction:
+            eviction-policy: NONE
+
+        "*_VIEW":
+          backup-count: 1
+          read-backup-data: true
+
+        "*_COMPLETIONS":
+          backup-count: 1
+          time-to-live-seconds: 3600

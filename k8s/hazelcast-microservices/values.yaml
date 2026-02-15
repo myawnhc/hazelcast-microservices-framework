@@ -1,0 +1,152 @@
+# Global values shared across all subcharts
+global:
+  # Container image registry prefix (e.g., "myregistry.azurecr.io/" or "")
+  imageRegistry: ""
+  # Kubernetes storage class for PersistentVolumeClaims
+  storageClass: ""
+  # Hazelcast cluster name — must match across all services
+  clusterName: "ecommerce-cluster"
+
+# ----------------------------------------------
+# Hazelcast Cluster (StatefulSet)
+# ----------------------------------------------
+hazelcast-cluster:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: hazelcast/hazelcast
+    tag: "5.6.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+
+# ----------------------------------------------
+# Account Service
+# ----------------------------------------------
+account-service:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: hazelcast-microservices/account-service
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8081
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+
+# ----------------------------------------------
+# Inventory Service
+# ----------------------------------------------
+inventory-service:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: hazelcast-microservices/inventory-service
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8082
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+
+# ----------------------------------------------
+# Order Service
+# ----------------------------------------------
+order-service:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: hazelcast-microservices/order-service
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8083
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+
+# ----------------------------------------------
+# Payment Service
+# ----------------------------------------------
+payment-service:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: hazelcast-microservices/payment-service
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8084
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+
+# ----------------------------------------------
+# API Gateway
+# ----------------------------------------------
+api-gateway:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: hazelcast-microservices/api-gateway
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8080
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "250m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+# ----------------------------------------------
+# MCP Server
+# ----------------------------------------------
+mcp-server:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: hazelcast-microservices/mcp-server
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8085
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "250m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+# ----------------------------------------------
+# Monitoring (Prometheus + Grafana)
+# ----------------------------------------------
+monitoring:
+  enabled: false

@@ -1,0 +1,51 @@
+apiVersion: v2
+name: hazelcast-microservices
+description: Hazelcast-based event sourcing microservices framework
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+maintainers:
+  - name: theyawns
+    url: https://github.com/theyawns
+
+dependencies:
+  - name: hazelcast-cluster
+    version: 0.1.0
+    repository: "file://charts/hazelcast-cluster"
+    condition: hazelcast-cluster.enabled
+
+  - name: account-service
+    version: 0.1.0
+    repository: "file://charts/account-service"
+    condition: account-service.enabled
+
+  - name: inventory-service
+    version: 0.1.0
+    repository: "file://charts/inventory-service"
+    condition: inventory-service.enabled
+
+  - name: order-service
+    version: 0.1.0
+    repository: "file://charts/order-service"
+    condition: order-service.enabled
+
+  - name: payment-service
+    version: 0.1.0
+    repository: "file://charts/payment-service"
+    condition: payment-service.enabled
+
+  - name: api-gateway
+    version: 0.1.0
+    repository: "file://charts/api-gateway"
+    condition: api-gateway.enabled
+
+  - name: mcp-server
+    version: 0.1.0
+    repository: "file://charts/mcp-server"
+    condition: mcp-server.enabled
+
+  - name: monitoring
+    version: 0.1.0
+    repository: "file://charts/monitoring"
+    condition: monitoring.enabled

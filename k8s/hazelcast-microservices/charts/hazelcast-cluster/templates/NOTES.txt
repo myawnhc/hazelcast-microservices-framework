@@ -1,0 +1,21 @@
+Hazelcast cluster "{{ .Values.clusterName }}" is deploying with {{ .Values.replicaCount }} members.
+
+Pod names:
+{{- range $i := until (int .Values.replicaCount) }}
+  - {{ include "hazelcast-cluster.fullname" $ }}-{{ $i }}
+{{- end }}
+
+Headless Service (for member discovery):
+  {{ include "hazelcast-cluster.fullname" . }}-headless.{{ .Release.Namespace }}.svc.cluster.local
+
+Client Service (for application connections):
+  {{ include "hazelcast-cluster.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+To check cluster status:
+  kubectl exec -it {{ include "hazelcast-cluster.fullname" . }}-0 -- curl http://localhost:{{ .Values.service.port }}/hazelcast/health/ready
+
+To view member logs:
+  kubectl logs {{ include "hazelcast-cluster.fullname" . }}-0
+
+Microservices should connect using:
+  HAZELCAST_CLUSTER_MEMBERS={{ include "hazelcast-cluster.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
