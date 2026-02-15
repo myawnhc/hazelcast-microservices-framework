@@ -117,6 +117,16 @@ api-gateway:
     pullPolicy: IfNotPresent
   service:
     port: 8080
+  ingress:
+    enabled: true
+    className: ""
+    annotations: {}
+    hosts:
+      - host: ""
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
   resources:
     requests:
       memory: "128Mi"
@@ -146,7 +156,14 @@ mcp-server:
       cpu: "500m"
 
 # ----------------------------------------------
-# Monitoring (Prometheus + Grafana)
+# Monitoring (Prometheus + Grafana + Jaeger)
 # ----------------------------------------------
 monitoring:
   enabled: false
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
+    adminPassword: "admin"
+  jaeger:
+    enabled: true

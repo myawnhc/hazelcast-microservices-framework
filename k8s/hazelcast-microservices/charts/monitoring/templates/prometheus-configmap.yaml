@@ -1,0 +1,89 @@
+{{- if .Values.prometheus.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "monitoring.fullname" . }}-prometheus-config
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+data:
+  prometheus.yml: |
+    # Prometheus Configuration for Hazelcast Microservices Framework (Kubernetes)
+    # Scrapes metrics from all services via Kubernetes Service DNS.
+    #
+    # To switch to Kubernetes service discovery (auto-discovers annotated pods),
+    # replace static_configs with kubernetes_sd_configs and relabel_configs.
+    # See: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#kubernetes_sd_config
+
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        monitor: 'ecommerce-demo'
+
+    scrape_configs:
+      # Prometheus self-monitoring
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Account Service
+      - job_name: 'account-service'
+        metrics_path: '/actuator/prometheus'
+        static_configs:
+          - targets: ['{{ .Release.Name }}-account-service:8081']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: 'account-service'
+
+      # Inventory Service
+      - job_name: 'inventory-service'
+        metrics_path: '/actuator/prometheus'
+        static_configs:
+          - targets: ['{{ .Release.Name }}-inventory-service:8082']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: 'inventory-service'
+
+      # Order Service
+      - job_name: 'order-service'
+        metrics_path: '/actuator/prometheus'
+        static_configs:
+          - targets: ['{{ .Release.Name }}-order-service:8083']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: 'order-service'
+
+      # Payment Service
+      - job_name: 'payment-service'
+        metrics_path: '/actuator/prometheus'
+        static_configs:
+          - targets: ['{{ .Release.Name }}-payment-service:8084']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: 'payment-service'
+
+      # API Gateway
+      - job_name: 'api-gateway'
+        metrics_path: '/actuator/prometheus'
+        static_configs:
+          - targets: ['{{ .Release.Name }}-api-gateway:8080']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: 'api-gateway'
+
+      # Hazelcast Cluster Nodes
+      # StatefulSet pods have stable DNS: {name}-0, {name}-1, {name}-2
+      - job_name: 'hazelcast'
+        metrics_path: '/hazelcast/rest/cluster'
+        static_configs:
+          - targets:
+              - '{{ .Release.Name }}-hazelcast-cluster-0.{{ .Release.Name }}-hazelcast-cluster-headless:5701'
+              - '{{ .Release.Name }}-hazelcast-cluster-1.{{ .Release.Name }}-hazelcast-cluster-headless:5701'
+              - '{{ .Release.Name }}-hazelcast-cluster-2.{{ .Release.Name }}-hazelcast-cluster-headless:5701'
+{{- end }}

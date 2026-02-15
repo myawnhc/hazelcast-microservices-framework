@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mcp-server.fullname" . }}-config
+  labels:
+    {{- include "mcp-server.labels" . | nindent 4 }}
+data:
+  # Uses 'docker' profile to enable HTTP/SSE transport (stdio doesn't work in K8s)
+  SPRING_PROFILES_ACTIVE: {{ .Values.spring.profiles | quote }}
+  JAVA_OPTS: "-Xms{{ .Values.jvm.xms }} -Xmx{{ .Values.jvm.xmx }} {{ .Values.jvm.opts }}"
+  # Upstream microservice URLs — MCP tools proxy requests to these services
+  MCP_SERVICES_ACCOUNT_URL: {{ .Values.services.account.url | default (printf "http://%s-account-service:%d" .Release.Name (.Values.services.account.port | int)) | quote }}
+  MCP_SERVICES_INVENTORY_URL: {{ .Values.services.inventory.url | default (printf "http://%s-inventory-service:%d" .Release.Name (.Values.services.inventory.port | int)) | quote }}
+  MCP_SERVICES_ORDER_URL: {{ .Values.services.order.url | default (printf "http://%s-order-service:%d" .Release.Name (.Values.services.order.port | int)) | quote }}
+  MCP_SERVICES_PAYMENT_URL: {{ .Values.services.payment.url | default (printf "http://%s-payment-service:%d" .Release.Name (.Values.services.payment.port | int)) | quote }}

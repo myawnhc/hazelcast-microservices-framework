@@ -1,0 +1,33 @@
+API Gateway has been deployed!
+
+  Service URL (cluster-internal): http://{{ include "api-gateway.fullname" . }}:{{ .Values.service.port }}
+
+{{- if .Values.ingress.enabled }}
+  Ingress is enabled. Access the gateway externally via:
+  {{- range .Values.ingress.hosts }}
+  {{- if .host }}
+    http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+  {{- else }}
+    http://<INGRESS-CONTROLLER-IP>/
+  {{- end }}
+  {{- end }}
+
+  To find the Ingress Controller's external IP:
+    kubectl get ingress {{ include "api-gateway.fullname" . }}
+{{- else }}
+  Ingress is disabled. To access locally, use port-forward:
+    kubectl port-forward svc/{{ include "api-gateway.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+    Then access: http://localhost:{{ .Values.service.port }}/
+{{- end }}
+
+Routes:
+  /api/customers/**  → account-service:8081
+  /api/products/**   → inventory-service:8082
+  /api/orders/**     → order-service:8083
+  /api/payments/**   → payment-service:8084
+
+To check pod status:
+  kubectl get pods -l app.kubernetes.io/name={{ include "api-gateway.name" . }}
+
+To view logs:
+  kubectl logs -l app.kubernetes.io/name={{ include "api-gateway.name" . }} -f

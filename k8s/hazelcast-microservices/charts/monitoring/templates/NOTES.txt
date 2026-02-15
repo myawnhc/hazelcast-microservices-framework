@@ -1,0 +1,27 @@
+Monitoring stack has been deployed!
+
+{{- if .Values.prometheus.enabled }}
+
+  Prometheus:
+    Service URL: http://{{ include "monitoring.fullname" . }}-prometheus:{{ .Values.prometheus.service.port }}
+    Port-forward:  kubectl port-forward svc/{{ include "monitoring.fullname" . }}-prometheus {{ .Values.prometheus.service.port }}:{{ .Values.prometheus.service.port }}
+    Then access:   http://localhost:{{ .Values.prometheus.service.port }}
+{{- end }}
+
+{{- if .Values.grafana.enabled }}
+
+  Grafana:
+    Service URL: http://{{ include "monitoring.fullname" . }}-grafana:{{ .Values.grafana.service.port }}
+    Port-forward:  kubectl port-forward svc/{{ include "monitoring.fullname" . }}-grafana {{ .Values.grafana.service.port }}:{{ .Values.grafana.service.port }}
+    Then access:   http://localhost:{{ .Values.grafana.service.port }}
+    Credentials:   admin / {{ .Values.grafana.adminPassword }}
+    Dashboards:    System Overview, Event Flow, Materialized Views, Saga Dashboard
+{{- end }}
+
+{{- if .Values.jaeger.enabled }}
+
+  Jaeger:
+    Service URL: http://jaeger:{{ .Values.jaeger.service.queryPort }}
+    Port-forward:  kubectl port-forward svc/jaeger {{ .Values.jaeger.service.queryPort }}:{{ .Values.jaeger.service.queryPort }}
+    Then access:   http://localhost:{{ .Values.jaeger.service.queryPort }}
+{{- end }}

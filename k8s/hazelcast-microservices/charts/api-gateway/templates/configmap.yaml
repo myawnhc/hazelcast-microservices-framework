@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "api-gateway.fullname" . }}-config
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ .Values.spring.profiles | quote }}
+  JAVA_OPTS: "-Xms{{ .Values.jvm.xms }} -Xmx{{ .Values.jvm.xmx }} {{ .Values.jvm.opts }}"
+  # Upstream service URLs — gateway routes traffic to these microservices
+  ACCOUNT_SERVICE_URL: {{ .Values.services.account.url | default (printf "http://%s-account-service:%d" .Release.Name (.Values.services.account.port | int)) | quote }}
+  INVENTORY_SERVICE_URL: {{ .Values.services.inventory.url | default (printf "http://%s-inventory-service:%d" .Release.Name (.Values.services.inventory.port | int)) | quote }}
+  ORDER_SERVICE_URL: {{ .Values.services.order.url | default (printf "http://%s-order-service:%d" .Release.Name (.Values.services.order.port | int)) | quote }}
+  PAYMENT_SERVICE_URL: {{ .Values.services.payment.url | default (printf "http://%s-payment-service:%d" .Release.Name (.Values.services.payment.port | int)) | quote }}
+  {{- if .Values.tracing.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.tracing.endpoint | quote }}
+  OTEL_SERVICE_NAME: "api-gateway"
+  {{- end }}

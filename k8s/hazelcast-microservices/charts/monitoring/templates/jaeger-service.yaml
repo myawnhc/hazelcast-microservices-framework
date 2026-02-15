@@ -1,0 +1,27 @@
+{{- if .Values.jaeger.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  # Named "jaeger" (without prefix) so microservice OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317 works
+  name: jaeger
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+spec:
+  type: {{ .Values.jaeger.service.type }}
+  ports:
+    - port: {{ .Values.jaeger.service.queryPort }}
+      targetPort: query
+      protocol: TCP
+      name: query
+    - port: {{ .Values.jaeger.service.otlpGrpcPort }}
+      targetPort: otlp-grpc
+      protocol: TCP
+      name: otlp-grpc
+    - port: {{ .Values.jaeger.service.otlpHttpPort }}
+      targetPort: otlp-http
+      protocol: TCP
+      name: otlp-http
+  selector:
+    {{- include "monitoring.jaeger.selectorLabels" . | nindent 4 }}
+{{- end }}

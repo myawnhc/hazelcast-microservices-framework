@@ -1,0 +1,993 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Saga lifecycle, step, compensation, and timeout metrics for the eCommerce microservices platform.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Saga Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Active Sagas",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(sagas_active_count)",
+          "legendFormat": "Active"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "orange", "value": null },
+              { "color": "red", "value": 3 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 3, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Compensating",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(sagas_compensating_count)",
+          "legendFormat": "Compensating"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 6, "y": 1 },
+      "id": 4,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Total Started",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_started_total)",
+          "legendFormat": "Started"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 9, "y": 1 },
+      "id": 5,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Total Completed",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_completed_total)",
+          "legendFormat": "Completed"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "orange", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 12, "y": 1 },
+      "id": 6,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Total Compensated",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_compensated_total)",
+          "legendFormat": "Compensated"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 15, "y": 1 },
+      "id": 7,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Total Failed",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_failed_total)",
+          "legendFormat": "Failed"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "purple", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 18, "y": 1 },
+      "id": 8,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Total Timed Out",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_timedout_total)",
+          "legendFormat": "Timed Out"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 21, "y": 1 },
+      "id": 9,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Timeout Detector",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "max(saga_timeout_detector_running)",
+          "legendFormat": "Running"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 10,
+      "title": "Saga Throughput",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 11,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Saga Start Rate (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_started_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} started"
+        },
+        {
+          "expr": "rate(saga_completed_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} completed"
+        },
+        {
+          "expr": "rate(saga_compensated_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} compensated"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 12,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Step Rate (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_steps_completed_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} steps completed"
+        },
+        {
+          "expr": "rate(saga_steps_failed_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}} steps failed"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 20,
+      "title": "Saga Duration",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 21,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Saga Duration Percentiles",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "saga_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.5\"}",
+          "legendFormat": "{{sagaType}} p50"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.95\"}",
+          "legendFormat": "{{sagaType}} p95"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.99\"}",
+          "legendFormat": "{{sagaType}} p99"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 22,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Compensation Duration Percentiles",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "saga_compensation_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.5\"}",
+          "legendFormat": "{{sagaType}} p50"
+        },
+        {
+          "expr": "saga_compensation_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.95\"}",
+          "legendFormat": "{{sagaType}} p95"
+        },
+        {
+          "expr": "saga_compensation_duration_seconds{sagaType=~\"$sagaType\", quantile=\"0.99\"}",
+          "legendFormat": "{{sagaType}} p99"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 30,
+      "title": "Timeout Detection",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 31,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Timeout Detection",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_timeouts_detected_total[$__rate_interval])",
+          "legendFormat": "Timeouts detected /s"
+        },
+        {
+          "expr": "rate(saga_timeouts_compensations_triggered_total[$__rate_interval])",
+          "legendFormat": "Compensations triggered /s"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 32,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Timeout Check Duration",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_timeout_check_duration_seconds_sum[$__rate_interval]) / rate(saga_timeout_check_duration_seconds_count[$__rate_interval])",
+          "legendFormat": "Avg check duration"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 40,
+      "title": "Compensation",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "id": 41,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Compensation Operations",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_compensation_started_total[$__rate_interval])",
+          "legendFormat": "Started"
+        },
+        {
+          "expr": "rate(saga_compensation_completed_total[$__rate_interval])",
+          "legendFormat": "Completed"
+        },
+        {
+          "expr": "rate(saga_compensation_failed_total[$__rate_interval])",
+          "legendFormat": "Failed"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "id": 42,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Compensation Steps by Saga Type",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(saga_compensation_steps_total{sagaType=~\"$sagaType\"}[$__rate_interval])",
+          "legendFormat": "{{sagaType}}"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "id": 50,
+      "title": "Success Rate",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 42 },
+      "id": 51,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Saga Success Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_completed_total) / (sum(saga_completed_total) + sum(saga_compensated_total) + sum(saga_failed_total) + sum(saga_timedout_total))",
+          "legendFormat": "Success Rate"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "stacking": { "mode": "normal" }, "fillOpacity": 50 },
+          "unit": "short"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Completed" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Compensated" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Failed" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Timed Out" }, "properties": [{ "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 42 },
+      "id": 52,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Saga Outcome Distribution",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "increase(saga_completed_total[$__rate_interval])",
+          "legendFormat": "Completed"
+        },
+        {
+          "expr": "increase(saga_compensated_total[$__rate_interval])",
+          "legendFormat": "Compensated"
+        },
+        {
+          "expr": "increase(saga_failed_total[$__rate_interval])",
+          "legendFormat": "Failed"
+        },
+        {
+          "expr": "increase(saga_timedout_total[$__rate_interval])",
+          "legendFormat": "Timed Out"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "id": 55,
+      "title": "Choreography vs Orchestration",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
+      "id": 56,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Duration Comparison: Choreographed vs Orchestrated",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "saga_duration_seconds{sagaType=\"OrderFulfillment\", quantile=\"0.5\"}",
+          "legendFormat": "Choreographed p50"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=\"OrderFulfillment\", quantile=\"0.95\"}",
+          "legendFormat": "Choreographed p95"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=\"OrderFulfillmentOrchestrated\", quantile=\"0.5\"}",
+          "legendFormat": "Orchestrated p50"
+        },
+        {
+          "expr": "saga_duration_seconds{sagaType=\"OrderFulfillmentOrchestrated\", quantile=\"0.95\"}",
+          "legendFormat": "Orchestrated p95"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
+      "id": 57,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Orchestrated Step Timing",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "saga_step_duration_seconds{sagaType=\"OrderFulfillmentOrchestrated\", quantile=\"0.5\"}",
+          "legendFormat": "{{stepName}} p50"
+        },
+        {
+          "expr": "saga_step_duration_seconds{sagaType=\"OrderFulfillmentOrchestrated\", quantile=\"0.95\"}",
+          "legendFormat": "{{stepName}} p95"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 57 },
+      "id": 58,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Choreographed Success Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_completed_total{sagaType=\"OrderFulfillment\"}) / (sum(saga_completed_total{sagaType=\"OrderFulfillment\"}) + sum(saga_compensated_total{sagaType=\"OrderFulfillment\"}) + sum(saga_failed_total{sagaType=\"OrderFulfillment\"}) + sum(saga_timedout_total{sagaType=\"OrderFulfillment\"}))",
+          "legendFormat": "Choreographed"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 57 },
+      "id": 59,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Orchestrated Success Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(saga_completed_total{sagaType=\"OrderFulfillmentOrchestrated\"}) / (sum(saga_completed_total{sagaType=\"OrderFulfillmentOrchestrated\"}) + sum(saga_compensated_total{sagaType=\"OrderFulfillmentOrchestrated\"}) + sum(saga_failed_total{sagaType=\"OrderFulfillmentOrchestrated\"}) + sum(saga_timedout_total{sagaType=\"OrderFulfillmentOrchestrated\"}))",
+          "legendFormat": "Orchestrated"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 63 },
+      "id": 60,
+      "title": "Resilience: Circuit Breakers",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "options": { "0": { "text": "CLOSED", "color": "green" }, "1": { "text": "OPEN", "color": "red" }, "2": { "text": "HALF_OPEN", "color": "yellow" } }, "type": "value" }
+          ]
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 64 },
+      "id": 61,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Circuit Breaker State",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "resilience4j_circuitbreaker_state{name=~\".*\"}",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 64 },
+      "id": 62,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Circuit Breaker Failure Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "resilience4j_circuitbreaker_failure_rate{name=~\".*\"} / 100",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 70 },
+      "id": 63,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Circuit Breaker Calls (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(resilience4j_circuitbreaker_calls_total{kind=\"successful\"}[$__rate_interval])",
+          "legendFormat": "{{name}} successful"
+        },
+        {
+          "expr": "rate(resilience4j_circuitbreaker_calls_total{kind=\"failed\"}[$__rate_interval])",
+          "legendFormat": "{{name}} failed"
+        },
+        {
+          "expr": "rate(resilience4j_circuitbreaker_calls_total{kind=\"not_permitted\"}[$__rate_interval])",
+          "legendFormat": "{{name}} rejected"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 76 },
+      "id": 70,
+      "title": "Resilience: Retry",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 77 },
+      "id": 71,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Retry Outcomes (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(resilience4j_retry_calls_total{kind=\"successful_without_retry\"}[$__rate_interval])",
+          "legendFormat": "{{name}} no retry needed"
+        },
+        {
+          "expr": "rate(resilience4j_retry_calls_total{kind=\"successful_with_retry\"}[$__rate_interval])",
+          "legendFormat": "{{name}} succeeded after retry"
+        },
+        {
+          "expr": "rate(resilience4j_retry_calls_total{kind=\"failed_with_retry\"}[$__rate_interval])",
+          "legendFormat": "{{name}} failed after retry"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 77 },
+      "id": 72,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Non-Retryable Exceptions (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(framework_resilience_retry_ignored_total[$__rate_interval])",
+          "legendFormat": "{{name}} ignored"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 83 },
+      "id": 80,
+      "title": "Outbox & Dead Letter Queue",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 84 },
+      "id": 81,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Outbox Written",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(outbox_entries_written_total)",
+          "legendFormat": "Written"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 4, "y": 84 },
+      "id": 82,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Outbox Delivered",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(outbox_entries_delivered_total)",
+          "legendFormat": "Delivered"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 8, "y": 84 },
+      "id": 83,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "Outbox Failed",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(outbox_entries_failed_total)",
+          "legendFormat": "Failed"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 12, "y": 84 },
+      "id": 84,
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "title": "DLQ Pending",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(dlq_entries_added_total) - sum(dlq_entries_replayed_total) - sum(dlq_entries_discarded_total)",
+          "legendFormat": "Pending"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 84 },
+      "id": 85,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "DLQ Operations (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(dlq_entries_added_total[$__rate_interval])",
+          "legendFormat": "Added"
+        },
+        {
+          "expr": "rate(dlq_entries_replayed_total[$__rate_interval])",
+          "legendFormat": "Replayed"
+        },
+        {
+          "expr": "rate(dlq_entries_discarded_total[$__rate_interval])",
+          "legendFormat": "Discarded"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 90 },
+      "id": 86,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Idempotency Checks (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(idempotency_checks_total{result=\"miss\"}[$__rate_interval])",
+          "legendFormat": "New events (miss)"
+        },
+        {
+          "expr": "rate(idempotency_checks_total{result=\"hit\"}[$__rate_interval])",
+          "legendFormat": "Duplicates blocked (hit)"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 90 },
+      "id": 87,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "title": "Outbox Publish Cycle Duration",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(outbox_publish_duration_seconds_sum[$__rate_interval]) / rate(outbox_publish_duration_seconds_count[$__rate_interval])",
+          "legendFormat": "Avg publish cycle"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["saga", "microservices", "hazelcast", "resilience"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "definition": "label_values(saga_started_total, sagaType)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "sagaType",
+        "query": "label_values(saga_started_total, sagaType)",
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Saga Dashboard",
+  "uid": "saga-dashboard",
+  "version": 1
+}

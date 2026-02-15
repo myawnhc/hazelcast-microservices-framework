@@ -9,6 +9,57 @@ service:
   type: ClusterIP
   port: 8085
 
+# JVM configuration
+jvm:
+  xms: "128m"
+  xmx: "256m"
+  opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+# Spring configuration — uses 'docker' profile which enables HTTP/SSE transport
+# (the default stdio transport doesn't work in Kubernetes)
+spring:
+  profiles: "docker"
+
+# Upstream microservice URLs — defaults constructed from Release.Name in configmap template
+services:
+  account:
+    url: ""
+    port: 8081
+  inventory:
+    url: ""
+    port: 8082
+  order:
+    url: ""
+    port: 8083
+  payment:
+    url: ""
+    port: 8084
+
+# Health probes
+probes:
+  startup:
+    initialDelaySeconds: 15
+    periodSeconds: 5
+    failureThreshold: 12
+    timeoutSeconds: 3
+  liveness:
+    initialDelaySeconds: 0
+    periodSeconds: 30
+    failureThreshold: 3
+    timeoutSeconds: 3
+  readiness:
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 3
+
+# Init container — wait for at least one microservice
+initContainers:
+  waitForServices:
+    enabled: true
+    image: busybox:1.36
+
+# Resource management
 resources:
   requests:
     memory: "128Mi"
@@ -17,7 +68,16 @@ resources:
     memory: "256Mi"
     cpu: "500m"
 
+# Service account
 serviceAccount:
   create: true
   name: ""
   annotations: {}
+
+# Pod scheduling
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

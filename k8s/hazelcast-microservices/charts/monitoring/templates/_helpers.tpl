@@ -31,3 +31,34 @@ app.kubernetes.io/part-of: hazelcast-microservices
 app.kubernetes.io/name: {{ include "monitoring.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Component-specific selector labels (for multi-deployment charts).
+Each component (prometheus, grafana, jaeger) needs distinct selectors
+so Services route to the right pods.
+*/}}
+{{- define "monitoring.prometheus.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "monitoring.name" . }}-prometheus
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{- define "monitoring.grafana.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "monitoring.name" . }}-grafana
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{- define "monitoring.jaeger.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "monitoring.name" . }}-jaeger
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Create the name of the service account to use.
+*/}}
+{{- define "monitoring.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "monitoring.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}

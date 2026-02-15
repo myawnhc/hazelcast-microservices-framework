@@ -1,0 +1,51 @@
+{{- if .Values.jaeger.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "monitoring.fullname" . }}-jaeger
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "monitoring.jaeger.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "monitoring.jaeger.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "monitoring.serviceAccountName" . }}
+      containers:
+        - name: jaeger
+          image: "{{ .Values.jaeger.image.repository }}:{{ .Values.jaeger.image.tag }}"
+          imagePullPolicy: {{ .Values.jaeger.image.pullPolicy }}
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+          ports:
+            - name: query
+              containerPort: {{ .Values.jaeger.service.queryPort }}
+              protocol: TCP
+            - name: otlp-grpc
+              containerPort: {{ .Values.jaeger.service.otlpGrpcPort }}
+              protocol: TCP
+            - name: otlp-http
+              containerPort: {{ .Values.jaeger.service.otlpHttpPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: query
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: query
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.jaeger.resources | nindent 12 }}
+{{- end }}

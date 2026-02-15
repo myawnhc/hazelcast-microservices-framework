@@ -1,0 +1,23 @@
+MCP Server has been deployed!
+
+  Service URL (cluster-internal): http://{{ include "mcp-server.fullname" . }}:{{ .Values.service.port }}
+  Transport: HTTP/SSE (Spring profile: {{ .Values.spring.profiles }})
+
+  Available MCP tools:
+    - queryView: Query materialized views across all services
+    - submitEvent: Submit domain events to any service
+    - getEventHistory: Retrieve event history for an entity
+    - listProducts: List products from inventory
+    - listCustomers: List customers from account service
+    - listOrders: List orders from order service
+    - getServiceHealth: Check health of all microservices
+
+To check pod status:
+  kubectl get pods -l app.kubernetes.io/name={{ include "mcp-server.name" . }}
+
+To view logs:
+  kubectl logs -l app.kubernetes.io/name={{ include "mcp-server.name" . }} -f
+
+To port-forward for local access:
+  kubectl port-forward svc/{{ include "mcp-server.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  Then access: http://localhost:{{ .Values.service.port }}/sse

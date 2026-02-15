@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "order-service.fullname" . }}
+  name: {{ include "api-gateway.fullname" . }}
   labels:
-    {{- include "order-service.labels" . | nindent 4 }}
+    {{- include "api-gateway.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   strategy:
@@ -13,11 +13,11 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      {{- include "order-service.selectorLabels" . | nindent 6 }}
+      {{- include "api-gateway.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "order-service.selectorLabels" . | nindent 8 }}
+        {{- include "api-gateway.selectorLabels" . | nindent 8 }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         prometheus.io/scrape: "true"
@@ -27,25 +27,26 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: {{ include "order-service.serviceAccountName" . }}
+      serviceAccountName: {{ include "api-gateway.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.initContainers.waitForHazelcast.enabled }}
+      # Wait for at least one microservice to be reachable before starting the gateway
+      {{- if .Values.initContainers.waitForServices.enabled }}
       initContainers:
-        - name: wait-for-hazelcast
-          image: {{ .Values.initContainers.waitForHazelcast.image }}
+        - name: wait-for-services
+          image: {{ .Values.initContainers.waitForServices.image }}
           command:
             - sh
             - -c
             - |
-              echo "Waiting for Hazelcast cluster at {{ .Release.Name }}-hazelcast-cluster:{{ .Values.hazelcast.port }}..."
-              until nc -z {{ .Release.Name }}-hazelcast-cluster {{ .Values.hazelcast.port }}; do
-                echo "Hazelcast not ready, retrying in 2s..."
+              echo "Waiting for account-service at {{ .Release.Name }}-account-service:{{ .Values.services.account.port }}..."
+              until nc -z {{ .Release.Name }}-account-service {{ .Values.services.account.port }}; do
+                echo "account-service not ready, retrying in 2s..."
                 sleep 2
               done
-              echo "Hazelcast is ready!"
+              echo "account-service is ready — gateway can start routing!"
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -57,14 +58,7 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "order-service.fullname" . }}-config
-          env:
-            - name: HZ_LICENSEKEY
-              valueFrom:
-                secretKeyRef:
-                  name: hazelcast-license
-                  key: license-key
-                  optional: true
+                name: {{ include "api-gateway.fullname" . }}-config
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
