@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "order-service.fullname" . }}-config
+  labels:
+    {{- include "order-service.labels" . | nindent 4 }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ .Values.spring.profiles | quote }}
+  JAVA_OPTS: "-Xms{{ .Values.jvm.xms }} -Xmx{{ .Values.jvm.xmx }} {{ .Values.jvm.opts }}"
+  HAZELCAST_CLUSTER_NAME: {{ .Values.hazelcast.clusterName | quote }}
+  HAZELCAST_CLUSTER_MEMBERS: "{{ .Release.Name }}-hazelcast-cluster:{{ .Values.hazelcast.port }}"
+  # Order service calls inventory and payment for saga orchestration
+  INVENTORY_SERVICE_URL: {{ .Values.services.inventory.url | default (printf "http://%s-inventory-service:%d" .Release.Name 8082) | quote }}
+  PAYMENT_SERVICE_URL: {{ .Values.services.payment.url | default (printf "http://%s-payment-service:%d" .Release.Name 8084) | quote }}
+  {{- if .Values.tracing.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.tracing.endpoint | quote }}
+  OTEL_SERVICE_NAME: "order-service"
+  {{- end }}

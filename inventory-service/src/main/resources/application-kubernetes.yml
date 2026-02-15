@@ -1,0 +1,22 @@
+# Kubernetes-specific configuration for inventory-service.
+# Activated by SPRING_PROFILES_ACTIVE=kubernetes (set in Helm ConfigMap).
+# Environment variables from the ConfigMap override values here.
+
+# Enable Kubernetes health probe endpoints
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,hazelcast
+
+# Reduce log verbosity in production containers
+logging:
+  level:
+    root: INFO
+    com.theyawns: INFO
+    com.hazelcast: WARN

@@ -9,6 +9,58 @@ service:
   type: ClusterIP
   port: 8083
 
+# JVM configuration
+jvm:
+  xms: "256m"
+  xmx: "512m"
+  opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+# Spring configuration
+spring:
+  profiles: "kubernetes"
+
+# Hazelcast client connection (to shared cluster)
+hazelcast:
+  clusterName: "ecommerce-cluster"
+  port: 5701
+
+# Order service needs to call other services for saga orchestration
+services:
+  inventory:
+    url: ""    # Set via template: http://{release}-inventory-service:8082
+  payment:
+    url: ""    # Set via template: http://{release}-payment-service:8084
+
+# OpenTelemetry / tracing
+tracing:
+  enabled: true
+  endpoint: "http://jaeger:4317"
+
+# Health probes (Spring Boot Actuator)
+probes:
+  startup:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 12
+    timeoutSeconds: 5
+  liveness:
+    initialDelaySeconds: 0
+    periodSeconds: 30
+    failureThreshold: 3
+    timeoutSeconds: 5
+  readiness:
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 5
+
+# Init container — wait for Hazelcast cluster before starting
+initContainers:
+  waitForHazelcast:
+    enabled: true
+    image: busybox:1.36
+
+# Resource management
 resources:
   requests:
     memory: "256Mi"
@@ -17,7 +69,16 @@ resources:
     memory: "512Mi"
     cpu: "1000m"
 
+# Service account
 serviceAccount:
   create: true
   name: ""
   annotations: {}
+
+# Pod scheduling
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

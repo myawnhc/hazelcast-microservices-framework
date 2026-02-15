@@ -1,0 +1,15 @@
+Inventory Service has been deployed!
+
+  Service URL (cluster-internal): http://{{ include "inventory-service.fullname" . }}:{{ .Values.service.port }}
+  API base path: /api/products
+
+To check pod status:
+  kubectl get pods -l app.kubernetes.io/name={{ include "inventory-service.name" . }}
+
+To view logs:
+  kubectl logs -l app.kubernetes.io/name={{ include "inventory-service.name" . }} -f
+
+To port-forward for local access:
+  kubectl port-forward svc/{{ include "inventory-service.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+
+Then access: http://localhost:{{ .Values.service.port }}/api/products

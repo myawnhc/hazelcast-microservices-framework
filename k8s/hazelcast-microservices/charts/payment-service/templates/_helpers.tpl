@@ -31,3 +31,14 @@ app.kubernetes.io/part-of: hazelcast-microservices
 app.kubernetes.io/name: {{ include "payment-service.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Create the name of the service account to use.
+*/}}
+{{- define "payment-service.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "payment-service.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
