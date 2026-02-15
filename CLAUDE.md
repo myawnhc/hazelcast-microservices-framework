@@ -952,10 +952,55 @@ implement the InventoryService with:
 
 ---
 
+## Environment Constraints
+
+### Java / Build Environment
+- **Development runs on Java 25.** Mockito's inline mock maker **cannot mock concrete classes** on Java 25. Always mock interfaces; if a concrete class needs mocking, extract an interface first (e.g., `ServiceClient` → `ServiceClientOperations`).
+- All framework modules must be installed to the local Maven repo (`mvn install -pl framework-core`) before running dependent module tests, otherwise BOM imports and transitive dependencies won't resolve.
+- When running the full test suite, use `mvn clean test` from the project root. For individual module tests after changes, install the changed module first: `mvn install -pl <module> -DskipTests && mvn test -pl <dependent-module>`.
+
+### Shell Scripts
+- **Target macOS bash 3.2** (`/bin/bash`). Avoid bash 4+ features:
+  - No associative arrays (`declare -A`)
+  - No `${!var}` indirect expansion
+  - No `mapfile` / `readarray`
+  - No `&>>` (use `>> file 2>&1` instead)
+- Use POSIX-compatible alternatives: `key:value` string loops with `${var%%:*}` / `${var##*:}` parameter expansion.
+
+### Spring Boot Conventions
+- When creating Spring beans with multiple constructors, always annotate the intended constructor with `@Autowired` to avoid ambiguous constructor errors.
+- `@Scheduled` annotations must use numeric milliseconds (e.g., `fixedDelay = 10000`), **not** duration strings like `"10s"`.
+- `@ConditionalOnBean` works with `ApplicationContextRunner` + user config providing the bean.
+
+### Kubernetes / Helm
+- When embedding JSON containing `{{ }}` syntax (e.g., Grafana dashboards, Prometheus queries) inside Helm templates, **never inline them directly**. Use `.Files.Get` to load from external files to avoid template rendering conflicts.
+- Service memory limits must be at least 1Gi for microservices running embedded Hazelcast + Jet (512Mi causes OOMKill under load).
+
+---
+
+## Architecture & Design
+
+- Architectural decisions that have been debated or revisited are recorded as ADRs under `docs/architecture/adr/`. **Once an ADR is accepted, do not revisit the decision without explicit user direction.**
+- Key settled ADRs:
+  - **ADR 008**: Dual-instance Hazelcast architecture (embedded standalone + shared cluster client)
+  - **ADR 010**: Single-replica scaling strategy (multi-replica deferred until PostgreSQL persistence)
+  - **ADR 005**: Community Edition default with Enterprise opt-in
+  - **ADR 009**: Flexible edition configuration via `EditionDetector`
+
+---
+
+## Testing & Build
+
+- After implementation, always run the full test suite (`mvn clean test`) from the project root before committing.
+- Before committing, verify that API request payloads in demo/test scripts match the actual controller contract (e.g., include all required fields like `unitPrice` in order line items). Check that metric names used in dashboards actually match the registered Micrometer metric names.
+- When writing tests that assume Community Edition, set `framework.edition.license.env-var=NONEXISTENT_TEST_LICENSE_VAR_12345` to avoid picking up the real `HZ_LICENSEKEY` set in the dev environment.
+
+---
+
 ## Getting Help
 
 If uncertain about:
-- **Architecture decisions**: Refer to `docs/architecture/`
+- **Architecture decisions**: Refer to `docs/architecture/adr/`
 - **Requirements**: Refer to `docs/requirements/`
 - **Design patterns**: Refer to `docs/design/`
 - **Hazelcast APIs**: Check Hazelcast 5.6 documentation
@@ -963,5 +1008,5 @@ If uncertain about:
 
 ---
 
-Last updated: 2026-01-25
-Version: 1.2
+Last updated: 2026-02-15
+Version: 1.3
