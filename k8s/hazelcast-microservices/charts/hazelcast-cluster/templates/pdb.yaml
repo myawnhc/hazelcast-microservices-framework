@@ -1,0 +1,13 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "hazelcast-cluster.fullname" . }}
+  labels:
+    {{- include "hazelcast-cluster.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "hazelcast-cluster.selectorLabels" . | nindent 6 }}
+{{- end }}

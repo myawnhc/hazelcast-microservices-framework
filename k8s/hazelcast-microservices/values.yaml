@@ -37,6 +37,12 @@ account-service:
     pullPolicy: IfNotPresent
   service:
     port: 8081
+  # autoscaling:
+  #   enabled: true
+  #   minReplicas: 2
+  #   maxReplicas: 5
+  # podDisruptionBudget:
+  #   enabled: true
   resources:
     requests:
       memory: "256Mi"
@@ -57,6 +63,12 @@ inventory-service:
     pullPolicy: IfNotPresent
   service:
     port: 8082
+  # autoscaling:
+  #   enabled: true
+  #   minReplicas: 2
+  #   maxReplicas: 5
+  # podDisruptionBudget:
+  #   enabled: true
   resources:
     requests:
       memory: "256Mi"
@@ -77,6 +89,12 @@ order-service:
     pullPolicy: IfNotPresent
   service:
     port: 8083
+  # autoscaling:
+  #   enabled: true
+  #   minReplicas: 2
+  #   maxReplicas: 5
+  # podDisruptionBudget:
+  #   enabled: true
   resources:
     requests:
       memory: "256Mi"
@@ -97,6 +115,12 @@ payment-service:
     pullPolicy: IfNotPresent
   service:
     port: 8084
+  # autoscaling:
+  #   enabled: true
+  #   minReplicas: 2
+  #   maxReplicas: 5
+  # podDisruptionBudget:
+  #   enabled: true
   resources:
     requests:
       memory: "256Mi"
@@ -127,6 +151,12 @@ api-gateway:
           - path: /
             pathType: Prefix
     tls: []
+  # autoscaling:
+  #   enabled: true
+  #   minReplicas: 2
+  #   maxReplicas: 5
+  # podDisruptionBudget:
+  #   enabled: true
   resources:
     requests:
       memory: "128Mi"

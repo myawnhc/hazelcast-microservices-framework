@@ -46,6 +46,12 @@ probes:
     failureThreshold: 5
     timeoutSeconds: 10
 
+# Pod Disruption Budget — preserves quorum during node drains
+# Enabled by default: losing 2+ Hazelcast members simultaneously risks data loss
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
 # Optional PersistentVolumeClaim for Hazelcast hot restart (Enterprise only)
 persistence:
   enabled: false
