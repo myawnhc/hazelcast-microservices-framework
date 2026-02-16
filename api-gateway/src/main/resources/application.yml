@@ -112,6 +112,11 @@ spring:
             allow-credentials: true
             max-age: 3600
 
+# Security (disabled by default — set to true to enable JWT validation)
+framework:
+  security:
+    enabled: false
+
 # Rate limiting
 gateway:
   rate-limit:
