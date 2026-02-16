@@ -388,19 +388,20 @@ services:
     environment:
       - MC_DEFAULT_CLUSTER=ecommerce-cluster
       - MC_DEFAULT_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
-      - MC_INIT_CMD=/opt/hazelcast/management-center/bin/mc-conf.sh cluster add -cn=account-local -ma=account-service:5701 -H /data -l && /opt/hazelcast/management-center/bin/mc-conf.sh cluster add -cn=inventory-local -ma=inventory-service:5701 -H /data -l && /opt/hazelcast/management-center/bin/mc-conf.sh cluster add -cn=order-local -ma=order-service:5701 -H /data -l && /opt/hazelcast/management-center/bin/mc-conf.sh cluster add -cn=payment-local -ma=payment-service:5701 -H /data -l
+      - MC_INIT_CMD=rm -f /data/mc.lock && /opt/hazelcast/management-center/bin/hz-mc conf cluster add -cn=account-local -ma=account-service:5701 -H /data -l && /opt/hazelcast/management-center/bin/hz-mc conf cluster add -cn=inventory-local -ma=inventory-service:5701 -H /data -l && /opt/hazelcast/management-center/bin/hz-mc conf cluster add -cn=order-local -ma=order-service:5701 -H /data -l && /opt/hazelcast/management-center/bin/hz-mc conf cluster add -cn=payment-local -ma=payment-service:5701 -H /data -l
     depends_on:
       hazelcast-1:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
 
   prometheus:
     image: prom/prometheus:v2.48.0
