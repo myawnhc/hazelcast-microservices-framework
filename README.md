@@ -22,6 +22,7 @@ This project provides a production-ready event sourcing framework using Hazelcas
 - **Resilience**: Circuit breakers and retry with exponential backoff on all saga listeners via Resilience4j; transactional outbox for guaranteed at-least-once event delivery; dead letter queue for failed events with admin endpoints; idempotency guards for exactly-once processing
 - **API Gateway**: Spring Cloud Gateway single entry point with path-based routing, Hazelcast-backed per-IP rate limiting, correlation ID propagation, per-route circuit breakers, CORS, aggregated health checks, and consistent JSON error responses ([API Gateway](api-gateway/README.md))
 - **Saga Observability**: Per-step duration metrics (`saga.step.duration`), Grafana comparison panels showing choreography vs orchestration side-by-side, MCP saga type filtering
+- **Security**: Three-layer security model — JWT authentication via OAuth2 Resource Server on API Gateway and services, HMAC-SHA256 service-to-service authentication for ITopic saga events, and API key authentication with role-based access control (VIEWER/OPERATOR/ADMIN) for the MCP server. All layers are opt-in and backward compatible ([Security Guide](docs/guides/security-guide.md))
 
 ### Phase 2 Features
 
@@ -217,6 +218,7 @@ curl http://localhost:8082/api/products/<product-id>/similar?limit=5
 - [Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md) - Grafana, Prometheus, and Jaeger setup
 - [MCP Server Guide](mcp-server/README.md) - AI assistant integration via Model Context Protocol
 - [MCP Examples](docs/guides/mcp-examples.md) - Example AI assistant conversations
+- [Security Guide](docs/guides/security-guide.md) - JWT, service-to-service, and MCP API key authentication
 
 ## Event Sourcing Flow
 

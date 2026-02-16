@@ -134,6 +134,12 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=account-service
       - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      # Security (uncomment to enable — see docs/guides/security-guide.md)
+      # - FRAMEWORK_SECURITY_ENABLED=true
+      # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_ENABLED=true
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_NAME=account-service
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_SHARED_SECRET=change-me-in-production
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -170,6 +176,12 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=inventory-service
       - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      # Security (uncomment to enable — see docs/guides/security-guide.md)
+      # - FRAMEWORK_SECURITY_ENABLED=true
+      # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_ENABLED=true
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_NAME=inventory-service
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_SHARED_SECRET=change-me-in-production
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -206,6 +218,12 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=order-service
       - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      # Security (uncomment to enable — see docs/guides/security-guide.md)
+      # - FRAMEWORK_SECURITY_ENABLED=true
+      # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_ENABLED=true
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_NAME=order-service
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_SHARED_SECRET=change-me-in-production
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -242,6 +260,12 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=payment-service
       - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      # Security (uncomment to enable — see docs/guides/security-guide.md)
+      # - FRAMEWORK_SECURITY_ENABLED=true
+      # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_ENABLED=true
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_NAME=payment-service
+      # - FRAMEWORK_SECURITY_SERVICE_IDENTITY_SHARED_SECRET=change-me-in-production
     depends_on:
       hazelcast-1:
         condition: service_healthy
@@ -281,6 +305,10 @@ services:
       - MCP_SERVICES_INVENTORY_URL=http://inventory-service:8082
       - MCP_SERVICES_ORDER_URL=http://order-service:8083
       - MCP_SERVICES_PAYMENT_URL=http://payment-service:8084
+      # MCP Security (uncomment to enable — see docs/guides/security-guide.md)
+      # - MCP_SECURITY_ENABLED=true
+      # - MCP_SECURITY_API_KEYS_demo-viewer-key=VIEWER
+      # - MCP_SECURITY_API_KEYS_demo-operator-key=OPERATOR
     depends_on:
       account-service:
         condition: service_healthy
@@ -322,6 +350,9 @@ services:
       - INVENTORY_SERVICE_URL=http://inventory-service:8082
       - ORDER_SERVICE_URL=http://order-service:8083
       - PAYMENT_SERVICE_URL=http://payment-service:8084
+      # Security (uncomment to enable — see docs/guides/security-guide.md)
+      # - FRAMEWORK_SECURITY_ENABLED=true
+      # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce
     depends_on:
       account-service:
         condition: service_healthy
