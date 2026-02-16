@@ -1,37 +1,78 @@
 # Hazelcast Microservices Framework
 
-An event sourcing microservices framework built on Hazelcast, demonstrating modern distributed systems patterns.
+A production-ready event sourcing framework built on Hazelcast, with a complete eCommerce demo showcasing the distributed systems patterns that make microservices actually work.
 
 ## Overview
 
-This project provides a production-ready event sourcing framework using Hazelcast for distributed data storage and stream processing. It includes a complete eCommerce demo with four microservices showcasing the framework's capabilities.
+Splitting a monolith into separate deployables doesn't make a microservices architecture. The hard problems — keeping services consistent without shared transactions, staying up when dependencies go down, understanding behavior across service boundaries — require specific patterns and infrastructure. This framework implements those patterns on Hazelcast and Spring Boot, with a four-service eCommerce demo (Account, Inventory, Order, Payment) that exercises every one of them end-to-end.
 
-### Key Features
+### Event Sourcing & Stream Processing
 
-- **Event Sourcing**: Immutable event log as the source of truth
-- **Materialized Views**: Fast query-optimized projections using Hazelcast IMap
-- **Event-Driven Architecture**: Cross-service communication via Hazelcast topics
-- **Stream Processing**: Hazelcast Jet pipelines for real-time event processing
-- **High Performance**: 100,000+ in-memory view operations per second
-- **Saga Support**: Built-in distributed transaction patterns
-- **Observability**: Prometheus metrics and structured logging
+Events are the source of truth, not database rows. Every state change is captured as an immutable event, enabling full audit trails, temporal queries, and replay.
 
-### Phase 3 Features
+- **Event Store**: Append-only event log backed by Hazelcast IMap with event journal
+- **Materialized Views**: Query-optimized projections rebuilt from events, delivering 100,000+ ops/sec at sub-millisecond latency
+- **Jet Pipelines**: Hazelcast Jet processes events in real time — persisting to the event store, updating materialized views, and publishing to the event bus in a single pipeline
+- **Event-Driven Communication**: Cross-service events flow through Hazelcast ITopic, decoupling services without message broker infrastructure
 
-- **Orchestrated Sagas**: Central `SagaOrchestrator` drives saga steps sequentially via HTTP with per-step timeout, retry, and automatic reverse-order compensation — choose between choreography and orchestration based on your requirements ([Saga Pattern Guide](docs/guides/saga-pattern-guide.md))
-- **Resilience**: Circuit breakers and retry with exponential backoff on all saga listeners via Resilience4j; transactional outbox for guaranteed at-least-once event delivery; dead letter queue for failed events with admin endpoints; idempotency guards for exactly-once processing
-- **API Gateway**: Spring Cloud Gateway single entry point with path-based routing, Hazelcast-backed per-IP rate limiting, correlation ID propagation, per-route circuit breakers, CORS, aggregated health checks, and consistent JSON error responses ([API Gateway](api-gateway/README.md))
-- **Saga Observability**: Per-step duration metrics (`saga.step.duration`), Grafana comparison panels showing choreography vs orchestration side-by-side, MCP saga type filtering
-- **Security**: Three-layer security model — JWT authentication via OAuth2 Resource Server on API Gateway and services, HMAC-SHA256 service-to-service authentication for ITopic saga events, and API key authentication with role-based access control (VIEWER/OPERATOR/ADMIN) for the MCP server. All layers are opt-in and backward compatible ([Security Guide](docs/guides/security-guide.md))
+### Distributed Transactions
 
-### Phase 2 Features
+Microservices can't share a database transaction. Sagas coordinate multi-service operations with automatic compensation when something fails.
 
-- **Choreographed Sagas**: Order fulfillment saga coordinating across all four services — Order, Inventory, Payment, and Account — with automatic timeout detection and compensation ([Saga Pattern Guide](docs/guides/saga-pattern-guide.md))
-- **Payment Service**: Fourth microservice handling payment processing and refunds, integrated into the saga flow
-- **Vector Store** (Enterprise): Product similarity search using Hazelcast IMap-based cosine similarity; Community Edition falls back gracefully with empty results
-- **Observability Stack**: Pre-provisioned Grafana dashboards (System Overview, Event Flow, Materialized Views, Sagas), Prometheus metrics scraping across all services and Hazelcast nodes, Jaeger distributed tracing via OTLP ([Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md))
-- **Edition Detection**: Automatic Community/Enterprise edition detection with `@ConditionalOnEnterpriseFeature` and `@ConditionalOnCommunityFallback` annotations for conditional bean wiring
-- **MCP Server**: AI assistant integration via the [Model Context Protocol](https://modelcontextprotocol.io/) — 7 tools for querying views, submitting events, inspecting sagas, checking metrics, and running demos ([MCP Server Guide](mcp-server/README.md) | [Example Conversations](docs/guides/mcp-examples.md))
+- **Choreographed Sagas**: Event-driven coordination across all four services with automatic timeout detection and compensation — no central coordinator, services react to events
+- **Orchestrated Sagas**: Central `SagaOrchestrator` drives steps sequentially via HTTP with per-step timeout, retry, and automatic reverse-order compensation — explicit control flow for complex workflows
+- Choose the right pattern for each use case, or run both side-by-side ([Saga Pattern Guide](docs/guides/saga-pattern-guide.md))
+
+### Resilience & Reliability
+
+In a distributed system, partial failure is normal. The framework ensures no event is lost and no failure goes unhandled.
+
+- **Circuit Breakers**: Resilience4j circuit breakers with retry and exponential backoff on all saga listeners — fail fast when a downstream service is unhealthy
+- **Transactional Outbox**: Guaranteed at-least-once event delivery — events are written atomically with state changes, then published asynchronously
+- **Dead Letter Queue**: Failed events land in a DLQ with admin REST endpoints for inspection, replay, and discard
+- **Idempotency Guards**: Exactly-once processing semantics prevent duplicate side effects when events are retried
+
+### Security
+
+Three independent layers, all opt-in and backward compatible — security is never in the way during development but ready for production.
+
+- **JWT Authentication**: OAuth2 Resource Server on the API Gateway and all services, with configurable public paths and custom `SecurityFilterChain` override support
+- **Service-to-Service Authentication**: HMAC-SHA256 signing of ITopic saga events via `EventAuthenticator` — consuming services verify message integrity and origin
+- **MCP API Key RBAC**: API key authentication with role-based tool access control (VIEWER / OPERATOR / ADMIN) for the MCP server, supporting both stdio and HTTP/SSE modes
+- [Security Guide](docs/guides/security-guide.md)
+
+### Observability
+
+You can't fix what you can't see. Every layer of the framework is instrumented and pre-wired to dashboards.
+
+- **Metrics**: Micrometer + Prometheus scraping across all services and Hazelcast nodes, with per-step saga duration metrics (`saga.step.duration`) and Grafana panels comparing choreography vs orchestration side-by-side
+- **Dashboards**: Pre-provisioned Grafana dashboards for System Overview, Event Flow, Materialized Views, and Sagas — ready out of the box
+- **Distributed Tracing**: Jaeger via OTLP for end-to-end request tracing across service boundaries
+- [Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md)
+
+### API Gateway
+
+A single entry point that handles the cross-cutting concerns services shouldn't implement individually.
+
+- Path-based routing to all four microservices with per-route circuit breakers
+- Hazelcast-backed per-IP rate limiting (shared state across gateway instances)
+- Correlation ID propagation, CORS, aggregated health checks, and consistent JSON error responses
+- [API Gateway Guide](api-gateway/README.md)
+
+### AI Integration
+
+An AI assistant can query, inspect, and operate the entire system through the Model Context Protocol.
+
+- **MCP Server**: 7 tools for querying materialized views, submitting events, inspecting saga state, checking metrics, and running demo scenarios
+- Supports stdio transport (local AI assistants) and HTTP/SSE (networked deployments)
+- [MCP Server Guide](mcp-server/README.md) | [Example Conversations](docs/guides/mcp-examples.md)
+
+### Enterprise Extensions
+
+The framework runs fully on Hazelcast Community Edition. Enterprise features are optional enhancements with automatic detection and graceful fallback.
+
+- **Vector Store**: Product similarity search using Hazelcast VectorCollection with HNSW indexing (Enterprise) or IMap-based cosine similarity (Community fallback)
+- **Edition Detection**: `@ConditionalOnEnterpriseFeature` and `@ConditionalOnCommunityFallback` annotations for conditional bean wiring — write once, run on either edition
 
 ## Architecture
 
