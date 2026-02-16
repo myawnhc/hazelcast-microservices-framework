@@ -636,17 +636,21 @@ framework:
 
 ### Day 23: Persistence Interface & PostgreSQL Implementation
 
+**Architecture decision**: Write-behind MapStore (see ADR 012). Hazelcast's native MapStore/MapLoader handles async batching, retry, and cold-start loading. No custom dual-write or replay code needed.
+
 **Tasks**:
 1. Create `com.theyawns.framework.store.persistence` package in framework-core
 2. Define `EventStorePersistence` interface:
    - `persist(PersistableEvent event)` — store a single event
-   - `persistBatch(List<PersistableEvent> events)` — store a batch
+   - `persistBatch(List<PersistableEvent> events)` — store a batch (used by MapStore.storeAll)
+   - `loadEvent(String eventId)` — load a single event by key (used by MapLoader.load)
    - `loadEvents(String aggregateId)` — load events for an aggregate (ordered by sequence)
    - `loadEvents(String aggregateId, long afterSequence)` — load events after a sequence number
-   - `loadAllEvents(Instant since)` — load all events since a timestamp (for full replay)
+   - `loadAllKeys()` — return all event keys (used by MapLoader.loadAllKeys)
    - `isAvailable()` — health check
-3. Define `PersistableEvent` record (aggregateId, aggregateType, eventType, payload as byte[], correlationId, sagaId, sequence, timestamp)
-4. Define `EventStorePersistenceProperties` — provider-agnostic config (enabled, async-write, replay-on-start)
+   - `getProviderName()` — "PostgreSQL", "MySQL", etc.
+3. Define `PersistableEvent` record (eventId, aggregateId, aggregateType, eventType, payload as byte[], correlationId, sagaId, sequence, timestamp)
+4. Define `PersistenceProperties` — provider-agnostic config (enabled, write-delay, batch-size, coalescing, initial-load-mode)
 5. Add Spring Data JPA and PostgreSQL driver dependencies
 6. Create `PostgresEventStorePersistence` implementing the interface
 7. Create `EventEntity` JPA entity + `EventRepository`
@@ -663,11 +667,13 @@ public interface EventStorePersistence {
 
     void persistBatch(List<PersistableEvent> events);
 
+    Optional<PersistableEvent> loadEvent(String eventId);
+
     List<PersistableEvent> loadEvents(String aggregateId);
 
     List<PersistableEvent> loadEvents(String aggregateId, long afterSequence);
 
-    List<PersistableEvent> loadAllEvents(Instant since);
+    Iterable<String> loadAllKeys();
 
     boolean isAvailable();
 
@@ -694,6 +700,7 @@ public record PersistableEvent(
 ```sql
 CREATE TABLE domain_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id VARCHAR(255) NOT NULL UNIQUE,
     aggregate_id VARCHAR(255) NOT NULL,
     aggregate_type VARCHAR(100) NOT NULL,
     event_type VARCHAR(100) NOT NULL,
@@ -706,6 +713,7 @@ CREATE TABLE domain_events (
 );
 
 CREATE INDEX idx_events_aggregate ON domain_events(aggregate_id, sequence);
+CREATE INDEX idx_events_event_id ON domain_events(event_id);
 CREATE INDEX idx_events_type ON domain_events(event_type);
 CREATE INDEX idx_events_saga ON domain_events(saga_id);
 CREATE INDEX idx_events_created ON domain_events(created_at);
@@ -722,16 +730,19 @@ CREATE INDEX idx_events_created ON domain_events(created_at);
 
 ---
 
-### Day 24: Dual-Write Strategy & Event Replay
+### Day 24: Write-Behind MapStore Integration
+
+**Architecture**: See ADR 012. MapStore replaces the previously planned `DurableEventStore` wrapper and `EventReplayService`. Hazelcast handles async write batching, retry, and cold-start cache loading natively.
 
 **Tasks**:
-1. Create `DurableEventStore` — wraps `HazelcastEventStore` + `EventStorePersistence`
-2. Implement dual-write: write to Hazelcast IMap first (fast path), then async persist via `EventStorePersistence`
-3. Create `EventReplayService` — replays events from `EventStorePersistence` to rebuild Hazelcast state on startup
-4. Add startup flag: `framework.persistence.replay-on-start=true`
-5. Handle replay ordering (by sequence within each aggregate)
-6. When persistence is disabled (`framework.persistence.enabled=false`), `DurableEventStore` delegates to `HazelcastEventStore` only — zero overhead
-7. Unit tests for dual-write and replay (mock the `EventStorePersistence` interface)
+1. Create `EventStoreMapStore implements MapStore<String, GenericRecord>, MapLoader<String, GenericRecord>` — delegates to `EventStorePersistence`, converts between `GenericRecord` and `PersistableEvent`
+2. Create `ViewStoreMapStore implements MapStore<String, GenericRecord>, MapLoader<String, GenericRecord>` — similar pattern for materialized view maps
+3. Create `MapStoreAutoConfiguration` — programmatically configures `MapStoreConfig` on `_ES` and `_VIEW` IMaps when persistence is enabled
+4. Configure write-behind settings: `writeDelaySeconds=5`, `writeBatchSize=100`, `writeCoalescing=false` for event stores, `writeCoalescing=true` for views
+5. Configure MapLoader: lazy loading for event stores (events loaded on-demand), eager loading for view maps (views loaded at startup for REST API readiness)
+6. Add IMap eviction policies: `max-size` or `max-idle-seconds` on `_ES` maps (evicted entries reloadable from PostgreSQL via MapLoader)
+7. When persistence is disabled (`framework.persistence.enabled=false`), no MapStore is configured — IMaps behave exactly as today
+8. Unit tests for MapStore conversion logic (mock the `EventStorePersistence` interface)
 
 **Configuration**:
 ```yaml
@@ -739,18 +750,43 @@ framework:
   persistence:
     enabled: true                    # false = Hazelcast-only (Phase 1/2 behavior)
     provider: postgresql             # informational; auto-detected from classpath
-    replay-on-start: true            # rebuild Hazelcast state from persistent store
-    async-write: true                # write to persistence asynchronously
+    write-delay-seconds: 5           # write-behind flush interval
+    write-batch-size: 100            # max entries per batch flush
+    write-coalescing: false          # false for event stores (append-only, unique keys)
+    view-write-coalescing: true      # true for views (only latest state persisted)
+    initial-load-mode: LAZY          # LAZY = load on demand; EAGER = load all at startup
+    view-initial-load-mode: EAGER    # views loaded at startup for REST API readiness
 ```
 
-**Extensibility note**: Because `DurableEventStore` depends on the `EventStorePersistence` interface (not `PostgresEventStorePersistence`), swapping PostgreSQL for another provider requires only:
+**MapStore architecture**:
+```
+EventStorePersistence (interface)     ← provider-agnostic
+    │
+    ▼
+PostgresEventStorePersistence         ← PostgreSQL implementation
+    │
+    ▼
+EventStoreMapStore                    ← thin Hazelcast adapter
+    │                                    (GenericRecord ↔ PersistableEvent conversion)
+    ▼
+IMap "{Domain}_ES"                    ← write-behind, coalescing=false
+    MapStoreConfig:
+      writeDelaySeconds: 5
+      writeBatchSize: 100
+      writeCoalescing: false
+      initialLoadMode: LAZY
+```
+
+**Extensibility note**: Because `EventStoreMapStore` depends on the `EventStorePersistence` interface (not `PostgresEventStorePersistence`), swapping PostgreSQL for another provider requires only:
 1. Implement `EventStorePersistence`
 2. Register the bean (e.g., via auto-configuration)
-3. No changes to `DurableEventStore`, `EventReplayService`, or any service code
+3. No changes to MapStore, pipeline, or service code
 
 **Deliverables**:
-- [ ] `DurableEventStore` dual-write implementation
-- [ ] `EventReplayService` for startup recovery
+- [ ] `EventStoreMapStore` (write-behind for event store IMaps)
+- [ ] `ViewStoreMapStore` (write-behind for view IMaps)
+- [ ] `MapStoreAutoConfiguration` (programmatic MapStoreConfig)
+- [ ] IMap eviction configuration
 - [ ] Configuration properties
 - [ ] Unit tests (persistence interface mocked)
 
@@ -760,18 +796,24 @@ framework:
 
 **Tasks**:
 1. Integration tests with Testcontainers PostgreSQL
-2. Test crash recovery: write events → kill Hazelcast → restart → verify replay
-3. Test async write failure handling (log and retry)
-4. Test `EventStorePersistence` contract with a simple in-memory implementation (proves the interface works independently of PostgreSQL)
-5. Add persistence metrics (write latency, queue depth, replay count)
-6. Update docker-compose with PostgreSQL service
-7. Create persistence guide (`docs/guides/persistence-guide.md`) including section on implementing custom providers
-8. Update main README
-9. Draft blog post section on durable event sourcing
+2. Test crash recovery: write events → kill Hazelcast → restart → verify MapLoader rebuilds state
+3. Test write-behind batching: verify `storeAll()` receives batched entries
+4. Test write-behind failure handling: simulate PostgreSQL outage → verify retry
+5. Test `EventStorePersistence` contract with a simple in-memory implementation (proves the interface works independently of PostgreSQL)
+6. Test MapLoader cold-start: eager load for views, lazy load for events
+7. Add persistence metrics (write-behind queue depth, batch flush latency, MapLoader load count)
+8. Update docker-compose with PostgreSQL service
+9. Create persistence guide (`docs/guides/persistence-guide.md`) including sections on:
+   - Write-behind configuration tuning
+   - Custom provider implementation
+   - Cold-start behavior (eager vs lazy loading)
+   - Eviction and memory management
+10. Update main README
+11. Draft blog post section on durable event sourcing with write-behind MapStore
 
 **Deliverables**:
 - [ ] Testcontainers integration tests
-- [ ] Crash recovery test
+- [ ] Crash recovery test (MapLoader rebuild)
 - [ ] In-memory `EventStorePersistence` for contract testing
 - [ ] Persistence metrics
 - [ ] Documentation (including custom provider guide)
@@ -831,11 +873,12 @@ framework:
 
 ### Area 6 Complete When:
 - [ ] `EventStorePersistence` interface defined (provider-agnostic)
-- [ ] PostgreSQL implementation working (persist + load + replay)
+- [ ] PostgreSQL implementation working (persist + load)
 - [ ] In-memory implementation for contract testing
-- [ ] Dual-write: Hazelcast + persistence provider
-- [ ] Replay rebuilds Hazelcast state on startup
-- [ ] Crash recovery verified
+- [ ] Write-behind MapStore configured on `_ES` and `_VIEW` IMaps (ADR 012)
+- [ ] MapLoader rebuilds Hazelcast state on startup (eager for views, lazy for events)
+- [ ] IMap eviction policies configured (bounded hot cache)
+- [ ] Crash recovery verified (MapLoader rebuild from PostgreSQL)
 - [ ] Persistence guide published (including custom provider instructions)
 
 ---
