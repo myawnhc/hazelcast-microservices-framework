@@ -1,0 +1,507 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  description: |
+    Payment processing service for the Hazelcast Event Sourcing Framework.
+
+    This service manages payment processing using event sourcing patterns:
+    - Payment processing triggers a `PaymentProcessedEvent`
+    - Refunds trigger a `PaymentRefundedEvent`
+    - Failed payments trigger a `PaymentFailedEvent`
+
+    **Key Features:**
+    - Supports multiple payment methods (credit card, debit, etc.)
+    - Automatic transaction ID generation
+    - Full refund support with reason tracking
+    - Event history for audit trail
+
+    **Payment Status Flow:**
+    ```
+    PENDING -> AUTHORIZED -> CAPTURED
+                  |             |
+                  v             v
+                FAILED       REFUNDED
+    ```
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:8084
+    description: Local development server
+  - url: http://payment-service:8084
+    description: Docker Compose internal
+
+tags:
+  - name: Payment Management
+    description: APIs for processing and managing payments
+  - name: Orchestrated Payment Operations
+    description: Saga orchestrator endpoints for distributed transactions
+
+paths:
+  /api/payments:
+    post:
+      tags:
+        - Payment Management
+      summary: Process payment
+      description: |
+        Processes a payment for an order.
+        Creates a `PaymentProcessedEvent` which:
+        1. Authorizes the payment amount
+        2. Captures funds
+        3. Generates a transaction ID
+        4. Stores the payment in the event store
+        5. Updates the payment materialized view
+
+        If authorization fails, a `PaymentFailedEvent` is created instead.
+      operationId: processPayment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+            example:
+              orderId: order-12345-uuid
+              customerId: cust-12345-uuid
+              amount: 2859.98
+              currency: USD
+              method: credit_card
+      responses:
+        '201':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+              example:
+                paymentId: pay-12345-uuid
+                orderId: order-12345-uuid
+                customerId: cust-12345-uuid
+                amount: 2859.98
+                currency: USD
+                method: credit_card
+                status: CAPTURED
+                transactionId: txn-abc123-uuid
+                failureReason: null
+        '400':
+          description: Invalid payment data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Payment Management
+      summary: List payments
+      description: |
+        Lists all payments from the materialized view.
+        Returns the most recent payments up to the specified limit.
+      operationId: listPayments
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of payments to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+          example: 10
+      responses:
+        '200':
+          description: Payments retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Payment'
+
+  /api/payments/{paymentId}:
+    get:
+      tags:
+        - Payment Management
+      summary: Get payment by ID
+      description: |
+        Retrieves payment details by payment ID.
+        Returns data from the payment materialized view.
+      operationId: getPayment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Unique payment identifier
+          schema:
+            type: string
+          example: pay-12345-uuid
+      responses:
+        '200':
+          description: Payment found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '404':
+          description: Payment not found
+
+  /api/payments/order/{orderId}:
+    get:
+      tags:
+        - Payment Management
+      summary: Get payment for order
+      description: |
+        Retrieves the payment associated with an order.
+        Useful for checking payment status during order fulfillment.
+      operationId: getPaymentByOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: Order identifier
+          schema:
+            type: string
+          example: order-12345-uuid
+      responses:
+        '200':
+          description: Payment found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '404':
+          description: Payment not found for order
+
+  /api/payments/{paymentId}/refund:
+    post:
+      tags:
+        - Payment Management
+      summary: Refund payment
+      description: |
+        Refunds a previously captured payment.
+        Creates a `PaymentRefundedEvent` which:
+        - Updates payment status to REFUNDED
+        - Records the refund reason
+
+        **Prerequisites:**
+        - Payment must be in CAPTURED status
+      operationId: refundPayment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Unique payment identifier
+          schema:
+            type: string
+          example: pay-12345-uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+            example:
+              reason: Customer requested refund
+      responses:
+        '200':
+          description: Payment refunded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+              example:
+                paymentId: pay-12345-uuid
+                orderId: order-12345-uuid
+                customerId: cust-12345-uuid
+                amount: 2859.98
+                currency: USD
+                method: credit_card
+                status: REFUNDED
+                transactionId: txn-abc123-uuid
+                failureReason: null
+        '404':
+          description: Payment not found
+        '409':
+          description: Payment cannot be refunded in current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: 'Payment cannot be refunded: current status is PENDING'
+                code: INVALID_STATE_TRANSITION
+
+  /api/payments/{paymentId}/events:
+    get:
+      tags:
+        - Payment Management
+      summary: Get payment event history
+      description: |
+        Retrieves the event history for a payment from the event store.
+        Returns events in chronological order, useful for auditing and debugging.
+      operationId: getPaymentEventHistory
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Unique payment identifier
+          schema:
+            type: string
+          example: pay-12345-uuid
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of events to return
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+          example: 20
+      responses:
+        '200':
+          description: Event history retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+
+  /api/saga/payment/process:
+    post:
+      tags:
+        - Orchestrated Payment Operations
+      summary: Process payment (orchestrated saga)
+      description: |
+        Processes a payment as part of an orchestrated saga.
+        Called by the saga orchestrator in order-service via HTTP.
+        Returns a standardized step response indicating success or failure.
+      operationId: processPaymentOrchestrated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestratedProcessRequest'
+            example:
+              orderId: order-12345-uuid
+              customerId: cust-12345-uuid
+              amount: "2859.98"
+              currency: USD
+              method: credit_card
+      responses:
+        '200':
+          description: Step completed (check success field for outcome)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratedStepResponse'
+              example:
+                success: true
+                data:
+                  paymentId: pay-12345-uuid
+                  transactionId: txn-abc123-uuid
+                errorMessage: null
+
+  /api/saga/payment/refund:
+    post:
+      tags:
+        - Orchestrated Payment Operations
+      summary: Refund payment (saga compensation)
+      description: |
+        Refunds a payment as a compensation step in an orchestrated saga.
+        Called when a downstream saga step fails and the payment must be reversed.
+      operationId: refundPaymentOrchestrated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestratedRefundRequest'
+            example:
+              paymentId: pay-12345-uuid
+              reason: Saga compensation - inventory reservation failed
+      responses:
+        '200':
+          description: Step completed (check success field for outcome)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratedStepResponse'
+
+components:
+  schemas:
+    PaymentRequest:
+      type: object
+      required:
+        - orderId
+        - customerId
+        - amount
+        - currency
+      properties:
+        orderId:
+          type: string
+          description: Order this payment is for
+          example: order-12345-uuid
+        customerId:
+          type: string
+          description: Customer making the payment
+          example: cust-12345-uuid
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          description: Payment amount
+          example: 2859.98
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code
+          example: USD
+        method:
+          type: string
+          description: Payment method (e.g., credit_card, debit, paypal)
+          example: credit_card
+
+    Payment:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          description: Unique payment identifier
+          example: pay-12345-uuid
+        orderId:
+          type: string
+          description: Associated order identifier
+          example: order-12345-uuid
+        customerId:
+          type: string
+          description: Customer identifier
+          example: cust-12345-uuid
+        amount:
+          type: number
+          format: decimal
+          description: Payment amount
+          example: 2859.98
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: USD
+        method:
+          type: string
+          description: Payment method used
+          example: credit_card
+        status:
+          type: string
+          enum: [PENDING, AUTHORIZED, CAPTURED, FAILED, REFUNDED]
+          description: Payment status
+          example: CAPTURED
+        transactionId:
+          type: string
+          description: External transaction identifier (generated on capture)
+          example: txn-abc123-uuid
+        failureReason:
+          type: string
+          nullable: true
+          description: Reason for failure (null if payment succeeded)
+          example: null
+
+    RefundRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          description: Reason for the refund
+          example: Customer requested refund
+
+    OrchestratedProcessRequest:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: Order identifier
+          example: order-12345-uuid
+        customerId:
+          type: string
+          description: Customer identifier
+          example: cust-12345-uuid
+        amount:
+          type: string
+          description: Payment amount (passed as string by orchestrator)
+          example: "2859.98"
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: USD
+        method:
+          type: string
+          description: Payment method
+          example: credit_card
+
+    OrchestratedRefundRequest:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          description: Payment to refund
+          example: pay-12345-uuid
+        reason:
+          type: string
+          description: Reason for the refund
+          example: Saga compensation - inventory reservation failed
+
+    OrchestratedStepResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Whether the step succeeded
+          example: true
+        data:
+          type: object
+          additionalProperties: true
+          description: Additional data from the step (e.g., paymentId, transactionId)
+          example:
+            paymentId: pay-12345-uuid
+            transactionId: txn-abc123-uuid
+        errorMessage:
+          type: string
+          nullable: true
+          description: Error message if the step failed
+          example: null
+
+    Event:
+      type: object
+      description: A domain event from the event store
+      additionalProperties: true
+      properties:
+        eventType:
+          type: string
+          description: Type of event
+          example: PaymentProcessedEvent
+        entityId:
+          type: string
+          description: Entity this event belongs to
+          example: pay-12345-uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+          enum: [INVALID_STATE_TRANSITION, PAYMENT_NOT_FOUND, INVALID_REQUEST]
