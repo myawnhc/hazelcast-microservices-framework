@@ -29,6 +29,10 @@ servers:
 tags:
   - name: Product Inventory
     description: APIs for managing products and stock levels
+  - name: Vector Similarity Search
+    description: Find similar products using vector embeddings (Enterprise Edition)
+  - name: Orchestrated Inventory Operations
+    description: Saga orchestrator endpoints for distributed transactions
 
 paths:
   /api/products:
@@ -76,6 +80,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Product Inventory
+      summary: List products
+      description: |
+        Lists all products from the materialized view.
+        Returns the most recent products up to the specified limit.
+      operationId: listProducts
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of products to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+          example: 10
+      responses:
+        '200':
+          description: Products retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
 
   /api/products/{productId}:
     get:
@@ -194,6 +226,165 @@ paths:
           description: Invalid request
         '404':
           description: Product not found
+
+  /api/products/{productId}/events:
+    get:
+      tags:
+        - Product Inventory
+      summary: Get product event history
+      description: |
+        Retrieves the event history for a product from the event store.
+        Returns events in chronological order, useful for auditing and debugging.
+      operationId: getProductEventHistory
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Unique product identifier
+          schema:
+            type: string
+          example: prod-12345-uuid
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of events to return
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+          example: 20
+      responses:
+        '200':
+          description: Event history retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+
+  /api/products/{productId}/similar:
+    get:
+      tags:
+        - Vector Similarity Search
+      summary: Find similar products
+      description: |
+        Returns products similar to the given product using vector similarity search.
+
+        **Requires Enterprise Edition** with Vector Store enabled. On Community Edition,
+        returns an empty list with an informational message indicating the feature
+        is unavailable.
+
+        Uses Hazelcast VectorCollection with HNSW indexing for efficient
+        nearest-neighbor search on product embedding vectors.
+      operationId: findSimilarProducts
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product ID to find similar products for
+          schema:
+            type: string
+          example: prod-12345-uuid
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of similar products to return
+          schema:
+            type: integer
+            default: 5
+            minimum: 1
+          example: 5
+      responses:
+        '200':
+          description: Similar products (may be empty on Community Edition)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilarProductsResponse'
+              examples:
+                enterprise:
+                  summary: Enterprise Edition (vector store available)
+                  value:
+                    productId: prod-12345-uuid
+                    vectorStoreAvailable: true
+                    implementation: HazelcastVectorStoreService
+                    message: Found 3 similar products
+                    similarProducts:
+                      - productId: prod-67890-uuid
+                        sku: LAPTOP-002
+                        name: Business Laptop
+                        price: 999.99
+                community:
+                  summary: Community Edition (vector store unavailable)
+                  value:
+                    productId: prod-12345-uuid
+                    vectorStoreAvailable: false
+                    implementation: NoOpVectorStoreService
+                    message: Vector similarity search requires Enterprise Edition. Running on Community Edition — no similar products available.
+                    similarProducts: []
+        '404':
+          description: Product not found
+
+  /api/saga/inventory/reserve-stock:
+    post:
+      tags:
+        - Orchestrated Inventory Operations
+      summary: Reserve stock (orchestrated saga)
+      description: |
+        Reserves stock for an order as part of an orchestrated saga.
+        Called by the saga orchestrator in order-service via HTTP.
+        Returns a standardized step response indicating success or failure.
+      operationId: reserveStockOrchestrated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestratedReserveRequest'
+            example:
+              productId: prod-12345-uuid
+              quantity: 2
+              orderId: order-12345-uuid
+      responses:
+        '200':
+          description: Step completed (check success field for outcome)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratedStepResponse'
+              example:
+                success: true
+                data:
+                  productId: prod-12345-uuid
+                  availableQuantity: 48
+                errorMessage: null
+
+  /api/saga/inventory/release-stock:
+    post:
+      tags:
+        - Orchestrated Inventory Operations
+      summary: Release stock (saga compensation)
+      description: |
+        Releases previously reserved stock as a compensation step in an orchestrated saga.
+        Called when a downstream saga step fails and the stock reservation must be reversed.
+      operationId: releaseStockOrchestrated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrchestratedReleaseRequest'
+            example:
+              orderId: order-12345-uuid
+              reason: Saga compensation - payment processing failed
+      responses:
+        '200':
+          description: Step completed (check success field for outcome)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratedStepResponse'
 
 components:
   schemas:
@@ -319,6 +510,97 @@ components:
           type: string
           description: Reason for releasing stock
           example: Order cancelled by customer
+
+    SimilarProductsResponse:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: The product ID that was queried
+          example: prod-12345-uuid
+        vectorStoreAvailable:
+          type: boolean
+          description: Whether the vector store is available (Enterprise feature)
+          example: true
+        implementation:
+          type: string
+          description: The vector store implementation type
+          example: HazelcastVectorStoreService
+        message:
+          type: string
+          description: Informational message about the result
+          example: Found 3 similar products
+        similarProducts:
+          type: array
+          description: List of similar products ordered by similarity score
+          items:
+            $ref: '#/components/schemas/Product'
+
+    OrchestratedReserveRequest:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: Product identifier
+          example: prod-12345-uuid
+        quantity:
+          type: integer
+          description: Quantity to reserve
+          example: 2
+        orderId:
+          type: string
+          description: Order requesting the reservation
+          example: order-12345-uuid
+
+    OrchestratedReleaseRequest:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: Order whose stock reservation to release
+          example: order-12345-uuid
+        reason:
+          type: string
+          description: Reason for releasing stock
+          example: Saga compensation - payment processing failed
+
+    OrchestratedStepResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Whether the step succeeded
+          example: true
+        data:
+          type: object
+          additionalProperties: true
+          description: Additional data from the step
+          example:
+            productId: prod-12345-uuid
+            availableQuantity: 48
+        errorMessage:
+          type: string
+          nullable: true
+          description: Error message if the step failed
+          example: null
+
+    Event:
+      type: object
+      description: A domain event from the event store
+      additionalProperties: true
+      properties:
+        eventType:
+          type: string
+          description: Type of event
+          example: ProductCreatedEvent
+        entityId:
+          type: string
+          description: Entity this event belongs to
+          example: prod-12345-uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred
 
     Error:
       type: object

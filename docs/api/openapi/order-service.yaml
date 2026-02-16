@@ -38,6 +38,10 @@ servers:
 tags:
   - name: Order Management
     description: APIs for managing customer orders
+  - name: Saga Management
+    description: APIs for inspecting saga state
+  - name: Metrics
+    description: APIs for system metrics
 
 paths:
   /api/orders:
@@ -97,6 +101,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Order Management
+      summary: List orders
+      description: |
+        Lists all orders from the materialized view.
+        Returns the most recent orders up to the specified limit.
+      operationId: listOrders
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of orders to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+          example: 10
+      responses:
+        '200':
+          description: Orders retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
 
   /api/orders/{orderId}:
     get:
@@ -239,6 +271,153 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Order not found
+
+  /api/orders/{orderId}/events:
+    get:
+      tags:
+        - Order Management
+      summary: Get order event history
+      description: |
+        Retrieves the event history for an order from the event store.
+        Returns events in chronological order, useful for auditing and debugging.
+      operationId: getOrderEventHistory
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          description: Unique order identifier
+          schema:
+            type: string
+          example: order-12345-uuid
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of events to return
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+          example: 20
+      responses:
+        '200':
+          description: Event history retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+
+  /api/sagas/{sagaId}:
+    get:
+      tags:
+        - Saga Management
+      summary: Get saga by ID
+      description: |
+        Retrieves the current state of a saga instance, including all step records.
+        Useful for monitoring saga progress and debugging failures.
+      operationId: getSaga
+      parameters:
+        - name: sagaId
+          in: path
+          required: true
+          description: Unique saga identifier
+          schema:
+            type: string
+          example: saga-12345-uuid
+      responses:
+        '200':
+          description: Saga found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SagaState'
+        '404':
+          description: Saga not found
+
+  /api/sagas:
+    get:
+      tags:
+        - Saga Management
+      summary: List sagas
+      description: |
+        Lists sagas, optionally filtered by status and/or type.
+        Without filters, returns all sagas across all statuses.
+      operationId: listSagas
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by saga status
+          schema:
+            type: string
+            enum: [STARTED, IN_PROGRESS, COMPLETED, COMPENSATING, COMPENSATED, FAILED, TIMED_OUT]
+        - name: type
+          in: query
+          required: false
+          description: Filter by saga type
+          schema:
+            type: string
+          example: OrderFulfillment
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+          example: 10
+      responses:
+        '200':
+          description: Sagas retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SagaState'
+        '400':
+          description: Invalid status value
+
+  /api/metrics/summary:
+    get:
+      tags:
+        - Metrics
+      summary: Get metrics summary
+      description: |
+        Returns aggregated saga and event metrics for the system.
+        Combines data from the SagaStateStore and Micrometer registry.
+
+        Includes:
+        - Saga counts by status (started, in-progress, completed, failed, etc.)
+        - Event counters (submitted, processed, failed)
+        - Active saga gauges
+      operationId: getMetricsSummary
+      responses:
+        '200':
+          description: Metrics retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsSummary'
+              example:
+                sagas:
+                  total: 42
+                  started: 2
+                  inProgress: 5
+                  completed: 30
+                  compensating: 1
+                  compensated: 2
+                  failed: 1
+                  timedOut: 1
+                events:
+                  eventsSubmitted: 150.0
+                  eventsProcessed: 148.0
+                  eventsFailed: 2.0
+                gauges:
+                  activeSagas: 7.0
+                  compensatingSagas: 1.0
 
 components:
   schemas:
@@ -385,6 +564,177 @@ components:
           type: string
           description: Who cancelled (customer, system, admin)
           example: customer
+
+    Event:
+      type: object
+      description: A domain event from the event store
+      additionalProperties: true
+      properties:
+        eventType:
+          type: string
+          description: Type of event
+          example: OrderCreatedEvent
+        entityId:
+          type: string
+          description: Entity this event belongs to
+          example: order-12345-uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred
+
+    SagaState:
+      type: object
+      properties:
+        sagaId:
+          type: string
+          description: Unique saga identifier
+          example: saga-12345-uuid
+        sagaType:
+          type: string
+          description: Type of saga
+          example: OrderFulfillment
+        correlationId:
+          type: string
+          description: Correlation ID linking the saga to the originating event
+          example: order-12345-uuid
+        status:
+          type: string
+          enum: [STARTED, IN_PROGRESS, COMPLETED, COMPENSATING, COMPENSATED, FAILED, TIMED_OUT]
+          description: Current saga status
+          example: COMPLETED
+        currentStep:
+          type: integer
+          description: Current step number (0-based)
+          example: 3
+        totalSteps:
+          type: integer
+          description: Total number of steps in the saga
+          example: 3
+        progressPercentage:
+          type: integer
+          description: Progress as a percentage (0-100)
+          example: 100
+        startedAt:
+          type: string
+          format: date-time
+          description: When the saga started
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the saga completed (null if still running)
+        durationMs:
+          type: integer
+          description: Duration in milliseconds
+          example: 245
+        deadline:
+          type: string
+          format: date-time
+          nullable: true
+          description: Saga timeout deadline
+        failureReason:
+          type: string
+          nullable: true
+          description: Reason for failure (null if successful)
+        failedAtStep:
+          type: string
+          nullable: true
+          description: Step name where the saga failed
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/SagaStep'
+
+    SagaStep:
+      type: object
+      properties:
+        stepNumber:
+          type: integer
+          description: Step number in the saga (0-based)
+          example: 0
+        stepName:
+          type: string
+          description: Human-readable step name
+          example: ReserveStock
+        service:
+          type: string
+          description: Service responsible for this step
+          example: inventory-service
+        eventType:
+          type: string
+          description: Event type that triggers or completes this step
+          example: StockReservedEvent
+        status:
+          type: string
+          enum: [PENDING, IN_PROGRESS, COMPLETED, FAILED, COMPENSATED]
+          description: Step status
+          example: COMPLETED
+        timestamp:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the step completed
+        eventId:
+          type: string
+          nullable: true
+          description: ID of the event that completed this step
+        failureReason:
+          type: string
+          nullable: true
+          description: Reason for step failure
+
+    MetricsSummary:
+      type: object
+      properties:
+        sagas:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: Total number of sagas
+            started:
+              type: integer
+              description: Sagas in STARTED status
+            inProgress:
+              type: integer
+              description: Sagas in IN_PROGRESS status
+            completed:
+              type: integer
+              description: Sagas in COMPLETED status
+            compensating:
+              type: integer
+              description: Sagas in COMPENSATING status
+            compensated:
+              type: integer
+              description: Sagas in COMPENSATED status
+            failed:
+              type: integer
+              description: Sagas in FAILED status
+            timedOut:
+              type: integer
+              description: Sagas in TIMED_OUT status
+        events:
+          type: object
+          properties:
+            eventsSubmitted:
+              type: number
+              description: Total events submitted
+            eventsProcessed:
+              type: number
+              description: Total events processed
+            eventsFailed:
+              type: number
+              description: Total events that failed processing
+        gauges:
+          type: object
+          properties:
+            activeSagas:
+              type: number
+              description: Current count of active sagas
+            compensatingSagas:
+              type: number
+              description: Current count of compensating sagas
 
     Error:
       type: object

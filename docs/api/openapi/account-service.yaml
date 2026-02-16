@@ -5,7 +5,7 @@ info:
     Customer account management service for the Hazelcast Event Sourcing Framework.
 
     This service manages customer accounts using event sourcing patterns:
-    - Customer creation triggers a `CustomerCreatedEvent`
+    - Customer creation triggers a `CustomerCreatedEvent` 
     - Updates trigger `CustomerUpdatedEvent`
     - Status changes trigger `CustomerStatusChangedEvent`
 
@@ -68,6 +68,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Customer Management
+      summary: List customers
+      description: |
+        Lists all customers from the materialized view.
+        Returns the most recent customers up to the specified limit.
+      operationId: listCustomers
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of customers to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+          example: 10
+      responses:
+        '200':
+          description: Customers retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Customer'
 
   /api/customers/{customerId}:
     get:
@@ -166,6 +194,42 @@ paths:
         '404':
           description: Customer not found
 
+  /api/customers/{customerId}/events:
+    get:
+      tags:
+        - Customer Management
+      summary: Get customer event history
+      description: |
+        Retrieves the event history for a customer from the event store.
+        Returns events in chronological order, useful for auditing and debugging.
+      operationId: getCustomerEventHistory
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          description: Unique customer identifier
+          schema:
+            type: string
+          example: cust-12345-uuid
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of events to return
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+          example: 20
+      responses:
+        '200':
+          description: Event history retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+
 components:
   schemas:
     CustomerRequest:
@@ -237,6 +301,24 @@ components:
         reason:
           type: string
           description: Reason for status change
+
+    Event:
+      type: object
+      description: A domain event from the event store
+      additionalProperties: true
+      properties:
+        eventType:
+          type: string
+          description: Type of event
+          example: CustomerCreatedEvent
+        entityId:
+          type: string
+          description: Entity this event belongs to
+          example: cust-12345-uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred
 
     Error:
       type: object
