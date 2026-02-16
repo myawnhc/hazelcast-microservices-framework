@@ -4,10 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.theyawns.ecommerce.mcp.client.ServiceClientOperations;
+import com.theyawns.ecommerce.mcp.security.ToolAuthorizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -29,6 +31,7 @@ public class InspectSagaTool {
 
     private final ServiceClientOperations serviceClient;
     private final ObjectMapper objectMapper;
+    private ToolAuthorizer toolAuthorizer;
 
     /**
      * Creates a new InspectSagaTool.
@@ -41,6 +44,16 @@ public class InspectSagaTool {
     }
 
     /**
+     * Sets the tool authorizer for role-based access control.
+     *
+     * @param toolAuthorizer the authorizer (injected only when security is enabled)
+     */
+    @Autowired(required = false)
+    public void setToolAuthorizer(final ToolAuthorizer toolAuthorizer) {
+        this.toolAuthorizer = toolAuthorizer;
+    }
+
+    /**
      * Inspects a saga by its ID, returning full state and step details.
      *
      * @param sagaId the saga identifier
@@ -50,6 +63,13 @@ public class InspectSagaTool {
             + "step progress, timing, and failure details.")
     public String inspectSaga(
             @ToolParam(description = "The saga ID to inspect") String sagaId) {
+
+        if (toolAuthorizer != null) {
+            String denied = toolAuthorizer.checkAccess("inspectSaga");
+            if (denied != null) {
+                return denied;
+            }
+        }
 
         logger.info("MCP inspectSaga: sagaId={}", sagaId);
 

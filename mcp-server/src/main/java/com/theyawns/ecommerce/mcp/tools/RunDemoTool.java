@@ -4,10 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.theyawns.ecommerce.mcp.client.ServiceClientOperations;
+import com.theyawns.ecommerce.mcp.security.ToolAuthorizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -42,6 +44,7 @@ public class RunDemoTool {
 
     private final ServiceClientOperations serviceClient;
     private final ObjectMapper objectMapper;
+    private ToolAuthorizer toolAuthorizer;
 
     /**
      * Creates a new RunDemoTool.
@@ -51,6 +54,16 @@ public class RunDemoTool {
     public RunDemoTool(ServiceClientOperations serviceClient) {
         this.serviceClient = serviceClient;
         this.objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    }
+
+    /**
+     * Sets the tool authorizer for role-based access control.
+     *
+     * @param toolAuthorizer the authorizer (injected only when security is enabled)
+     */
+    @Autowired(required = false)
+    public void setToolAuthorizer(final ToolAuthorizer toolAuthorizer) {
+        this.toolAuthorizer = toolAuthorizer;
     }
 
     /**
@@ -69,6 +82,13 @@ public class RunDemoTool {
             @ToolParam(description = "Scenario: happy_path, payment_failure, saga_timeout, "
                     + "orchestrated_happy_path, orchestrated_payment_failure, or load_sample_data")
             String scenario) {
+
+        if (toolAuthorizer != null) {
+            String denied = toolAuthorizer.checkAccess("runDemo");
+            if (denied != null) {
+                return denied;
+            }
+        }
 
         logger.info("MCP runDemo: scenario={}", scenario);
 

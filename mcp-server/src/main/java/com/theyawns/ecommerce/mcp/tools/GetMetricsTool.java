@@ -4,9 +4,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.theyawns.ecommerce.mcp.client.ServiceClientOperations;
+import com.theyawns.ecommerce.mcp.security.ToolAuthorizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -28,6 +30,7 @@ public class GetMetricsTool {
 
     private final ServiceClientOperations serviceClient;
     private final ObjectMapper objectMapper;
+    private ToolAuthorizer toolAuthorizer;
 
     /**
      * Creates a new GetMetricsTool.
@@ -40,6 +43,16 @@ public class GetMetricsTool {
     }
 
     /**
+     * Sets the tool authorizer for role-based access control.
+     *
+     * @param toolAuthorizer the authorizer (injected only when security is enabled)
+     */
+    @Autowired(required = false)
+    public void setToolAuthorizer(final ToolAuthorizer toolAuthorizer) {
+        this.toolAuthorizer = toolAuthorizer;
+    }
+
+    /**
      * Retrieves aggregated system metrics including saga counts and event throughput.
      *
      * @return JSON string with the metrics summary
@@ -47,6 +60,13 @@ public class GetMetricsTool {
     @Tool(description = "Get system metrics including saga counts by status, "
             + "event throughput, and active saga gauges.")
     public String getMetrics() {
+
+        if (toolAuthorizer != null) {
+            String denied = toolAuthorizer.checkAccess("getMetrics");
+            if (denied != null) {
+                return denied;
+            }
+        }
 
         logger.info("MCP getMetrics");
 

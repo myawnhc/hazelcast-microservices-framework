@@ -703,7 +703,7 @@ public class EventSourcingController<D extends DomainObject<K>,
          *
          * <p>When set, the controller writes events to the outbox instead of
          * publishing directly to the shared cluster's ITopic. The
-         * {@link OutboxPublisher} handles actual delivery with retry logic.
+         * {@link OutboxStore} handles actual delivery with retry logic.
          *
          * <p>When not set, the controller falls back to direct ITopic publishing.
          *

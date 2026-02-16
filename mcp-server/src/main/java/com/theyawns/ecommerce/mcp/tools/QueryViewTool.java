@@ -4,10 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.theyawns.ecommerce.mcp.client.ServiceClientOperations;
+import com.theyawns.ecommerce.mcp.security.ToolAuthorizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -38,6 +40,7 @@ public class QueryViewTool {
 
     private final ServiceClientOperations serviceClient;
     private final ObjectMapper objectMapper;
+    private ToolAuthorizer toolAuthorizer;
 
     /**
      * Creates a new QueryViewTool.
@@ -47,6 +50,16 @@ public class QueryViewTool {
     public QueryViewTool(ServiceClientOperations serviceClient) {
         this.serviceClient = serviceClient;
         this.objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    }
+
+    /**
+     * Sets the tool authorizer for role-based access control.
+     *
+     * @param toolAuthorizer the authorizer (injected only when security is enabled)
+     */
+    @Autowired(required = false)
+    public void setToolAuthorizer(final ToolAuthorizer toolAuthorizer) {
+        this.toolAuthorizer = toolAuthorizer;
     }
 
     /**
@@ -63,6 +76,13 @@ public class QueryViewTool {
             @ToolParam(description = "View to query: customer, product, order, or payment") String viewName,
             @ToolParam(description = "Optional: specific entity ID to retrieve", required = false) String key,
             @ToolParam(description = "Maximum results when listing (default: 10)", required = false) Integer limit) {
+
+        if (toolAuthorizer != null) {
+            String denied = toolAuthorizer.checkAccess("queryView");
+            if (denied != null) {
+                return denied;
+            }
+        }
 
         logger.info("MCP queryView: view={}, key={}, limit={}", viewName, key, limit);
 
