@@ -19,6 +19,7 @@ import com.theyawns.ecommerce.order.domain.ProductAvailabilityViewUpdater;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.outbox.OutboxStore;
+import com.theyawns.framework.security.identity.EventAuthenticator;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.store.HazelcastEventStore;
@@ -386,7 +387,9 @@ public class OrderServiceConfig {
             OrderViewUpdater viewUpdater,
             MeterRegistry meterRegistry,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
-            OutboxStore outboxStore) {
+            OutboxStore outboxStore,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            EventAuthenticator eventAuthenticator) {
 
         controller = EventSourcingController.<Order, String, DomainEvent<Order, String>>builder()
                 .hazelcast(hazelcastInstance)
@@ -397,6 +400,7 @@ public class OrderServiceConfig {
                 .viewUpdaterClass(OrderViewUpdater.class)
                 .meterRegistry(meterRegistry)
                 .outboxStore(outboxStore)
+                .eventAuthenticator(eventAuthenticator)
                 .build();
 
         // Start the pipeline immediately after building the controller

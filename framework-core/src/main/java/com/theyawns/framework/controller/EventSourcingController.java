@@ -13,6 +13,7 @@ import com.theyawns.framework.outbox.OutboxStore;
 import com.theyawns.framework.pipeline.EventSourcingPipeline;
 import com.theyawns.framework.pipeline.HazelcastEventBus;
 import com.theyawns.framework.pipeline.PipelineMetrics;
+import com.theyawns.framework.security.identity.EventAuthenticator;
 import com.theyawns.framework.store.EventStore;
 import com.theyawns.framework.store.PartitionedSequenceKey;
 import com.theyawns.framework.tracing.EventSpanDecorator;
@@ -96,6 +97,7 @@ public class EventSourcingController<D extends DomainObject<K>,
     private final PipelineMetrics pipelineMetrics;
     private final EventSpanDecorator eventSpanDecorator;
     private final OutboxStore outboxStore;
+    private final EventAuthenticator eventAuthenticator;
     private final EventSourcingPipeline<D, K, E> pipeline;
 
     /**
@@ -120,6 +122,7 @@ public class EventSourcingController<D extends DomainObject<K>,
         this.pipelineMetrics = new PipelineMetrics(meterRegistry, domainName);
         this.eventSpanDecorator = builder.eventSpanDecorator;
         this.outboxStore = builder.outboxStore;
+        this.eventAuthenticator = builder.eventAuthenticator;
 
         // Initialize Hazelcast structures
         this.sequenceGenerator = hazelcast.getFlakeIdGenerator(domainName + SEQUENCE_GEN_SUFFIX);
@@ -454,12 +457,18 @@ public class EventSourcingController<D extends DomainObject<K>,
         if (sharedHazelcast == null || pending.eventRecord == null || pending.eventType == null) {
             return;
         }
+
+        // Wrap event in authenticated envelope if service identity is configured
+        final GenericRecord recordToPublish = (eventAuthenticator != null)
+                ? eventAuthenticator.wrapWithAuthentication(pending.eventRecord, pending.eventType)
+                : pending.eventRecord;
+
         if (outboxStore != null) {
             // Durable outbox path — OutboxPublisher handles actual delivery
             OutboxEntry entry = new OutboxEntry(
                     pending.completionInfo.getEventId(),
                     pending.eventType,
-                    pending.eventRecord
+                    recordToPublish
             );
             outboxStore.write(entry);
             logger.debug("Wrote event {} to outbox for deferred shared cluster delivery",
@@ -468,7 +477,7 @@ public class EventSourcingController<D extends DomainObject<K>,
             // Legacy direct publish (when outbox is disabled)
             try {
                 ITopic<GenericRecord> topic = sharedHazelcast.getTopic(pending.eventType);
-                topic.publish(pending.eventRecord);
+                topic.publish(recordToPublish);
                 logger.debug("Republished event {} to shared cluster topic: {}", pending.eventType, pending.eventType);
             } catch (Exception e) {
                 logger.warn("Failed to republish event {} to shared cluster: {}", pending.eventType, e.getMessage());
@@ -581,6 +590,7 @@ public class EventSourcingController<D extends DomainObject<K>,
         private MeterRegistry meterRegistry;
         private EventSpanDecorator eventSpanDecorator;
         private OutboxStore outboxStore;
+        private EventAuthenticator eventAuthenticator;
 
         /**
          * Sets the Hazelcast instance.
@@ -702,6 +712,23 @@ public class EventSourcingController<D extends DomainObject<K>,
          */
         public Builder<D, K, E> outboxStore(OutboxStore outboxStore) {
             this.outboxStore = outboxStore;
+            return this;
+        }
+
+        /**
+         * Sets the event authenticator for signing events published to the shared cluster (optional).
+         *
+         * <p>When set, events are wrapped in an authenticated envelope containing
+         * the service identity and HMAC signature before being published to ITopic.
+         * Saga listeners on receiving services unwrap and verify the signature.
+         *
+         * <p>When not set, events are published without authentication (backward compatible).
+         *
+         * @param eventAuthenticator the event authenticator
+         * @return this builder
+         */
+        public Builder<D, K, E> eventAuthenticator(EventAuthenticator eventAuthenticator) {
+            this.eventAuthenticator = eventAuthenticator;
             return this;
         }
 

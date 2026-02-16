@@ -13,6 +13,7 @@ import com.theyawns.framework.dlq.DeadLetterQueueOperations;
 import com.theyawns.framework.idempotency.IdempotencyGuard;
 import com.theyawns.framework.resilience.ResilienceException;
 import com.theyawns.framework.resilience.ResilientOperations;
+import com.theyawns.framework.security.identity.EventAuthenticator;
 import com.theyawns.framework.tracing.EventSpanDecorator;
 import io.micrometer.tracing.Span;
 import jakarta.annotation.PostConstruct;
@@ -52,6 +53,7 @@ public class PaymentSagaListener {
     private ResilientOperations resilientServiceInvoker;
     private IdempotencyGuard idempotencyGuard;
     private DeadLetterQueueOperations deadLetterQueue;
+    private EventAuthenticator eventAuthenticator;
 
     /**
      * Creates a new PaymentSagaListener.
@@ -106,6 +108,29 @@ public class PaymentSagaListener {
     @Autowired(required = false)
     public void setDeadLetterQueue(DeadLetterQueueOperations deadLetterQueue) {
         this.deadLetterQueue = deadLetterQueue;
+    }
+
+    /**
+     * Sets the event authenticator for verifying event signatures (optional).
+     *
+     * @param eventAuthenticator the event authenticator
+     */
+    @Autowired(required = false)
+    public void setEventAuthenticator(EventAuthenticator eventAuthenticator) {
+        this.eventAuthenticator = eventAuthenticator;
+    }
+
+    /**
+     * Unwraps an event from its authenticated envelope if an authenticator is available.
+     *
+     * @param record the GenericRecord that may be an envelope or a raw event
+     * @return the unwrapped event GenericRecord
+     */
+    private GenericRecord unwrapEvent(GenericRecord record) {
+        if (eventAuthenticator != null) {
+            return eventAuthenticator.unwrapAndVerify(record);
+        }
+        return record;
     }
 
     /**
@@ -185,7 +210,7 @@ public class PaymentSagaListener {
 
         @Override
         public void onMessage(Message<GenericRecord> message) {
-            GenericRecord record = message.getMessageObject();
+            GenericRecord record = unwrapEvent(message.getMessageObject());
 
             String eventId = record.getString("eventId");
             if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
@@ -264,7 +289,7 @@ public class PaymentSagaListener {
 
         @Override
         public void onMessage(Message<GenericRecord> message) {
-            GenericRecord record = message.getMessageObject();
+            GenericRecord record = unwrapEvent(message.getMessageObject());
 
             String eventId = record.getString("eventId");
             if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {

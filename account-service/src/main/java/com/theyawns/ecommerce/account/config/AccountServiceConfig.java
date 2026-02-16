@@ -14,6 +14,7 @@ import com.theyawns.ecommerce.common.domain.Customer;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.outbox.OutboxStore;
+import com.theyawns.framework.security.identity.EventAuthenticator;
 import com.theyawns.framework.store.HazelcastEventStore;
 import com.theyawns.framework.view.HazelcastViewStore;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -225,7 +226,9 @@ public class AccountServiceConfig {
             CustomerViewUpdater viewUpdater,
             MeterRegistry meterRegistry,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
-            OutboxStore outboxStore) {
+            OutboxStore outboxStore,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            EventAuthenticator eventAuthenticator) {
 
         controller = EventSourcingController.<Customer, String, DomainEvent<Customer, String>>builder()
                 .hazelcast(hazelcastInstance)
@@ -236,6 +239,7 @@ public class AccountServiceConfig {
                 .viewUpdaterClass(CustomerViewUpdater.class)
                 .meterRegistry(meterRegistry)
                 .outboxStore(outboxStore)
+                .eventAuthenticator(eventAuthenticator)
                 .build();
 
         // Start the pipeline immediately after building the controller
