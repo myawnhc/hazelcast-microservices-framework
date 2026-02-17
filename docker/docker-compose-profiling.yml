@@ -1,0 +1,119 @@
+# Docker Compose override for async-profiler flame graph capture
+#
+# Adds SYS_PTRACE capability, mounts async-profiler binary and output volume,
+# and injects JVM flags for accurate stack walking.
+#
+# Usage:
+#   cd docker
+#   docker compose -f docker-compose.yml -f docker-compose-profiling.yml up -d
+#
+# Prerequisites:
+#   Run ./docker/profiling/download-async-profiler.sh first.
+#
+# Notes:
+#   - perf_events is NOT available in Docker Desktop for macOS;
+#     async-profiler auto-falls back to itimer (wall-clock) profiling.
+#   - Allocation profiling (-e alloc) uses JVMTI and works fully.
+#   - Memory limits bumped to 768M to account for profiler overhead.
+
+services:
+
+  account-service:
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - ./profiling/async-profiler:/opt/async-profiler:ro
+      - ./profiling/output:/profiles
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+PreserveFramePointer -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints
+      - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=account-service
+      - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ecommerce
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  inventory-service:
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - ./profiling/async-profiler:/opt/async-profiler:ro
+      - ./profiling/output:/profiles
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+PreserveFramePointer -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints
+      - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=inventory-service
+      - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ecommerce
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  order-service:
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - ./profiling/async-profiler:/opt/async-profiler:ro
+      - ./profiling/output:/profiles
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+PreserveFramePointer -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints
+      - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=order-service
+      - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ecommerce
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  payment-service:
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - ./profiling/async-profiler:/opt/async-profiler:ro
+      - ./profiling/output:/profiles
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+PreserveFramePointer -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints
+      - HAZELCAST_CLUSTER_NAME=ecommerce-cluster
+      - HAZELCAST_CLUSTER_MEMBERS=hazelcast-1:5701,hazelcast-2:5701,hazelcast-3:5701
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=payment-service
+      - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ecommerce
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+    deploy:
+      resources:
+        limits:
+          memory: 768M
