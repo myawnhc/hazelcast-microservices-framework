@@ -189,4 +189,90 @@ class EventStoreMapStoreTest {
     void shouldRejectNullPersistence() {
         assertThrows(IllegalArgumentException.class, () -> new EventStoreMapStore(null));
     }
+
+    @Test
+    @DisplayName("should load all events from persistence")
+    void shouldLoadAllEventsFromPersistence() {
+        // Arrange
+        PartitionedSequenceKey<String> key1 = new PartitionedSequenceKey<>(1L, "cust-001");
+        PartitionedSequenceKey<String> key2 = new PartitionedSequenceKey<>(2L, "cust-002");
+
+        GenericRecord rec1 = GenericRecordBuilder.compact("E1").setString("v", "a").build();
+        GenericRecord rec2 = GenericRecordBuilder.compact("E2").setString("v", "b").build();
+
+        when(persistence.loadEvent(isNull(), eq("seq:1|key:cust-001")))
+                .thenReturn(Optional.of(new PersistableEvent("seq:1|key:cust-001", "cust-001", 1L,
+                        "E1", GenericRecordJsonConverter.toJson(rec1), 100L, null)));
+        when(persistence.loadEvent(isNull(), eq("seq:2|key:cust-002")))
+                .thenReturn(Optional.of(new PersistableEvent("seq:2|key:cust-002", "cust-002", 2L,
+                        "E2", GenericRecordJsonConverter.toJson(rec2), 200L, null)));
+
+        // Act
+        Map<PartitionedSequenceKey<String>, GenericRecord> result =
+                mapStore.loadAll(List.of(key1, key2));
+
+        // Assert
+        assertEquals(2, result.size());
+        assertEquals("a", result.get(key1).getString("v"));
+        assertEquals("b", result.get(key2).getString("v"));
+    }
+
+    @Test
+    @DisplayName("should skip missing events in loadAll")
+    void shouldLoadAllSkippingMissingEvents() {
+        // Arrange
+        PartitionedSequenceKey<String> key1 = new PartitionedSequenceKey<>(1L, "cust-001");
+        PartitionedSequenceKey<String> key2 = new PartitionedSequenceKey<>(2L, "cust-002");
+
+        GenericRecord rec1 = GenericRecordBuilder.compact("E1").setString("v", "a").build();
+        when(persistence.loadEvent(isNull(), eq("seq:1|key:cust-001")))
+                .thenReturn(Optional.of(new PersistableEvent("seq:1|key:cust-001", "cust-001", 1L,
+                        "E1", GenericRecordJsonConverter.toJson(rec1), 100L, null)));
+        when(persistence.loadEvent(isNull(), eq("seq:2|key:cust-002")))
+                .thenReturn(Optional.empty());
+
+        // Act
+        Map<PartitionedSequenceKey<String>, GenericRecord> result =
+                mapStore.loadAll(List.of(key1, key2));
+
+        // Assert
+        assertEquals(1, result.size());
+        assertTrue(result.containsKey(key1));
+        assertFalse(result.containsKey(key2));
+    }
+
+    @Test
+    @DisplayName("should delete all events via persistence provider")
+    void shouldDeleteAllEvents() {
+        // Arrange
+        PartitionedSequenceKey<String> key1 = new PartitionedSequenceKey<>(1L, "a");
+        PartitionedSequenceKey<String> key2 = new PartitionedSequenceKey<>(2L, "b");
+        PartitionedSequenceKey<String> key3 = new PartitionedSequenceKey<>(3L, "c");
+
+        // Act
+        mapStore.deleteAll(List.of(key1, key2, key3));
+
+        // Assert
+        verify(persistence).delete(isNull(), eq("seq:1|key:a"));
+        verify(persistence).delete(isNull(), eq("seq:2|key:b"));
+        verify(persistence).delete(isNull(), eq("seq:3|key:c"));
+    }
+
+    @Test
+    @DisplayName("should set mapName on init and pass through to persistence")
+    void shouldInitWithMapName() {
+        // Act
+        mapStore.init(null, new java.util.Properties(), "Customer_ES");
+
+        PartitionedSequenceKey<String> key = new PartitionedSequenceKey<>(1L, "cust-001");
+        GenericRecord record = GenericRecordBuilder.compact("E")
+                .setString("data", "test")
+                .build();
+        mapStore.store(key, record);
+
+        // Assert
+        ArgumentCaptor<PersistableEvent> captor = ArgumentCaptor.forClass(PersistableEvent.class);
+        verify(persistence).persist(eq("Customer_ES"), captor.capture());
+        assertEquals("seq:1|key:cust-001", captor.getValue().mapKey());
+    }
 }

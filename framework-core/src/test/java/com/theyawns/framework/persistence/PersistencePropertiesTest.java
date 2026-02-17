@@ -88,5 +88,77 @@ class PersistencePropertiesTest {
         assertTrue(str.contains("writeBatchSize=100"));
         assertTrue(str.contains("writeCoalescing=false"));
         assertTrue(str.contains("LAZY"));
+        assertTrue(str.contains("eventStoreEviction="));
+        assertTrue(str.contains("viewStoreEviction="));
+    }
+
+    // ========================================================================
+    // Eviction config tests
+    // ========================================================================
+
+    @Test
+    @DisplayName("should have correct default eviction values for event store")
+    void shouldHaveCorrectEventStoreEvictionDefaults() {
+        PersistenceProperties props = new PersistenceProperties();
+        PersistenceProperties.EvictionConfig eviction = props.getEventStoreEviction();
+
+        assertTrue(eviction.isEnabled());
+        assertEquals(10000, eviction.getMaxSize());
+        assertEquals("PER_NODE", eviction.getMaxSizePolicy());
+        assertEquals("LRU", eviction.getEvictionPolicy());
+        assertEquals(0, eviction.getMaxIdleSeconds());
+    }
+
+    @Test
+    @DisplayName("should have maxIdleSeconds=3600 for view store eviction by default")
+    void shouldHaveViewStoreMaxIdleDefault() {
+        PersistenceProperties props = new PersistenceProperties();
+        PersistenceProperties.EvictionConfig eviction = props.getViewStoreEviction();
+
+        assertTrue(eviction.isEnabled());
+        assertEquals(3600, eviction.getMaxIdleSeconds());
+    }
+
+    @Test
+    @DisplayName("should allow setting eviction config properties")
+    void shouldAllowSettingEvictionProperties() {
+        PersistenceProperties.EvictionConfig eviction = new PersistenceProperties.EvictionConfig();
+
+        eviction.setEnabled(false);
+        eviction.setMaxSize(5000);
+        eviction.setMaxSizePolicy("USED_HEAP_PERCENTAGE");
+        eviction.setEvictionPolicy("LFU");
+        eviction.setMaxIdleSeconds(1800);
+
+        assertFalse(eviction.isEnabled());
+        assertEquals(5000, eviction.getMaxSize());
+        assertEquals("USED_HEAP_PERCENTAGE", eviction.getMaxSizePolicy());
+        assertEquals("LFU", eviction.getEvictionPolicy());
+        assertEquals(1800, eviction.getMaxIdleSeconds());
+    }
+
+    @Test
+    @DisplayName("should allow replacing eviction config on properties")
+    void shouldAllowReplacingEvictionConfig() {
+        PersistenceProperties props = new PersistenceProperties();
+        PersistenceProperties.EvictionConfig custom = new PersistenceProperties.EvictionConfig(7200);
+        custom.setMaxSize(20000);
+
+        props.setEventStoreEviction(custom);
+
+        assertEquals(20000, props.getEventStoreEviction().getMaxSize());
+        assertEquals(7200, props.getEventStoreEviction().getMaxIdleSeconds());
+    }
+
+    @Test
+    @DisplayName("should produce meaningful eviction toString")
+    void shouldProduceEvictionToString() {
+        PersistenceProperties.EvictionConfig eviction = new PersistenceProperties.EvictionConfig();
+        String str = eviction.toString();
+
+        assertTrue(str.contains("enabled=true"));
+        assertTrue(str.contains("maxSize=10000"));
+        assertTrue(str.contains("PER_NODE"));
+        assertTrue(str.contains("LRU"));
     }
 }

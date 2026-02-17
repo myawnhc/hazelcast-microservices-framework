@@ -4,9 +4,12 @@ import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
+import com.hazelcast.config.EvictionConfig;
+import com.hazelcast.config.EvictionPolicy;
 import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
 import com.hazelcast.config.MapStoreConfig;
+import com.hazelcast.config.MaxSizePolicy;
 import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
@@ -132,6 +135,21 @@ public class PaymentServiceConfig {
                     .setInitialLoadMode(MapStoreConfig.InitialLoadMode.EAGER);
             viewMapConfig.setMapStoreConfig(viewMsc);
             logger.info("Persistence enabled for {}_VIEW map (write-behind)", DOMAIN_NAME);
+
+            // Eviction — bounded hot cache backed by MapLoader
+            PersistenceProperties.EvictionConfig viewEviction = persistenceProperties.getViewStoreEviction();
+            if (viewEviction.isEnabled()) {
+                viewMapConfig.getEvictionConfig()
+                        .setEvictionPolicy(EvictionPolicy.valueOf(viewEviction.getEvictionPolicy()))
+                        .setMaxSizePolicy(MaxSizePolicy.valueOf(viewEviction.getMaxSizePolicy()))
+                        .setSize(viewEviction.getMaxSize());
+                if (viewEviction.getMaxIdleSeconds() > 0) {
+                    viewMapConfig.setMaxIdleSeconds(viewEviction.getMaxIdleSeconds());
+                }
+                logger.info("Eviction enabled for {}_VIEW (maxSize={}, policy={}, maxIdle={}s)",
+                        DOMAIN_NAME, viewEviction.getMaxSize(), viewEviction.getEvictionPolicy(),
+                        viewEviction.getMaxIdleSeconds());
+            }
         }
         config.addMapConfig(viewMapConfig);
 
@@ -147,6 +165,20 @@ public class PaymentServiceConfig {
                     .setInitialLoadMode(MapStoreConfig.InitialLoadMode.LAZY);
             eventStoreMapConfig.setMapStoreConfig(esMsc);
             logger.info("Persistence enabled for {}_ES map (write-behind)", DOMAIN_NAME);
+
+            // Eviction — bounded hot cache backed by MapLoader
+            PersistenceProperties.EvictionConfig esEviction = persistenceProperties.getEventStoreEviction();
+            if (esEviction.isEnabled()) {
+                eventStoreMapConfig.getEvictionConfig()
+                        .setEvictionPolicy(EvictionPolicy.valueOf(esEviction.getEvictionPolicy()))
+                        .setMaxSizePolicy(MaxSizePolicy.valueOf(esEviction.getMaxSizePolicy()))
+                        .setSize(esEviction.getMaxSize());
+                if (esEviction.getMaxIdleSeconds() > 0) {
+                    eventStoreMapConfig.setMaxIdleSeconds(esEviction.getMaxIdleSeconds());
+                }
+                logger.info("Eviction enabled for {}_ES (maxSize={}, policy={})",
+                        DOMAIN_NAME, esEviction.getMaxSize(), esEviction.getEvictionPolicy());
+            }
         }
         config.addMapConfig(eventStoreMapConfig);
 

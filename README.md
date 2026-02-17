@@ -67,6 +67,16 @@ An AI assistant can query, inspect, and operate the entire system through the Mo
 - Supports stdio transport (local AI assistants) and HTTP/SSE (networked deployments)
 - [MCP Server Guide](mcp-server/README.md) | [Example Conversations](docs/guides/mcp-examples.md)
 
+### Durable Persistence
+
+In-memory data survives restarts. Write-behind MapStores asynchronously persist events and views to PostgreSQL without slowing the hot path.
+
+- **Write-Behind MapStore**: Events and views are batched and flushed to PostgreSQL asynchronously — zero-latency impact on the event pipeline
+- **Automatic Cold Start**: Materialized views reload from the database on service restart via MapLoader (EAGER mode)
+- **Bounded Memory**: IMap eviction keeps entries within configurable limits; evicted entries are reloaded on demand from the database
+- **Provider-Agnostic**: `EventStorePersistence` and `ViewStorePersistence` interfaces — swap PostgreSQL for MySQL, CockroachDB, or any JDBC-compatible database
+- [Persistence Guide](docs/guides/persistence-guide.md)
+
 ### Enterprise Extensions
 
 The framework runs fully on Hazelcast Community Edition. Enterprise features are optional enhancements with automatic detection and graceful fallback.
@@ -122,6 +132,7 @@ The framework runs fully on Hazelcast Community Edition. Enterprise features are
 | Module | Description |
 |--------|-------------|
 | [framework-core](framework-core/README.md) | Domain-agnostic event sourcing framework |
+| [framework-postgres](framework-postgres/) | PostgreSQL persistence provider (write-behind MapStore) |
 | [ecommerce-common](ecommerce-common/README.md) | Shared domain objects, events, and DTOs |
 | [account-service](account-service/README.md) | Customer account management |
 | [inventory-service](inventory-service/README.md) | Product catalog and stock management |
@@ -259,6 +270,7 @@ curl http://localhost:8082/api/products/<product-id>/similar?limit=5
 - [Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md) - Grafana, Prometheus, and Jaeger setup
 - [MCP Server Guide](mcp-server/README.md) - AI assistant integration via Model Context Protocol
 - [MCP Examples](docs/guides/mcp-examples.md) - Example AI assistant conversations
+- [Persistence Guide](docs/guides/persistence-guide.md) - Write-behind MapStore, PostgreSQL, eviction, and custom providers
 - [Security Guide](docs/guides/security-guide.md) - JWT, service-to-service, and MCP API key authentication
 
 ## Event Sourcing Flow
@@ -334,6 +346,7 @@ The bundled `load-test.sh` script uses `curl` in bash subshells, which adds sign
 | Framework | Spring Boot | 3.2.x |
 | Data Grid | Hazelcast | 5.6.0 |
 | Build | Maven | 3.8+ |
+| Database | PostgreSQL | 16+ |
 | Containers | Docker | 20.10+ |
 | Metrics | Micrometer/Prometheus | - |
 | Dashboards | Grafana | 10.3.x |
@@ -347,6 +360,7 @@ The bundled `load-test.sh` script uses `curl` in bash subshells, which adds sign
 ```
 hazelcast-microservices-framework/
 ├── framework-core/          # Core framework (event sourcing, sagas, edition detection, vector store)
+├── framework-postgres/      # PostgreSQL persistence provider
 ├── ecommerce-common/        # Shared domain objects, events, DTOs
 ├── account-service/         # Customer service (:8081)
 ├── inventory-service/       # Product service (:8082)

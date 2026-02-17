@@ -2,10 +2,13 @@ package com.theyawns.framework.persistence;
 
 import com.theyawns.framework.persistence.mapstore.EventStoreMapStore;
 import com.theyawns.framework.persistence.mapstore.ViewStoreMapStore;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -33,6 +36,60 @@ public class PersistenceAutoConfiguration {
 
     private static final Logger logger = LoggerFactory.getLogger(PersistenceAutoConfiguration.class);
 
+    @Autowired(required = false)
+    private PersistenceMetrics persistenceMetrics;
+
+    // ========================================================================
+    // Metrics
+    // ========================================================================
+
+    /**
+     * Creates persistence metrics when a MeterRegistry is available.
+     *
+     * @param meterRegistry the Micrometer registry
+     * @return the persistence metrics
+     */
+    @Bean
+    @ConditionalOnBean(MeterRegistry.class)
+    public PersistenceMetrics persistenceMetrics(MeterRegistry meterRegistry) {
+        logger.info("Creating PersistenceMetrics for MapStore instrumentation");
+        return new PersistenceMetrics(meterRegistry);
+    }
+
+    // ========================================================================
+    // Fallback persistence providers (when no external provider on classpath)
+    // ========================================================================
+
+    /**
+     * Fallback in-memory event store persistence for when no external provider
+     * (e.g., PostgreSQL) is available. Useful for development and testing.
+     *
+     * @return the in-memory event store persistence
+     */
+    @Bean
+    @ConditionalOnMissingBean(EventStorePersistence.class)
+    public EventStorePersistence inMemoryEventStorePersistence() {
+        logger.info("No EventStorePersistence provider found — using InMemoryEventStorePersistence");
+        return new InMemoryEventStorePersistence();
+    }
+
+    /**
+     * Fallback in-memory view store persistence for when no external provider
+     * (e.g., PostgreSQL) is available. Useful for development and testing.
+     *
+     * @return the in-memory view store persistence
+     */
+    @Bean
+    @ConditionalOnMissingBean(ViewStorePersistence.class)
+    public ViewStorePersistence inMemoryViewStorePersistence() {
+        logger.info("No ViewStorePersistence provider found — using InMemoryViewStorePersistence");
+        return new InMemoryViewStorePersistence();
+    }
+
+    // ========================================================================
+    // MapStore adapter beans
+    // ========================================================================
+
     /**
      * Creates the EventStoreMapStore bean when an EventStorePersistence provider is available.
      *
@@ -44,7 +101,7 @@ public class PersistenceAutoConfiguration {
     public EventStoreMapStore eventStoreMapStore(EventStorePersistence persistence) {
         logger.info("Creating EventStoreMapStore with persistence provider: {}",
                 persistence.getClass().getSimpleName());
-        return new EventStoreMapStore(persistence);
+        return new EventStoreMapStore(persistence, persistenceMetrics);
     }
 
     /**
@@ -58,6 +115,6 @@ public class PersistenceAutoConfiguration {
     public ViewStoreMapStore viewStoreMapStore(ViewStorePersistence persistence) {
         logger.info("Creating ViewStoreMapStore with persistence provider: {}",
                 persistence.getClass().getSimpleName());
-        return new ViewStoreMapStore(persistence);
+        return new ViewStoreMapStore(persistence, persistenceMetrics);
     }
 }

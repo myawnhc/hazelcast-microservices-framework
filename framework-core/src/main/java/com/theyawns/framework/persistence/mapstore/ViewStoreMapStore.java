@@ -4,10 +4,12 @@ import com.hazelcast.map.MapLoaderLifecycleSupport;
 import com.hazelcast.map.MapStore;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.framework.persistence.PersistableView;
+import com.theyawns.framework.persistence.PersistenceMetrics;
 import com.theyawns.framework.persistence.ViewStorePersistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -35,18 +37,30 @@ public class ViewStoreMapStore
     private static final Logger logger = LoggerFactory.getLogger(ViewStoreMapStore.class);
 
     private final ViewStorePersistence persistence;
+    private final PersistenceMetrics metrics;
     private String mapName;
 
     /**
-     * Creates a new ViewStoreMapStore.
+     * Creates a new ViewStoreMapStore without metrics.
      *
      * @param persistence the persistence provider
      */
     public ViewStoreMapStore(ViewStorePersistence persistence) {
+        this(persistence, null);
+    }
+
+    /**
+     * Creates a new ViewStoreMapStore with optional metrics.
+     *
+     * @param persistence the persistence provider
+     * @param metrics the metrics collector (may be null)
+     */
+    public ViewStoreMapStore(ViewStorePersistence persistence, PersistenceMetrics metrics) {
         if (persistence == null) {
             throw new IllegalArgumentException("persistence cannot be null");
         }
         this.persistence = persistence;
+        this.metrics = metrics;
     }
 
     @Override
@@ -67,8 +81,12 @@ public class ViewStoreMapStore
 
     @Override
     public void store(String key, GenericRecord value) {
+        Instant start = metrics != null ? Instant.now() : null;
         PersistableView view = toPersistableView(key, value);
         persistence.persist(mapName, view);
+        if (metrics != null) {
+            metrics.recordStore(mapName, "view", start);
+        }
     }
 
     @Override
@@ -76,17 +94,24 @@ public class ViewStoreMapStore
         if (map.isEmpty()) {
             return;
         }
+        Instant start = metrics != null ? Instant.now() : null;
         List<PersistableView> views = new ArrayList<>(map.size());
         for (Map.Entry<String, GenericRecord> entry : map.entrySet()) {
             views.add(toPersistableView(entry.getKey(), entry.getValue()));
         }
         persistence.persistBatch(mapName, views);
+        if (metrics != null) {
+            metrics.recordBatchStore(mapName, "view", map.size(), start);
+        }
         logger.debug("Persisted batch of {} view entries for map {}", map.size(), mapName);
     }
 
     @Override
     public void delete(String key) {
         persistence.delete(mapName, key);
+        if (metrics != null) {
+            metrics.recordDelete(mapName);
+        }
     }
 
     @Override
@@ -102,9 +127,17 @@ public class ViewStoreMapStore
 
     @Override
     public GenericRecord load(String key) {
-        return persistence.loadView(mapName, key)
+        Instant start = metrics != null ? Instant.now() : null;
+        GenericRecord result = persistence.loadView(mapName, key)
                 .map(pv -> GenericRecordJsonConverter.fromJson(pv.viewData()))
                 .orElse(null);
+        if (metrics != null) {
+            metrics.recordLoad(mapName, start);
+            if (result == null) {
+                metrics.recordLoadMiss(mapName);
+            }
+        }
+        return result;
     }
 
     @Override

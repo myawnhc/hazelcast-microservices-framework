@@ -5,10 +5,12 @@ import com.hazelcast.map.MapStore;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.framework.persistence.EventStorePersistence;
 import com.theyawns.framework.persistence.PersistableEvent;
+import com.theyawns.framework.persistence.PersistenceMetrics;
 import com.theyawns.framework.store.PartitionedSequenceKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
@@ -42,18 +44,30 @@ public class EventStoreMapStore
     static final String KEY_PREFIX = "key:";
 
     private final EventStorePersistence persistence;
+    private final PersistenceMetrics metrics;
     private String mapName;
 
     /**
-     * Creates a new EventStoreMapStore.
+     * Creates a new EventStoreMapStore without metrics.
      *
      * @param persistence the persistence provider
      */
     public EventStoreMapStore(EventStorePersistence persistence) {
+        this(persistence, null);
+    }
+
+    /**
+     * Creates a new EventStoreMapStore with optional metrics.
+     *
+     * @param persistence the persistence provider
+     * @param metrics the metrics collector (may be null)
+     */
+    public EventStoreMapStore(EventStorePersistence persistence, PersistenceMetrics metrics) {
         if (persistence == null) {
             throw new IllegalArgumentException("persistence cannot be null");
         }
         this.persistence = persistence;
+        this.metrics = metrics;
     }
 
     @Override
@@ -74,8 +88,12 @@ public class EventStoreMapStore
 
     @Override
     public void store(PartitionedSequenceKey<String> key, GenericRecord value) {
+        Instant start = metrics != null ? Instant.now() : null;
         PersistableEvent event = toPersistableEvent(key, value);
         persistence.persist(mapName, event);
+        if (metrics != null) {
+            metrics.recordStore(mapName, "event", start);
+        }
     }
 
     @Override
@@ -83,16 +101,23 @@ public class EventStoreMapStore
         if (map.isEmpty()) {
             return;
         }
+        Instant start = metrics != null ? Instant.now() : null;
         persistence.persistBatch(mapName,
                 map.entrySet().stream()
                         .map(e -> toPersistableEvent(e.getKey(), e.getValue()))
                         .toList());
+        if (metrics != null) {
+            metrics.recordBatchStore(mapName, "event", map.size(), start);
+        }
         logger.debug("Persisted batch of {} events for map {}", map.size(), mapName);
     }
 
     @Override
     public void delete(PartitionedSequenceKey<String> key) {
         persistence.delete(mapName, serializeKey(key));
+        if (metrics != null) {
+            metrics.recordDelete(mapName);
+        }
     }
 
     @Override
@@ -108,9 +133,17 @@ public class EventStoreMapStore
 
     @Override
     public GenericRecord load(PartitionedSequenceKey<String> key) {
-        return persistence.loadEvent(mapName, serializeKey(key))
+        Instant start = metrics != null ? Instant.now() : null;
+        GenericRecord result = persistence.loadEvent(mapName, serializeKey(key))
                 .map(pe -> GenericRecordJsonConverter.fromJson(pe.eventData()))
                 .orElse(null);
+        if (metrics != null) {
+            metrics.recordLoad(mapName, start);
+            if (result == null) {
+                metrics.recordLoadMiss(mapName);
+            }
+        }
+        return result;
     }
 
     @Override

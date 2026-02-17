@@ -62,6 +62,18 @@ public class PersistenceProperties {
     private InitialLoadMode initialLoadMode = InitialLoadMode.LAZY;
 
     /**
+     * Eviction configuration for event store IMaps.
+     * Defaults: enabled=true, maxSize=10000, PER_NODE, LRU, maxIdleSeconds=0.
+     */
+    private EvictionConfig eventStoreEviction = new EvictionConfig();
+
+    /**
+     * Eviction configuration for view store IMaps.
+     * Defaults: enabled=true, maxSize=10000, PER_NODE, LRU, maxIdleSeconds=3600.
+     */
+    private EvictionConfig viewStoreEviction = new EvictionConfig(3600);
+
+    /**
      * Creates a new PersistenceProperties with default values.
      */
     public PersistenceProperties() {
@@ -167,6 +179,42 @@ public class PersistenceProperties {
         this.initialLoadMode = initialLoadMode;
     }
 
+    /**
+     * Returns the eviction configuration for event store IMaps.
+     *
+     * @return the event store eviction config
+     */
+    public EvictionConfig getEventStoreEviction() {
+        return eventStoreEviction;
+    }
+
+    /**
+     * Sets the eviction configuration for event store IMaps.
+     *
+     * @param eventStoreEviction the eviction config
+     */
+    public void setEventStoreEviction(final EvictionConfig eventStoreEviction) {
+        this.eventStoreEviction = eventStoreEviction;
+    }
+
+    /**
+     * Returns the eviction configuration for view store IMaps.
+     *
+     * @return the view store eviction config
+     */
+    public EvictionConfig getViewStoreEviction() {
+        return viewStoreEviction;
+    }
+
+    /**
+     * Sets the eviction configuration for view store IMaps.
+     *
+     * @param viewStoreEviction the eviction config
+     */
+    public void setViewStoreEviction(final EvictionConfig viewStoreEviction) {
+        this.viewStoreEviction = viewStoreEviction;
+    }
+
     @Override
     public String toString() {
         return "PersistenceProperties{" +
@@ -175,6 +223,8 @@ public class PersistenceProperties {
                 ", writeBatchSize=" + writeBatchSize +
                 ", writeCoalescing=" + writeCoalescing +
                 ", initialLoadMode=" + initialLoadMode +
+                ", eventStoreEviction=" + eventStoreEviction +
+                ", viewStoreEviction=" + viewStoreEviction +
                 '}';
     }
 
@@ -186,5 +236,86 @@ public class PersistenceProperties {
         LAZY,
         /** Load all entries at startup. */
         EAGER
+    }
+
+    /**
+     * Eviction configuration for IMap entries when persistence is enabled.
+     *
+     * <p>When persistence is active, IMaps become bounded hot caches. Evicted entries
+     * can be reloaded from the database via the MapLoader on demand.
+     */
+    public static class EvictionConfig {
+
+        private boolean enabled = true;
+        private int maxSize = 10000;
+        private String maxSizePolicy = "PER_NODE";
+        private String evictionPolicy = "LRU";
+        private int maxIdleSeconds = 0;
+
+        /**
+         * Creates an EvictionConfig with default values (maxIdleSeconds=0).
+         */
+        public EvictionConfig() {
+        }
+
+        /**
+         * Creates an EvictionConfig with a specific maxIdleSeconds.
+         *
+         * @param maxIdleSeconds the max idle time in seconds
+         */
+        public EvictionConfig(final int maxIdleSeconds) {
+            this.maxIdleSeconds = maxIdleSeconds;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(final boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getMaxSize() {
+            return maxSize;
+        }
+
+        public void setMaxSize(final int maxSize) {
+            this.maxSize = maxSize;
+        }
+
+        public String getMaxSizePolicy() {
+            return maxSizePolicy;
+        }
+
+        public void setMaxSizePolicy(final String maxSizePolicy) {
+            this.maxSizePolicy = maxSizePolicy;
+        }
+
+        public String getEvictionPolicy() {
+            return evictionPolicy;
+        }
+
+        public void setEvictionPolicy(final String evictionPolicy) {
+            this.evictionPolicy = evictionPolicy;
+        }
+
+        public int getMaxIdleSeconds() {
+            return maxIdleSeconds;
+        }
+
+        public void setMaxIdleSeconds(final int maxIdleSeconds) {
+            this.maxIdleSeconds = maxIdleSeconds;
+        }
+
+        @Override
+        public String toString() {
+            return "EvictionConfig{" +
+                    "enabled=" + enabled +
+                    ", maxSize=" + maxSize +
+                    ", maxSizePolicy='" + maxSizePolicy + '\'' +
+                    ", evictionPolicy='" + evictionPolicy + '\'' +
+                    ", maxIdleSeconds=" + maxIdleSeconds +
+                    '}';
+        }
     }
 }
