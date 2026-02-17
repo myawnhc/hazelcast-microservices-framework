@@ -33,6 +33,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Main controller for the event sourcing framework.
@@ -108,6 +109,9 @@ public class EventSourcingController<D extends DomainObject<K>,
      */
     private final ConcurrentMap<String, PendingCompletion<K>> pendingCompletions;
 
+    /** Counter for pipeline completions received without a matching pending entry. */
+    private final AtomicLong orphanedCompletions = new AtomicLong(0);
+
     /**
      * Private constructor - use builder.
      */
@@ -129,6 +133,17 @@ public class EventSourcingController<D extends DomainObject<K>,
         this.pendingEventsMap = hazelcast.getMap(domainName + PENDING_SUFFIX);
         this.pendingCompletions = new ConcurrentHashMap<>();
 
+        // Performance gauges for monitoring pending work
+        meterRegistry.gauge("eventsourcing.pending.completions",
+                java.util.Collections.singletonList(io.micrometer.core.instrument.Tag.of("domain", domainName)),
+                pendingCompletions, ConcurrentMap::size);
+        meterRegistry.gauge("eventsourcing.pending.events",
+                java.util.Collections.singletonList(io.micrometer.core.instrument.Tag.of("domain", domainName)),
+                pendingEventsMap, IMap::size);
+        meterRegistry.gauge("eventsourcing.completions.orphaned",
+                java.util.Collections.singletonList(io.micrometer.core.instrument.Tag.of("domain", domainName)),
+                orphanedCompletions);
+
         // Listen for pipeline completions on the completions map.
         // The pipeline writes a PipelineCompletion GenericRecord with timing metadata.
         // We extract timing here (where MeterRegistry is available) to record metrics.
@@ -149,6 +164,9 @@ public class EventSourcingController<D extends DomainObject<K>,
                                 // Republish the event to the shared cluster's ITopic
                                 // so saga listeners on other services can receive it
                                 republishToSharedCluster(pending);
+                            } else {
+                                orphanedCompletions.incrementAndGet();
+                                logger.warn("Orphaned pipeline completion for eventId: {}", eventId);
                             }
                             recordPipelineMetrics(completion, pending);
                         },
