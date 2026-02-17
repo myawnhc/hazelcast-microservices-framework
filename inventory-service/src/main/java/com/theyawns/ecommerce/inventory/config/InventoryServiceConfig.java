@@ -15,6 +15,8 @@ import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.ecommerce.common.domain.Product;
 import com.theyawns.ecommerce.common.view.ProductViewUpdater;
+import com.theyawns.framework.config.HazelcastClientConfigCustomizer;
+import com.theyawns.framework.config.HazelcastConfigCustomizer;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.outbox.OutboxStore;
@@ -35,6 +37,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+
+import java.util.List;
 
 /**
  * Spring configuration for the Inventory Service.
@@ -77,6 +81,12 @@ public class InventoryServiceConfig {
 
     @Autowired(required = false)
     private PersistenceProperties persistenceProperties;
+
+    @Autowired(required = false)
+    private List<HazelcastConfigCustomizer> configCustomizers;
+
+    @Autowired(required = false)
+    private List<HazelcastClientConfigCustomizer> clientConfigCustomizers;
 
     private EventSourcingController<Product, String, DomainEvent<Product, String>> controller;
 
@@ -195,6 +205,11 @@ public class InventoryServiceConfig {
         config.getJetConfig().setEnabled(true);
         config.getJetConfig().setResourceUploadEnabled(true);
 
+        // Apply framework-level customizers (e.g., HD Memory, TPC)
+        if (configCustomizers != null) {
+            configCustomizers.forEach(c -> c.customize(config));
+        }
+
         logger.info("Creating standalone Hazelcast instance for local Jet processing (cluster: {})",
                 embeddedClusterName);
         return Hazelcast.newHazelcastInstance(config);
@@ -237,6 +252,11 @@ public class InventoryServiceConfig {
         clientConfig.setClusterName(effectiveClusterName);
         for (String member : effectiveClusterMembers.split(",")) {
             clientConfig.getNetworkConfig().addAddress(member.trim());
+        }
+
+        // Apply framework-level client customizers (e.g., TPC)
+        if (clientConfigCustomizers != null) {
+            clientConfigCustomizers.forEach(c -> c.customize(clientConfig));
         }
 
         logger.info("Creating Hazelcast client for shared cluster: {} with members: {}",

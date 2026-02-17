@@ -74,6 +74,7 @@ class EditionPropertiesTest {
             assertThat(props.getFeatures().getTls().getEnabled()).isEqualTo("auto");
             assertThat(props.getFeatures().getHdMemory().getEnabled()).isEqualTo("auto");
             assertThat(props.getFeatures().getWanReplication().getEnabled()).isEqualTo("auto");
+            assertThat(props.getFeatures().getTpc().getEnabled()).isEqualTo("auto");
         }
     }
 
@@ -103,6 +104,26 @@ class EditionPropertiesTest {
             final EditionProperties props = new EditionProperties();
             assertThat(props.getFeatures().getHotRestart().getFallbackBehavior())
                     .isEqualTo("mapstore");
+        }
+
+        @Test
+        @DisplayName("should have correct HD Memory extended defaults")
+        void shouldHaveCorrectHdMemoryExtendedDefaults() {
+            final EditionProperties props = new EditionProperties();
+            final EditionProperties.HdMemoryFeatureConfig hdConfig = props.getFeatures().getHdMemory();
+            assertThat(hdConfig.getCapacityMb()).isEqualTo(512);
+            assertThat(hdConfig.getAllocatorType()).isEqualTo("POOLED");
+            assertThat(hdConfig.getFallbackBehavior()).isEqualTo("on-heap");
+        }
+
+        @Test
+        @DisplayName("should have correct TPC defaults")
+        void shouldHaveCorrectTpcDefaults() {
+            final EditionProperties props = new EditionProperties();
+            final EditionProperties.TpcFeatureConfig tpcConfig = props.getFeatures().getTpc();
+            assertThat(tpcConfig.getEventloopCount()).isZero();
+            assertThat(tpcConfig.isClientEnabled()).isTrue();
+            assertThat(tpcConfig.getFallbackBehavior()).isEqualTo("standard-threading");
         }
     }
 
@@ -191,6 +212,8 @@ class EditionPropertiesTest {
                     .isSameAs(features.getTls());
             assertThat(features.getConfigFor(EditionDetector.EnterpriseFeature.HD_MEMORY))
                     .isSameAs(features.getHdMemory());
+            assertThat(features.getConfigFor(EditionDetector.EnterpriseFeature.THREAD_PER_CORE))
+                    .isSameAs(features.getTpc());
             assertThat(features.getConfigFor(EditionDetector.EnterpriseFeature.WAN_REPLICATION))
                     .isSameAs(features.getWanReplication());
         }

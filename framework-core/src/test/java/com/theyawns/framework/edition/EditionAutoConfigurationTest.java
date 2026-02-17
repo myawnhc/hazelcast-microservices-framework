@@ -124,6 +124,43 @@ class EditionAutoConfigurationTest {
         }
 
         @Test
+        @DisplayName("should bind TPC configuration properties")
+        void shouldBindTpcProperties() {
+            contextRunner
+                    .withUserConfiguration(HazelcastConfig.class)
+                    .withPropertyValues(
+                            "framework.features.tpc.enabled=auto",
+                            "framework.features.tpc.fallback-behavior=standard-threading",
+                            "framework.features.tpc.eventloop-count=4",
+                            "framework.features.tpc.client-enabled=false"
+                    )
+                    .run(context -> {
+                        final EditionProperties props = context.getBean(EditionProperties.class);
+                        final EditionProperties.TpcFeatureConfig tpcConfig = props.getFeatures().getTpc();
+                        assertThat(tpcConfig.getEnabled()).isEqualTo("auto");
+                        assertThat(tpcConfig.getEventloopCount()).isEqualTo(4);
+                        assertThat(tpcConfig.isClientEnabled()).isFalse();
+                    });
+        }
+
+        @Test
+        @DisplayName("should bind HD Memory extended configuration properties")
+        void shouldBindHdMemoryExtendedProperties() {
+            contextRunner
+                    .withUserConfiguration(HazelcastConfig.class)
+                    .withPropertyValues(
+                            "framework.features.hd-memory.capacity-mb=1024",
+                            "framework.features.hd-memory.allocator-type=STANDARD"
+                    )
+                    .run(context -> {
+                        final EditionProperties props = context.getBean(EditionProperties.class);
+                        final EditionProperties.HdMemoryFeatureConfig hdConfig = props.getFeatures().getHdMemory();
+                        assertThat(hdConfig.getCapacityMb()).isEqualTo(1024);
+                        assertThat(hdConfig.getAllocatorType()).isEqualTo("STANDARD");
+                    });
+        }
+
+        @Test
         @DisplayName("should detect Community when mode explicitly set to community")
         void shouldDetectCommunityWhenExplicitlySet() {
             contextRunner

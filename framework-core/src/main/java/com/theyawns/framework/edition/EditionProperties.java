@@ -298,14 +298,19 @@ public class EditionProperties {
         private FeatureConfig tls = new FeatureConfig("auto", "warn");
 
         /**
-         * HD Memory feature configuration.
+         * HD Memory feature configuration with capacity and allocator settings.
          */
-        private FeatureConfig hdMemory = new FeatureConfig("auto", "on-heap");
+        private HdMemoryFeatureConfig hdMemory = new HdMemoryFeatureConfig();
 
         /**
          * WAN Replication feature configuration.
          */
         private FeatureConfig wanReplication = new FeatureConfig("auto", "disabled");
+
+        /**
+         * Thread-Per-Core feature configuration with eventloop count and client settings.
+         */
+        private TpcFeatureConfig tpc = new TpcFeatureConfig();
 
         /**
          * Creates a new FeaturesConfig with default values.
@@ -346,12 +351,12 @@ public class EditionProperties {
             this.tls = tls != null ? tls : new FeatureConfig("auto", "warn");
         }
 
-        public FeatureConfig getHdMemory() {
+        public HdMemoryFeatureConfig getHdMemory() {
             return hdMemory;
         }
 
-        public void setHdMemory(FeatureConfig hdMemory) {
-            this.hdMemory = hdMemory != null ? hdMemory : new FeatureConfig("auto", "on-heap");
+        public void setHdMemory(HdMemoryFeatureConfig hdMemory) {
+            this.hdMemory = hdMemory != null ? hdMemory : new HdMemoryFeatureConfig();
         }
 
         public FeatureConfig getWanReplication() {
@@ -360,6 +365,14 @@ public class EditionProperties {
 
         public void setWanReplication(FeatureConfig wanReplication) {
             this.wanReplication = wanReplication != null ? wanReplication : new FeatureConfig("auto", "disabled");
+        }
+
+        public TpcFeatureConfig getTpc() {
+            return tpc;
+        }
+
+        public void setTpc(TpcFeatureConfig tpc) {
+            this.tpc = tpc != null ? tpc : new TpcFeatureConfig();
         }
 
         /**
@@ -375,6 +388,7 @@ public class EditionProperties {
                 case HOT_RESTART -> hotRestart;
                 case TLS -> tls;
                 case HD_MEMORY -> hdMemory;
+                case THREAD_PER_CORE -> tpc;
                 case WAN_REPLICATION -> wanReplication;
             };
         }
@@ -457,6 +471,91 @@ public class EditionProperties {
         @Override
         public String toString() {
             return "FeatureConfig{enabled='" + enabled + "', fallbackBehavior='" + fallbackBehavior + "'}";
+        }
+    }
+
+    /**
+     * Extended feature configuration for HD Memory with capacity and allocator settings.
+     */
+    public static class HdMemoryFeatureConfig extends FeatureConfig {
+
+        /**
+         * HD Memory pool capacity in megabytes.
+         * Default: 512
+         */
+        private int capacityMb = 512;
+
+        /**
+         * Memory allocator type: STANDARD or POOLED.
+         * POOLED generally offers better performance for varied allocation sizes.
+         * Default: POOLED
+         */
+        private String allocatorType = "POOLED";
+
+        /**
+         * Creates a new HdMemoryFeatureConfig with default values.
+         */
+        public HdMemoryFeatureConfig() {
+            super("auto", "on-heap");
+        }
+
+        public int getCapacityMb() {
+            return capacityMb;
+        }
+
+        public void setCapacityMb(int capacityMb) {
+            this.capacityMb = capacityMb;
+        }
+
+        public String getAllocatorType() {
+            return allocatorType;
+        }
+
+        public void setAllocatorType(String allocatorType) {
+            this.allocatorType = Objects.requireNonNull(allocatorType, "allocatorType cannot be null");
+        }
+    }
+
+    /**
+     * Extended feature configuration for Thread-Per-Core networking.
+     *
+     * <p>Note: TPC is {@code @Beta} in Hazelcast 5.6 and may change in future releases.
+     */
+    public static class TpcFeatureConfig extends FeatureConfig {
+
+        /**
+         * Number of eventloop threads. 0 means auto-detect (available processors).
+         * Default: 0
+         */
+        private int eventloopCount = 0;
+
+        /**
+         * Whether to also enable TPC on the hazelcastClient (shared cluster client).
+         * Default: true
+         */
+        private boolean clientEnabled = true;
+
+        /**
+         * Creates a new TpcFeatureConfig with default values.
+         */
+        public TpcFeatureConfig() {
+            super("auto", "standard-threading");
+        }
+
+        public int getEventloopCount() {
+            return eventloopCount;
+        }
+
+        public void setEventloopCount(int eventloopCount) {
+            this.eventloopCount = eventloopCount;
+        }
+
+        public boolean isClientEnabled() {
+            return clientEnabled;
+        }
+
+        public void setClientEnabled(boolean clientEnabled) {
+            this.clientEnabled = clientEnabled;
         }
     }
 

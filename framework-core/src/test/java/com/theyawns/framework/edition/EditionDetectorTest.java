@@ -173,7 +173,16 @@ class EditionDetectorTest {
         @Test
         @DisplayName("should have all expected features")
         void shouldHaveAllExpectedFeatures() {
-            assertThat(EditionDetector.EnterpriseFeature.values()).hasSize(6);
+            assertThat(EditionDetector.EnterpriseFeature.values()).hasSize(7);
+        }
+
+        @Test
+        @DisplayName("should have correct TPC metadata")
+        void shouldHaveCorrectTpcMetadata() {
+            assertThat(EditionDetector.EnterpriseFeature.THREAD_PER_CORE.getDisplayName())
+                    .isEqualTo("Thread-Per-Core");
+            assertThat(EditionDetector.EnterpriseFeature.THREAD_PER_CORE.getDescription())
+                    .isEqualTo("High-throughput thread-per-core networking");
         }
     }
 

@@ -74,6 +74,13 @@ public class EditionDetector {
         /** HD Memory for off-heap storage. */
         HD_MEMORY("HD Memory", "Off-heap storage for large datasets"),
 
+        /**
+         * Thread-Per-Core networking for high throughput.
+         *
+         * <p>Note: TPC is {@code @Beta} in Hazelcast 5.6 and may change in future releases.
+         */
+        THREAD_PER_CORE("Thread-Per-Core", "High-throughput thread-per-core networking"),
+
         /** WAN Replication for multi-datacenter. */
         WAN_REPLICATION("WAN Replication", "Multi-datacenter replication");
 
@@ -199,6 +206,9 @@ public class EditionDetector {
         if (isHdMemoryAvailable()) {
             features.add(EnterpriseFeature.HD_MEMORY);
         }
+        if (isTpcAvailable()) {
+            features.add(EnterpriseFeature.THREAD_PER_CORE);
+        }
 
         return features;
     }
@@ -214,7 +224,9 @@ public class EditionDetector {
 
     private boolean isCpSubsystemAvailable() {
         try {
-            return hazelcast.getCPSubsystem() != null;
+            // CP Subsystem requires explicit configuration of member count to be usable.
+            // getCPSubsystem() always returns a non-null proxy, so we check config instead.
+            return hazelcast.getConfig().getCPSubsystemConfig().getCPMemberCount() > 0;
         } catch (Exception e) {
             return false;
         }
@@ -240,6 +252,14 @@ public class EditionDetector {
     private boolean isHdMemoryAvailable() {
         try {
             return hazelcast.getConfig().getNativeMemoryConfig().isEnabled();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean isTpcAvailable() {
+        try {
+            return hazelcast.getConfig().getTpcConfig().isEnabled();
         } catch (Exception e) {
             return false;
         }

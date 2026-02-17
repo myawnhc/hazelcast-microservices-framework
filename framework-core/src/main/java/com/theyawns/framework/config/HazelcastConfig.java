@@ -9,6 +9,7 @@ import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -66,6 +67,9 @@ public class HazelcastConfig {
     @Value("${hazelcast.network.port-auto-increment:true}")
     private boolean portAutoIncrement;
 
+    @Autowired(required = false)
+    private List<HazelcastConfigCustomizer> configCustomizers;
+
     /**
      * Comma-separated list of cluster member addresses for TCP/IP discovery.
      * If set, TCP/IP join is used instead of multicast (required for Docker).
@@ -108,6 +112,11 @@ public class HazelcastConfig {
 
         // Enable Jet
         config.getJetConfig().setEnabled(true);
+
+        // Apply framework-level customizers (e.g., HD Memory, TPC)
+        if (configCustomizers != null) {
+            configCustomizers.forEach(c -> c.customize(config));
+        }
 
         logger.info("Creating Hazelcast instance with cluster name: {}", clusterName);
         return Hazelcast.newHazelcastInstance(config);
