@@ -221,12 +221,13 @@ echo ""
 echo -e "${YELLOW}Finding Java PID in $SERVICE...${NC}"
 
 # The Dockerfile uses: ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
-# So java is NOT PID 1 — we need pgrep
-JAVA_PID=$(docker exec "$SERVICE" pgrep -f 'java.*app.jar' 2>/dev/null | head -1)
+# PID 1 is the "sh -c" wrapper; the actual java process has a higher PID.
+# Use pgrep without -f first (matches process name "java", not the shell's cmdline).
+JAVA_PID=$(docker exec "$SERVICE" pgrep -x java 2>/dev/null | head -1)
 
 if [ -z "$JAVA_PID" ]; then
-    # Fallback: try to find any java process
-    JAVA_PID=$(docker exec "$SERVICE" pgrep java 2>/dev/null | head -1)
+    # Fallback: match full cmdline but skip PID 1 (the sh wrapper)
+    JAVA_PID=$(docker exec "$SERVICE" pgrep -f 'java.*-jar' 2>/dev/null | grep -v '^1$' | head -1)
 fi
 
 if [ -z "$JAVA_PID" ]; then
