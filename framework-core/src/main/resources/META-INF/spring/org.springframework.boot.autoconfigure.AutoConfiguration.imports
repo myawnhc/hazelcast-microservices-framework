@@ -7,6 +7,8 @@ com.theyawns.framework.outbox.OutboxAutoConfiguration
 com.theyawns.framework.dlq.DeadLetterQueueAutoConfiguration
 com.theyawns.framework.idempotency.IdempotencyAutoConfiguration
 com.theyawns.framework.saga.orchestrator.SagaOrchestratorAutoConfiguration
+com.theyawns.framework.saga.SagaCompensationConfig
+com.theyawns.framework.saga.SagaTimeoutAutoConfiguration
 com.theyawns.framework.security.SecurityAutoConfiguration
 com.theyawns.framework.security.PermitAllSecurityAutoConfiguration
 com.theyawns.framework.security.identity.ServiceIdentityAutoConfiguration

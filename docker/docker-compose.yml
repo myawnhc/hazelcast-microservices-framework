@@ -406,6 +406,8 @@ services:
       - INVENTORY_SERVICE_URL=http://inventory-service:8082
       - ORDER_SERVICE_URL=http://order-service:8083
       - PAYMENT_SERVICE_URL=http://payment-service:8084
+      # Rate limiting (disable for perf testing: GATEWAY_RATE_LIMIT_ENABLED=false)
+      - GATEWAY_RATE_LIMIT_ENABLED=${GATEWAY_RATE_LIMIT_ENABLED:-true}
       # Security (uncomment to enable — see docs/guides/security-guide.md)
       # - FRAMEWORK_SECURITY_ENABLED=true
       # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce

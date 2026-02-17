@@ -14,7 +14,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -123,8 +122,10 @@ public class SagaTimeoutDetector {
     /**
      * Scheduled method that checks for timed-out sagas.
      *
-     * <p>Uses a distributed lock to ensure only one instance processes
-     * timeouts at a time in a clustered environment.
+     * <p>Uses the {@code running} AtomicBoolean to prevent concurrent execution
+     * within the same JVM. In the dual-instance architecture (ADR 008), each
+     * service runs its own timeout detector independently; the saga state store
+     * operations are idempotent, so overlapping detection across services is safe.
      */
     @Scheduled(fixedDelayString = "${saga.timeout.check-interval:5000}")
     public void checkForTimedOutSagas() {
@@ -133,38 +134,7 @@ public class SagaTimeoutDetector {
             return;
         }
 
-        // Try to acquire distributed lock
-        com.hazelcast.cp.lock.FencedLock lock = null;
-        boolean lockAcquired = false;
-
-        try {
-            lock = hazelcast.getCPSubsystem().getLock(TIMEOUT_DETECTOR_LOCK);
-            // Try lock with short timeout - if another instance has it, skip this check
-            lockAcquired = lock.tryLock(100, TimeUnit.MILLISECONDS);
-            if (!lockAcquired) {
-                logger.trace("Could not acquire timeout detector lock, skipping this check");
-                return;
-            }
-
-            performTimeoutCheck();
-
-        } catch (Exception e) {
-            // Fall back to non-locked execution if CP subsystem not available
-            if (e.getMessage() != null && e.getMessage().contains("CP Subsystem")) {
-                logger.debug("CP Subsystem not available, running without distributed lock");
-                performTimeoutCheck();
-            } else {
-                logger.error("Error during timeout check", e);
-            }
-        } finally {
-            if (lockAcquired && lock != null) {
-                try {
-                    lock.unlock();
-                } catch (Exception e) {
-                    logger.warn("Error releasing timeout detector lock", e);
-                }
-            }
-        }
+        performTimeoutCheck();
     }
 
     /**

@@ -13,9 +13,9 @@
 | Saga Metrics | `SagaMetrics.java` | 11 | 7 | 3 | 21 |
 | Persistence Metrics | `PersistenceMetrics.java` | 6 | 0 | 3 | 9 |
 | Gateway Metrics | `RequestTimingFilter.java` | 0 | 0 | 1 | 1 |
-| Controller Inline Metrics | `EventSourcingController.java` | 2 | 0 | 0 | 2 |
+| Controller Inline Metrics | `EventSourcingController.java` | 2 | 3 | 1 | 6 |
 | JVM / System Metrics | `MetricsConfig.java` | -- | -- | -- | auto |
-| **Total (application-level)** | | **25** | **7** | **10** | **42** |
+| **Total (application-level)** | | **25** | **10** | **11** | **46** |
 
 ---
 
@@ -138,7 +138,7 @@
 ## 5. Controller Inline Metrics (`EventSourcingController.java`)
 
 **Source:** `framework-core/src/main/java/com/theyawns/framework/controller/EventSourcingController.java`
-**Registered via:** Direct `meterRegistry.counter()` calls in `handleEvent()`.
+**Registered via:** Direct `meterRegistry` calls in constructor and `handleEvent()`.
 
 ### Counters
 
@@ -146,6 +146,20 @@
 |-------------|------|-------------|
 | `eventsourcing.events.submitted` | `eventType`, `domain` | Events submitted to the controller. **NOTE:** This is the same metric name as `PipelineMetrics.recordEventSubmitted()`. Both register counters with the same name and tags, so they will merge into the same Micrometer counter if called for the same domain/eventType combination. In practice, `handleEvent()` increments this directly, and `PipelineMetrics.recordEventSubmitted()` is also available but may not be called separately. |
 | `eventsourcing.events.failed` | `eventType`, `domain` | Events that failed during `handleEvent()` submission (before entering the pipeline). Captures exceptions in event metadata setup, sequence assignment, or pending map write. |
+
+### Gauges
+
+| Metric Name | Tags | Description |
+|-------------|------|-------------|
+| `eventsourcing.pending.completions` | `domain` | Size of the `pendingCompletions` ConcurrentHashMap. Indicates how many events are waiting for pipeline completion. Growth indicates pipeline backpressure. |
+| `eventsourcing.pending.events` | `domain` | Size of the `{domain}_PENDING` IMap. Events waiting to be picked up by the Jet pipeline. |
+| `eventsourcing.completions.orphaned` | `domain` | Cumulative count of pipeline completions received without a matching `pendingCompletions` entry. Indicates late completions (after 30s timeout). |
+
+### Timers (with p50 / p95 / p99 percentiles)
+
+| Metric Name | Tags | Description |
+|-------------|------|-------------|
+| `eventsourcing.itopic.publish.duration` | `domain` | Duration of ITopic publish operations to the shared cluster for cross-service event propagation. Only measured on the direct publish path (when outbox is disabled). |
 
 ---
 
@@ -209,17 +223,17 @@ Five pre-built dashboards are provided under `docker/grafana/dashboards/`. The K
 
 The following metrics are not currently instrumented but would improve observability.
 
-| # | Gap | Category | Description | Priority |
-|---|-----|----------|-------------|----------|
-| 1 | Events in flight | Gauge | No gauge for `pendingEventsMap.size()` or `pendingCompletions.size()` in `EventSourcingController`. Would indicate pipeline backpressure. | High |
-| 2 | Orphaned completions | Counter | No counter for completion map entries received without a matching `pendingCompletions` entry. Currently silently ignored (the `pending != null` check in the EntryAddedListener). | Medium |
-| 3 | IMap operation duration | Timer | No timer wrapping individual `IMap.set()`, `IMap.get()`, or `IMap.executeOnKey()` calls. Would identify Hazelcast-level latency separate from application logic. | Medium |
-| 4 | ITopic publish duration | Timer | No timer for `sharedHazelcast.getTopic().publish()` in the cross-cluster republish path. Would detect shared cluster communication bottlenecks. | Medium |
-| 5 | Concurrent requests gauge | Gauge | No gauge for in-flight HTTP requests at the API gateway. `gateway.request.duration` measures completed requests but not queue depth. | Low |
-| 6 | Event journal fill ratio | Gauge | No metric for how full the event journal is relative to its configured capacity. Journal overflow causes silent event loss in the Jet pipeline source. | High |
-| 7 | pendingCompletions map size | Gauge | `ConcurrentHashMap` with 30-second timeout but no size gauge. Unbounded growth indicates pipeline stalls. | High |
-| 8 | Outbox delivery latency | Timer | No timer from outbox entry write (`OutboxStore.write()`) to ITopic publish (`OutboxPublisher` delivery). Would measure end-to-end outbox delay. | Medium |
-| 9 | Near cache metrics | Gauge/Counter | Near cache is configured for view maps but hit/miss/eviction metrics are not exposed to Micrometer. Hazelcast collects these internally but they are not bridged. | Low |
+| # | Gap | Category | Description | Priority | Status |
+|---|-----|----------|-------------|----------|--------|
+| 1 | Events in flight | Gauge | No gauge for `pendingEventsMap.size()` or `pendingCompletions.size()` in `EventSourcingController`. | High | **RESOLVED** — `eventsourcing.pending.events` and `eventsourcing.pending.completions` gauges added |
+| 2 | Orphaned completions | Counter | No counter for completion map entries received without a matching `pendingCompletions` entry. | Medium | **RESOLVED** — `eventsourcing.completions.orphaned` gauge added |
+| 3 | IMap operation duration | Timer | No timer wrapping individual `IMap.set()`, `IMap.get()`, or `IMap.executeOnKey()` calls. | Medium | Deferred — pipeline stage timers already cover the hot path; add targeted timers if profiling reveals IMap-level bottlenecks |
+| 4 | ITopic publish duration | Timer | No timer for `sharedHazelcast.getTopic().publish()` in the cross-cluster republish path. | Medium | **RESOLVED** — `eventsourcing.itopic.publish.duration` timer added |
+| 5 | Concurrent requests gauge | Gauge | No gauge for in-flight HTTP requests at the API gateway. | Low | Open |
+| 6 | Event journal fill ratio | Gauge | No metric for how full the event journal is relative to its configured capacity. | High | Deferred — no clean public API in Hazelcast 5.x to read journal fill level |
+| 7 | pendingCompletions map size | Gauge | `ConcurrentHashMap` with 30-second timeout but no size gauge. | High | **RESOLVED** — `eventsourcing.pending.completions` gauge (same as gap #1) |
+| 8 | Outbox delivery latency | Timer | No timer from outbox entry write to ITopic publish. | Medium | Open |
+| 9 | Near cache metrics | Gauge/Counter | Near cache hit/miss/eviction metrics not exposed to Micrometer. | Low | Open |
 | 10 | Serialization timing | Timer | No measurement of `toGenericRecord()` / `fromGenericRecord()` duration. Compact serialization is fast but serialization overhead in the hot path is invisible. | Low |
 
 ---

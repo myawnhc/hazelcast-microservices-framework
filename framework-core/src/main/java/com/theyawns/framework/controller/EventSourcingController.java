@@ -112,6 +112,9 @@ public class EventSourcingController<D extends DomainObject<K>,
     /** Counter for pipeline completions received without a matching pending entry. */
     private final AtomicLong orphanedCompletions = new AtomicLong(0);
 
+    /** Timer for ITopic publish duration to shared cluster. */
+    private final io.micrometer.core.instrument.Timer topicPublishTimer;
+
     /**
      * Private constructor - use builder.
      */
@@ -143,6 +146,11 @@ public class EventSourcingController<D extends DomainObject<K>,
         meterRegistry.gauge("eventsourcing.completions.orphaned",
                 java.util.Collections.singletonList(io.micrometer.core.instrument.Tag.of("domain", domainName)),
                 orphanedCompletions);
+
+        this.topicPublishTimer = io.micrometer.core.instrument.Timer.builder("eventsourcing.itopic.publish.duration")
+                .tag("domain", domainName)
+                .publishPercentiles(0.5, 0.95, 0.99)
+                .register(meterRegistry);
 
         // Listen for pipeline completions on the completions map.
         // The pipeline writes a PipelineCompletion GenericRecord with timing metadata.
@@ -495,7 +503,7 @@ public class EventSourcingController<D extends DomainObject<K>,
             // Legacy direct publish (when outbox is disabled)
             try {
                 ITopic<GenericRecord> topic = sharedHazelcast.getTopic(pending.eventType);
-                topic.publish(recordToPublish);
+                topicPublishTimer.record(() -> topic.publish(recordToPublish));
                 logger.debug("Republished event {} to shared cluster topic: {}", pending.eventType, pending.eventType);
             } catch (Exception e) {
                 logger.warn("Failed to republish event {} to shared cluster: {}", pending.eventType, e.getMessage());

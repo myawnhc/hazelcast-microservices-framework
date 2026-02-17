@@ -148,6 +148,13 @@ public class HazelcastSagaStateStore implements SagaStateStore {
         logger.debug("Completing saga: {} with outcome: {}", sagaId, outcome);
 
         SagaState state = getRequiredSaga(sagaId);
+
+        // Skip if already in a terminal state (idempotent for concurrent timeout detectors)
+        if (state.getStatus().isTerminal()) {
+            logger.debug("Saga {} already in terminal state: {}, skipping", sagaId, state.getStatus());
+            return state;
+        }
+
         SagaState completed = state.complete(outcome);
         sagaMap.set(sagaId, completed.toGenericRecord());
 
