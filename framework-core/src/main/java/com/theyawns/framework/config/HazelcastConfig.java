@@ -2,6 +2,8 @@ package com.theyawns.framework.config;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
+import com.hazelcast.config.IndexConfig;
+import com.hazelcast.config.IndexType;
 import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
 import com.hazelcast.config.TcpIpConfig;
@@ -110,6 +112,9 @@ public class HazelcastConfig {
         // Configure completions maps
         configureCompletionsMaps(config);
 
+        // Configure outbox maps with indexes for efficient polling
+        configureOutboxMaps(config);
+
         // Enable Jet
         config.getJetConfig().setEnabled(true);
 
@@ -184,6 +189,23 @@ public class HazelcastConfig {
 
         config.addMapConfig(completionsMapConfig);
         logger.debug("Configured completions maps with 1 hour TTL");
+    }
+
+    /**
+     * Configures the outbox map with indexes for efficient polling.
+     * A HASH index on {@code status} avoids full-scan deserialization for
+     * equality predicates. A SORTED index on {@code createdAt} enables
+     * server-side ordering inside {@code PagingPredicate}.
+     */
+    private void configureOutboxMaps(Config config) {
+        MapConfig outboxMapConfig = new MapConfig("framework_OUTBOX");
+        outboxMapConfig.setBackupCount(backupCount);
+        outboxMapConfig.addIndexConfig(
+                new IndexConfig(IndexType.HASH, "status"));
+        outboxMapConfig.addIndexConfig(
+                new IndexConfig(IndexType.SORTED, "createdAt"));
+        config.addMapConfig(outboxMapConfig);
+        logger.debug("Configured outbox map with HASH(status) and SORTED(createdAt) indexes");
     }
 
     /**

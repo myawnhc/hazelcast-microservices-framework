@@ -4,6 +4,7 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
+import com.hazelcast.query.PagingPredicate;
 import com.hazelcast.query.Predicates;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
@@ -13,6 +14,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -64,13 +66,18 @@ public class HazelcastOutboxStore implements OutboxStore {
 
     @Override
     public List<OutboxEntry> pollPending(final int maxBatchSize) {
-        final Collection<GenericRecord> pending = outboxMap.values(
-                Predicates.equal("status", OutboxEntry.Status.PENDING.name()));
+        Comparator<Map.Entry<String, GenericRecord>> byCreatedAt =
+                Comparator.comparingLong(e -> e.getValue().getInt64("createdAt"));
 
-        return pending.stream()
+        PagingPredicate<String, GenericRecord> pagingPredicate = Predicates.pagingPredicate(
+                Predicates.equal("status", OutboxEntry.Status.PENDING.name()),
+                byCreatedAt,
+                maxBatchSize);
+
+        Collection<GenericRecord> page = outboxMap.values(pagingPredicate);
+
+        return page.stream()
                 .map(HazelcastOutboxStore::fromRecord)
-                .sorted(Comparator.comparing(OutboxEntry::getCreatedAt))
-                .limit(maxBatchSize)
                 .collect(Collectors.toList());
     }
 
@@ -115,9 +122,8 @@ public class HazelcastOutboxStore implements OutboxStore {
 
     @Override
     public long pendingCount() {
-        final Collection<GenericRecord> pending = outboxMap.values(
-                Predicates.equal("status", OutboxEntry.Status.PENDING.name()));
-        return pending.size();
+        return outboxMap.keySet(
+                Predicates.equal("status", OutboxEntry.Status.PENDING.name())).size();
     }
 
     /**

@@ -78,48 +78,50 @@ public class OutboxPublisher {
         }
 
         Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            List<OutboxEntry> pending = outboxStore.pollPending(properties.getMaxBatchSize());
+            if (pending.isEmpty()) {
+                meterRegistry.counter("outbox.poll.empty").increment();
+                return;
+            }
 
-        List<OutboxEntry> pending = outboxStore.pollPending(properties.getMaxBatchSize());
-        if (pending.isEmpty()) {
-            return;
-        }
+            int delivered = 0;
+            int failed = 0;
 
-        int delivered = 0;
-        int failed = 0;
-
-        for (OutboxEntry entry : pending) {
-            try {
-                ITopic<GenericRecord> topic = sharedHazelcast.getTopic(entry.getEventType());
-                topic.publish(entry.getEventRecord());
-                outboxStore.markDelivered(entry.getEventId());
-                delivered++;
-                logger.debug("Delivered outbox entry: eventId={}, eventType={}",
-                        entry.getEventId(), entry.getEventType());
-            } catch (Exception e) {
-                failed++;
-                if (entry.getRetryCount() + 1 >= properties.getMaxRetries()) {
-                    outboxStore.markFailed(entry.getEventId(),
-                            "Max retries exceeded: " + e.getMessage());
-                    meterRegistry.counter("outbox.entries.failed").increment();
-                    logger.error("Outbox entry permanently failed after {} retries: eventId={}, reason={}",
-                            entry.getRetryCount() + 1, entry.getEventId(), e.getMessage());
-                } else {
-                    outboxStore.incrementRetryCount(entry.getEventId(), e.getMessage());
-                    logger.warn("Failed to deliver outbox entry (retry {}): eventId={}, reason={}",
-                            entry.getRetryCount() + 1, entry.getEventId(), e.getMessage());
+            for (OutboxEntry entry : pending) {
+                try {
+                    ITopic<GenericRecord> topic = sharedHazelcast.getTopic(entry.getEventType());
+                    topic.publish(entry.getEventRecord());
+                    outboxStore.markDelivered(entry.getEventId());
+                    delivered++;
+                    logger.debug("Delivered outbox entry: eventId={}, eventType={}",
+                            entry.getEventId(), entry.getEventType());
+                } catch (Exception e) {
+                    failed++;
+                    if (entry.getRetryCount() + 1 >= properties.getMaxRetries()) {
+                        outboxStore.markFailed(entry.getEventId(),
+                                "Max retries exceeded: " + e.getMessage());
+                        meterRegistry.counter("outbox.entries.failed").increment();
+                        logger.error("Outbox entry permanently failed after {} retries: eventId={}, reason={}",
+                                entry.getRetryCount() + 1, entry.getEventId(), e.getMessage());
+                    } else {
+                        outboxStore.incrementRetryCount(entry.getEventId(), e.getMessage());
+                        logger.warn("Failed to deliver outbox entry (retry {}): eventId={}, reason={}",
+                                entry.getRetryCount() + 1, entry.getEventId(), e.getMessage());
+                    }
                 }
             }
-        }
 
-        if (delivered > 0) {
-            meterRegistry.counter("outbox.entries.delivered").increment(delivered);
-        }
+            if (delivered > 0) {
+                meterRegistry.counter("outbox.entries.delivered").increment(delivered);
+            }
 
-        sample.stop(meterRegistry.timer("outbox.publish.duration"));
-
-        if (delivered > 0 || failed > 0) {
-            logger.info("Outbox publish cycle: delivered={}, failed={}, remaining={}",
-                    delivered, failed, pending.size() - delivered - failed);
+            if (delivered > 0 || failed > 0) {
+                logger.info("Outbox publish cycle: delivered={}, failed={}, remaining={}",
+                        delivered, failed, pending.size() - delivered - failed);
+            }
+        } finally {
+            sample.stop(meterRegistry.timer("outbox.publish.duration"));
         }
     }
 }
