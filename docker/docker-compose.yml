@@ -113,6 +113,34 @@ services:
           memory: 512M
 
   # ============================================
+  # PostgreSQL (persistence layer)
+  # ============================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    hostname: postgres
+    networks:
+      - ecommerce-network
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ecommerce
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ============================================
   # Microservices
   # ============================================
 
@@ -134,6 +162,11 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=account-service
       - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      # Persistence (PostgreSQL write-behind)
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ecommerce
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
       # Security (uncomment to enable — see docs/guides/security-guide.md)
       # - FRAMEWORK_SECURITY_ENABLED=true
       # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce
@@ -146,6 +179,8 @@ services:
       hazelcast-2:
         condition: service_healthy
       hazelcast-3:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
@@ -176,6 +211,11 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=inventory-service
       - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      # Persistence (PostgreSQL write-behind)
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ecommerce
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
       # Security (uncomment to enable — see docs/guides/security-guide.md)
       # - FRAMEWORK_SECURITY_ENABLED=true
       # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce
@@ -188,6 +228,8 @@ services:
       hazelcast-2:
         condition: service_healthy
       hazelcast-3:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
@@ -218,6 +260,11 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=order-service
       - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      # Persistence (PostgreSQL write-behind)
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ecommerce
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
       # Security (uncomment to enable — see docs/guides/security-guide.md)
       # - FRAMEWORK_SECURITY_ENABLED=true
       # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce
@@ -230,6 +277,8 @@ services:
       hazelcast-2:
         condition: service_healthy
       hazelcast-3:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
@@ -260,6 +309,11 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_SERVICE_NAME=payment-service
       - HZ_LICENSEKEY=${HZ_LICENSEKEY:-}
+      # Persistence (PostgreSQL write-behind)
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/ecommerce
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
       # Security (uncomment to enable — see docs/guides/security-guide.md)
       # - FRAMEWORK_SECURITY_ENABLED=true
       # - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://auth.example.com/realms/ecommerce
@@ -272,6 +326,8 @@ services:
       hazelcast-2:
         condition: service_healthy
       hazelcast-3:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
@@ -483,5 +539,6 @@ services:
           memory: 256M
 
 volumes:
+  postgres-data:
   prometheus-data:
   grafana-data:

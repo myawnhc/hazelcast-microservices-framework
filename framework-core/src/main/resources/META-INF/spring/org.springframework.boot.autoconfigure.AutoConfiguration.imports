@@ -9,3 +9,4 @@ com.theyawns.framework.saga.orchestrator.SagaOrchestratorAutoConfiguration
 com.theyawns.framework.security.SecurityAutoConfiguration
 com.theyawns.framework.security.PermitAllSecurityAutoConfiguration
 com.theyawns.framework.security.identity.ServiceIdentityAutoConfiguration
+com.theyawns.framework.persistence.PersistenceAutoConfiguration

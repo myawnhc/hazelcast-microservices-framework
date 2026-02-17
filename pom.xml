@@ -21,6 +21,7 @@
 
     <modules>
         <module>framework-core</module>
+        <module>framework-postgres</module>
         <module>ecommerce-common</module>
         <module>account-service</module>
         <module>inventory-service</module>
@@ -109,6 +110,30 @@
                 <groupId>com.theyawns</groupId>
                 <artifactId>api-gateway</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.theyawns</groupId>
+                <artifactId>framework-postgres</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- PostgreSQL -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>42.7.1</version>
+            </dependency>
+
+            <!-- Flyway -->
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-core</artifactId>
+                <version>10.4.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-database-postgresql</artifactId>
+                <version>10.4.1</version>
             </dependency>
 
             <!-- Spring Cloud -->

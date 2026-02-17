@@ -6,6 +6,7 @@ import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
 import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
+import com.hazelcast.config.MapStoreConfig;
 import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.Hazelcast;
@@ -19,6 +20,9 @@ import com.theyawns.ecommerce.order.domain.ProductAvailabilityViewUpdater;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.outbox.OutboxStore;
+import com.theyawns.framework.persistence.PersistenceProperties;
+import com.theyawns.framework.persistence.mapstore.EventStoreMapStore;
+import com.theyawns.framework.persistence.mapstore.ViewStoreMapStore;
 import com.theyawns.framework.security.identity.EventAuthenticator;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
 import com.theyawns.framework.saga.SagaStateStore;
@@ -28,6 +32,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -73,6 +78,15 @@ public class OrderServiceConfig {
 
     @Value("${hazelcast.event-journal.capacity:10000}")
     private int eventJournalCapacity;
+
+    @Autowired(required = false)
+    private EventStoreMapStore eventStoreMapStore;
+
+    @Autowired(required = false)
+    private ViewStoreMapStore viewStoreMapStore;
+
+    @Autowired(required = false)
+    private PersistenceProperties persistenceProperties;
 
     private EventSourcingController<Order, String, DomainEvent<Order, String>> controller;
 
@@ -123,10 +137,32 @@ public class OrderServiceConfig {
 
         // Configure view map
         MapConfig viewMapConfig = new MapConfig(DOMAIN_NAME + "_VIEW");
+        if (viewStoreMapStore != null && persistenceProperties != null) {
+            MapStoreConfig viewMsc = new MapStoreConfig()
+                    .setImplementation(viewStoreMapStore)
+                    .setEnabled(true)
+                    .setWriteDelaySeconds(persistenceProperties.getWriteDelaySeconds())
+                    .setWriteBatchSize(persistenceProperties.getWriteBatchSize())
+                    .setWriteCoalescing(true)
+                    .setInitialLoadMode(MapStoreConfig.InitialLoadMode.EAGER);
+            viewMapConfig.setMapStoreConfig(viewMsc);
+            logger.info("Persistence enabled for {}_VIEW map (write-behind)", DOMAIN_NAME);
+        }
         config.addMapConfig(viewMapConfig);
 
         // Configure event store map
         MapConfig eventStoreMapConfig = new MapConfig(DOMAIN_NAME + "_ES");
+        if (eventStoreMapStore != null && persistenceProperties != null) {
+            MapStoreConfig esMsc = new MapStoreConfig()
+                    .setImplementation(eventStoreMapStore)
+                    .setEnabled(true)
+                    .setWriteDelaySeconds(persistenceProperties.getWriteDelaySeconds())
+                    .setWriteBatchSize(persistenceProperties.getWriteBatchSize())
+                    .setWriteCoalescing(false)
+                    .setInitialLoadMode(MapStoreConfig.InitialLoadMode.LAZY);
+            eventStoreMapConfig.setMapStoreConfig(esMsc);
+            logger.info("Persistence enabled for {}_ES map (write-behind)", DOMAIN_NAME);
+        }
         config.addMapConfig(eventStoreMapConfig);
 
         // Configure customer orders index map (for getOrdersByCustomer)
