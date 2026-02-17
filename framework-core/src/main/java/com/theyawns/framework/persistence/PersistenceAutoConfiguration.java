@@ -36,9 +36,6 @@ public class PersistenceAutoConfiguration {
 
     private static final Logger logger = LoggerFactory.getLogger(PersistenceAutoConfiguration.class);
 
-    @Autowired(required = false)
-    private PersistenceMetrics persistenceMetrics;
-
     // ========================================================================
     // Metrics
     // ========================================================================
@@ -94,11 +91,13 @@ public class PersistenceAutoConfiguration {
      * Creates the EventStoreMapStore bean when an EventStorePersistence provider is available.
      *
      * @param persistence the persistence provider
+     * @param persistenceMetrics the persistence metrics (nullable if no MeterRegistry)
      * @return the MapStore adapter for event stores
      */
     @Bean
     @ConditionalOnBean(EventStorePersistence.class)
-    public EventStoreMapStore eventStoreMapStore(EventStorePersistence persistence) {
+    public EventStoreMapStore eventStoreMapStore(EventStorePersistence persistence,
+                                                  @Autowired(required = false) PersistenceMetrics persistenceMetrics) {
         logger.info("Creating EventStoreMapStore with persistence provider: {}",
                 persistence.getClass().getSimpleName());
         return new EventStoreMapStore(persistence, persistenceMetrics);
@@ -108,11 +107,13 @@ public class PersistenceAutoConfiguration {
      * Creates the ViewStoreMapStore bean when a ViewStorePersistence provider is available.
      *
      * @param persistence the persistence provider
+     * @param persistenceMetrics the persistence metrics (nullable if no MeterRegistry)
      * @return the MapStore adapter for view stores
      */
     @Bean
     @ConditionalOnBean(ViewStorePersistence.class)
-    public ViewStoreMapStore viewStoreMapStore(ViewStorePersistence persistence) {
+    public ViewStoreMapStore viewStoreMapStore(ViewStorePersistence persistence,
+                                               @Autowired(required = false) PersistenceMetrics persistenceMetrics) {
         logger.info("Creating ViewStoreMapStore with persistence provider: {}",
                 persistence.getClass().getSimpleName());
         return new ViewStoreMapStore(persistence, persistenceMetrics);
