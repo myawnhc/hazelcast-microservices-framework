@@ -30,8 +30,6 @@
 docker/profiling/async-profiler/
 docker/profiling/output/
 
-# Flame graph HTML files (large, generated per session)
-docs/perf/flamegraphs/*.html
 
 # macOS
 .DS_Store
