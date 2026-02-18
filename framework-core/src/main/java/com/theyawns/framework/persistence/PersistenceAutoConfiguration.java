@@ -5,7 +5,7 @@ import com.theyawns.framework.persistence.mapstore.ViewStoreMapStore;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -97,25 +97,27 @@ public class PersistenceAutoConfiguration {
     @Bean
     @ConditionalOnBean(EventStorePersistence.class)
     public EventStoreMapStore eventStoreMapStore(EventStorePersistence persistence,
-                                                  @Autowired(required = false) PersistenceMetrics persistenceMetrics) {
+                                                  ObjectProvider<PersistenceMetrics> metricsProvider) {
+        PersistenceMetrics metrics = metricsProvider.getIfAvailable();
         logger.info("Creating EventStoreMapStore with persistence provider: {}",
                 persistence.getClass().getSimpleName());
-        return new EventStoreMapStore(persistence, persistenceMetrics);
+        return new EventStoreMapStore(persistence, metrics);
     }
 
     /**
      * Creates the ViewStoreMapStore bean when a ViewStorePersistence provider is available.
      *
      * @param persistence the persistence provider
-     * @param persistenceMetrics the persistence metrics (nullable if no MeterRegistry)
+     * @param metricsProvider the persistence metrics provider (empty if no MeterRegistry)
      * @return the MapStore adapter for view stores
      */
     @Bean
     @ConditionalOnBean(ViewStorePersistence.class)
     public ViewStoreMapStore viewStoreMapStore(ViewStorePersistence persistence,
-                                               @Autowired(required = false) PersistenceMetrics persistenceMetrics) {
+                                               ObjectProvider<PersistenceMetrics> metricsProvider) {
+        PersistenceMetrics metrics = metricsProvider.getIfAvailable();
         logger.info("Creating ViewStoreMapStore with persistence provider: {}",
                 persistence.getClass().getSimpleName());
-        return new ViewStoreMapStore(persistence, persistenceMetrics);
+        return new ViewStoreMapStore(persistence, metrics);
     }
 }

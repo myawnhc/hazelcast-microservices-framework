@@ -4,7 +4,6 @@ import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
-import com.hazelcast.config.EvictionConfig;
 import com.hazelcast.config.EvictionPolicy;
 import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
@@ -30,10 +29,12 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Primary;
 
 import java.util.List;
@@ -72,15 +73,6 @@ public class AccountServiceConfig {
     private int eventJournalCapacity;
 
     @Autowired(required = false)
-    private EventStoreMapStore eventStoreMapStore;
-
-    @Autowired(required = false)
-    private ViewStoreMapStore viewStoreMapStore;
-
-    @Autowired(required = false)
-    private PersistenceProperties persistenceProperties;
-
-    @Autowired(required = false)
     private List<HazelcastConfigCustomizer> configCustomizers;
 
     @Autowired(required = false)
@@ -93,6 +85,11 @@ public class AccountServiceConfig {
      *
      * <p>Uses a service-specific cluster name (default: {@code account-local}) to distinguish
      * this embedded instance from the shared cluster in Management Center.
+     *
+     * <p>MapStore persistence is NOT configured here because hazelcast-spring's
+     * {@code BeanFactoryPostProcessor} forces early creation of this bean, before
+     * auto-configuration beans (MapStore, PersistenceProperties) are available.
+     * MapStore is attached later by the {@link #persistenceAttacher} bean.
      *
      * @return the configured Hazelcast instance
      */
@@ -120,9 +117,6 @@ public class AccountServiceConfig {
 
         // Enable event journal for pending events map (required for Jet streaming)
         int effectiveCapacity = eventJournalCapacity > 0 ? eventJournalCapacity : 10000;
-        EventJournalConfig journalConfig = new EventJournalConfig()
-                .setEnabled(true)
-                .setCapacity(effectiveCapacity);
 
         // Configure pending maps for ALL domains with event journal (required for cluster-wide consistency)
         for (String domain : new String[]{"Customer", "Product", "Order"}) {
@@ -133,64 +127,9 @@ public class AccountServiceConfig {
             config.addMapConfig(pendingMapConfig);
         }
 
-        // Configure view map
-        MapConfig viewMapConfig = new MapConfig(DOMAIN_NAME + "_VIEW");
-        if (viewStoreMapStore != null && persistenceProperties != null) {
-            MapStoreConfig viewMsc = new MapStoreConfig()
-                    .setImplementation(viewStoreMapStore)
-                    .setEnabled(true)
-                    .setWriteDelaySeconds(persistenceProperties.getWriteDelaySeconds())
-                    .setWriteBatchSize(persistenceProperties.getWriteBatchSize())
-                    .setWriteCoalescing(true)
-                    .setInitialLoadMode(MapStoreConfig.InitialLoadMode.EAGER);
-            viewMapConfig.setMapStoreConfig(viewMsc);
-            logger.info("Persistence enabled for {}_VIEW map (write-behind)", DOMAIN_NAME);
-
-            // Eviction — bounded hot cache backed by MapLoader
-            PersistenceProperties.EvictionConfig viewEviction = persistenceProperties.getViewStoreEviction();
-            if (viewEviction.isEnabled()) {
-                viewMapConfig.getEvictionConfig()
-                        .setEvictionPolicy(EvictionPolicy.valueOf(viewEviction.getEvictionPolicy()))
-                        .setMaxSizePolicy(MaxSizePolicy.valueOf(viewEviction.getMaxSizePolicy()))
-                        .setSize(viewEviction.getMaxSize());
-                if (viewEviction.getMaxIdleSeconds() > 0) {
-                    viewMapConfig.setMaxIdleSeconds(viewEviction.getMaxIdleSeconds());
-                }
-                logger.info("Eviction enabled for {}_VIEW (maxSize={}, policy={}, maxIdle={}s)",
-                        DOMAIN_NAME, viewEviction.getMaxSize(), viewEviction.getEvictionPolicy(),
-                        viewEviction.getMaxIdleSeconds());
-            }
-        }
-        config.addMapConfig(viewMapConfig);
-
-        // Configure event store map
-        MapConfig eventStoreMapConfig = new MapConfig(DOMAIN_NAME + "_ES");
-        if (eventStoreMapStore != null && persistenceProperties != null) {
-            MapStoreConfig esMsc = new MapStoreConfig()
-                    .setImplementation(eventStoreMapStore)
-                    .setEnabled(true)
-                    .setWriteDelaySeconds(persistenceProperties.getWriteDelaySeconds())
-                    .setWriteBatchSize(persistenceProperties.getWriteBatchSize())
-                    .setWriteCoalescing(false)
-                    .setInitialLoadMode(MapStoreConfig.InitialLoadMode.LAZY);
-            eventStoreMapConfig.setMapStoreConfig(esMsc);
-            logger.info("Persistence enabled for {}_ES map (write-behind)", DOMAIN_NAME);
-
-            // Eviction — bounded hot cache backed by MapLoader
-            PersistenceProperties.EvictionConfig esEviction = persistenceProperties.getEventStoreEviction();
-            if (esEviction.isEnabled()) {
-                eventStoreMapConfig.getEvictionConfig()
-                        .setEvictionPolicy(EvictionPolicy.valueOf(esEviction.getEvictionPolicy()))
-                        .setMaxSizePolicy(MaxSizePolicy.valueOf(esEviction.getMaxSizePolicy()))
-                        .setSize(esEviction.getMaxSize());
-                if (esEviction.getMaxIdleSeconds() > 0) {
-                    eventStoreMapConfig.setMaxIdleSeconds(esEviction.getMaxIdleSeconds());
-                }
-                logger.info("Eviction enabled for {}_ES (maxSize={}, policy={})",
-                        DOMAIN_NAME, esEviction.getMaxSize(), esEviction.getEvictionPolicy());
-            }
-        }
-        config.addMapConfig(eventStoreMapConfig);
+        // Configure view and event store maps (MapStore attached later by persistenceAttacher)
+        config.addMapConfig(new MapConfig(DOMAIN_NAME + "_VIEW"));
+        config.addMapConfig(new MapConfig(DOMAIN_NAME + "_ES"));
 
         // Standalone embedded instance - no cluster join.
         // Cross-service communication uses the separate hazelcastClient() bean.
@@ -262,12 +201,96 @@ public class AccountServiceConfig {
     }
 
     /**
+     * Attaches MapStore persistence to event store and view maps.
+     *
+     * <p>This bean runs during normal Spring bean creation (after auto-configuration
+     * beans are available), modifying the live Hazelcast config to add MapStore
+     * before any {@code getMap()} calls. The {@code hazelcastInstance()} bean is
+     * forced early by hazelcast-spring's BeanFactoryPostProcessor, before persistence
+     * beans exist — so MapStore must be attached in this separate phase.
+     *
+     * @param hazelcastInstance the embedded Hazelcast instance
+     * @param esMapStoreProvider optional event store MapStore
+     * @param viewMapStoreProvider optional view store MapStore
+     * @param propsProvider optional persistence properties
+     * @return marker object (bean exists to enforce ordering via @DependsOn)
+     */
+    @Bean
+    public Object persistenceAttacher(
+            HazelcastInstance hazelcastInstance,
+            ObjectProvider<EventStoreMapStore> esMapStoreProvider,
+            ObjectProvider<ViewStoreMapStore> viewMapStoreProvider,
+            ObjectProvider<PersistenceProperties> propsProvider) {
+
+        EventStoreMapStore esMapStore = esMapStoreProvider.getIfAvailable();
+        ViewStoreMapStore viewMapStore = viewMapStoreProvider.getIfAvailable();
+        PersistenceProperties props = propsProvider.getIfAvailable();
+
+        if (esMapStore != null && viewMapStore != null && props != null) {
+            // Attach MapStore to event store map
+            MapConfig esConfig = hazelcastInstance.getConfig().getMapConfig(DOMAIN_NAME + "_ES");
+            esConfig.setMapStoreConfig(new MapStoreConfig()
+                    .setImplementation(esMapStore)
+                    .setEnabled(true)
+                    .setWriteDelaySeconds(props.getWriteDelaySeconds())
+                    .setWriteBatchSize(props.getWriteBatchSize())
+                    .setWriteCoalescing(false)
+                    .setInitialLoadMode(MapStoreConfig.InitialLoadMode.LAZY));
+            logger.info("Persistence enabled for {}_ES map (write-behind)", DOMAIN_NAME);
+
+            PersistenceProperties.EvictionConfig esEviction = props.getEventStoreEviction();
+            if (esEviction.isEnabled()) {
+                esConfig.getEvictionConfig()
+                        .setEvictionPolicy(EvictionPolicy.valueOf(esEviction.getEvictionPolicy()))
+                        .setMaxSizePolicy(MaxSizePolicy.valueOf(esEviction.getMaxSizePolicy()))
+                        .setSize(esEviction.getMaxSize());
+                if (esEviction.getMaxIdleSeconds() > 0) {
+                    esConfig.setMaxIdleSeconds(esEviction.getMaxIdleSeconds());
+                }
+                logger.info("Eviction enabled for {}_ES (maxSize={}, policy={})",
+                        DOMAIN_NAME, esEviction.getMaxSize(), esEviction.getEvictionPolicy());
+            }
+
+            // Attach MapStore to view map
+            MapConfig viewConfig = hazelcastInstance.getConfig().getMapConfig(DOMAIN_NAME + "_VIEW");
+            viewConfig.setMapStoreConfig(new MapStoreConfig()
+                    .setImplementation(viewMapStore)
+                    .setEnabled(true)
+                    .setWriteDelaySeconds(props.getWriteDelaySeconds())
+                    .setWriteBatchSize(props.getWriteBatchSize())
+                    .setWriteCoalescing(true)
+                    .setInitialLoadMode(MapStoreConfig.InitialLoadMode.LAZY));
+            logger.info("Persistence enabled for {}_VIEW map (write-behind)", DOMAIN_NAME);
+
+            PersistenceProperties.EvictionConfig viewEviction = props.getViewStoreEviction();
+            if (viewEviction.isEnabled()) {
+                viewConfig.getEvictionConfig()
+                        .setEvictionPolicy(EvictionPolicy.valueOf(viewEviction.getEvictionPolicy()))
+                        .setMaxSizePolicy(MaxSizePolicy.valueOf(viewEviction.getMaxSizePolicy()))
+                        .setSize(viewEviction.getMaxSize());
+                if (viewEviction.getMaxIdleSeconds() > 0) {
+                    viewConfig.setMaxIdleSeconds(viewEviction.getMaxIdleSeconds());
+                }
+                logger.info("Eviction enabled for {}_VIEW (maxSize={}, policy={}, maxIdle={}s)",
+                        DOMAIN_NAME, viewEviction.getMaxSize(), viewEviction.getEvictionPolicy(),
+                        viewEviction.getMaxIdleSeconds());
+            }
+        } else {
+            logger.info("Persistence not available — {}_ES and {}_VIEW maps will use in-memory only",
+                    DOMAIN_NAME, DOMAIN_NAME);
+        }
+
+        return "persistence-attached";
+    }
+
+    /**
      * Creates the event store for customer events.
      *
      * @param hazelcast the Hazelcast instance
      * @return the event store
      */
     @Bean
+    @DependsOn("persistenceAttacher")
     public HazelcastEventStore<Customer, String, DomainEvent<Customer, String>> customerEventStore(
             HazelcastInstance hazelcast) {
         return new HazelcastEventStore<>(hazelcast, DOMAIN_NAME);
@@ -280,6 +303,7 @@ public class AccountServiceConfig {
      * @return the view store
      */
     @Bean
+    @DependsOn("persistenceAttacher")
     public HazelcastViewStore<String> customerViewStore(HazelcastInstance hazelcast) {
         return new HazelcastViewStore<>(hazelcast, DOMAIN_NAME);
     }
