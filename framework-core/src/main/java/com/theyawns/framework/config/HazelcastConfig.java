@@ -2,10 +2,12 @@ package com.theyawns.framework.config;
 
 import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
+import com.hazelcast.config.EvictionConfig;
 import com.hazelcast.config.IndexConfig;
 import com.hazelcast.config.IndexType;
 import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
+import com.hazelcast.config.MaxSizePolicy;
 import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
@@ -68,6 +70,9 @@ public class HazelcastConfig {
 
     @Value("${hazelcast.network.port-auto-increment:true}")
     private boolean portAutoIncrement;
+
+    @Value("${hazelcast.completions.max-size:50000}")
+    private int completionsMaxSize;
 
     @Autowired(required = false)
     private List<HazelcastConfigCustomizer> configCustomizers;
@@ -179,6 +184,8 @@ public class HazelcastConfig {
 
     /**
      * Configures maps for completion tracking.
+     * Entries expire after 1 hour (TTL) and are bounded by max-size per node
+     * to prevent unbounded growth during extended demo sessions.
      */
     private void configureCompletionsMaps(Config config) {
         MapConfig completionsMapConfig = new MapConfig("*_COMPLETIONS");
@@ -187,8 +194,17 @@ public class HazelcastConfig {
         // Completions can be evicted after TTL
         completionsMapConfig.setTimeToLiveSeconds(3600); // 1 hour
 
+        // Safety net: bound map size per node to prevent OOM in multi-hour runs
+        if (completionsMaxSize > 0) {
+            EvictionConfig evictionConfig = new EvictionConfig()
+                    .setMaxSizePolicy(MaxSizePolicy.PER_NODE)
+                    .setSize(completionsMaxSize)
+                    .setEvictionPolicy(com.hazelcast.config.EvictionPolicy.LRU);
+            completionsMapConfig.setEvictionConfig(evictionConfig);
+        }
+
         config.addMapConfig(completionsMapConfig);
-        logger.debug("Configured completions maps with 1 hour TTL");
+        logger.debug("Configured completions maps with 1 hour TTL, max-size: {}", completionsMaxSize);
     }
 
     /**

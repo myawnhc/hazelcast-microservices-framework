@@ -1,0 +1,42 @@
+# Docker Compose Override: Grafana Image Renderer
+#
+# Adds server-side PNG rendering capability to Grafana for automated
+# dashboard screenshot capture during performance tests.
+#
+# Usage:
+#   cd docker
+#   docker compose -f docker-compose.yml -f docker-compose-renderer.yml up -d
+#
+# Verify:
+#   curl -u admin:admin -o test.png \
+#     "http://localhost:3000/render/d/system-overview/system-overview?width=1200&height=800"
+#
+# Notes:
+#   - The renderer runs headless Chromium; allocate at least 512M memory.
+#   - First render may be slow (~5s) as Chromium starts; subsequent renders are faster.
+
+services:
+
+  grafana-renderer:
+    image: grafana/grafana-image-renderer:3.11.6
+    container_name: grafana-renderer
+    hostname: grafana-renderer
+    networks:
+      - ecommerce-network
+    environment:
+      ENABLE_METRICS: "true"
+      RENDERING_MODE: default
+      RENDERING_CLUSTERING_MODE: default
+      RENDERING_CLUSTERING_MAX_CONCURRENCY: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  grafana:
+    environment:
+      - GF_RENDERING_SERVER_URL=http://grafana-renderer:8081/render
+      - GF_RENDERING_CALLBACK_URL=http://grafana:3000/
+      - GF_LOG_FILTERS=rendering:debug
+    depends_on:
+      - grafana-renderer

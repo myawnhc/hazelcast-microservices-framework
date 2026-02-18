@@ -40,3 +40,6 @@ scripts/perf/results/
 
 # A/B test results (large JSON files, retained locally for cross-run comparison)
 scripts/perf/ab-results/
+
+# Sustained load test results (screenshots, stats logs, large JSON)
+scripts/perf/sustained-results/
