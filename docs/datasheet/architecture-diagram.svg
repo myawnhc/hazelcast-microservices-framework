@@ -1,0 +1,224 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <linearGradient id="hzBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a6dca;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0d4a8a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="hzCluster" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f3460;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="serviceGreen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#22c55e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16a34a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="gatewayPurple" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6d28d9;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="mcpOrange" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="obsRed" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ef4444;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#dc2626;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="pgBlue" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#336791;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#264f73;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="1" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+    <filter id="shadowLight" x="-3%" y="-3%" width="106%" height="110%">
+      <feDropShadow dx="0.5" dy="1" stdDeviation="1.5" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="520" fill="#f8fafc" rx="8"/>
+
+  <!-- ===== TOP ROW: Clients ===== -->
+  <!-- AI Assistant -->
+  <g filter="url(#shadowLight)">
+    <rect x="50" y="20" width="145" height="50" rx="8" fill="url(#mcpOrange)"/>
+    <text x="122" y="41" text-anchor="middle" fill="white" font-size="10" font-weight="600">AI Assistant</text>
+    <text x="122" y="55" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="9">(Claude, GPT, etc.)</text>
+  </g>
+
+  <!-- Client Apps -->
+  <g filter="url(#shadowLight)">
+    <rect x="580" y="20" width="270" height="50" rx="8" fill="#475569"/>
+    <text x="715" y="41" text-anchor="middle" fill="white" font-size="10" font-weight="600">Client Applications</text>
+    <text x="715" y="55" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="9">Web, Mobile, CLI</text>
+  </g>
+
+  <!-- ===== SECOND ROW: MCP + Gateway ===== -->
+  <!-- MCP Server -->
+  <g filter="url(#shadowLight)">
+    <rect x="50" y="95" width="145" height="50" rx="8" fill="url(#mcpOrange)"/>
+    <text x="122" y="115" text-anchor="middle" fill="white" font-size="10" font-weight="600">MCP Server</text>
+    <text x="122" y="129" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="9">7 Tools  |  :8085</text>
+  </g>
+
+  <!-- API Gateway -->
+  <g filter="url(#shadowLight)">
+    <rect x="580" y="95" width="270" height="50" rx="8" fill="url(#gatewayPurple)"/>
+    <text x="715" y="112" text-anchor="middle" fill="white" font-size="10" font-weight="600">API Gateway  :8080</text>
+    <text x="715" y="128" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="9">Rate Limiting  |  Circuit Breakers  |  JWT Auth</text>
+  </g>
+
+  <!-- ===== CONNECTIONS: Top ===== -->
+  <!-- AI to MCP -->
+  <line x1="122" y1="70" x2="122" y2="95" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="136" y="86" fill="#92400e" font-size="7.5" font-weight="500">MCP</text>
+  <!-- Clients to Gateway -->
+  <line x1="715" y1="70" x2="715" y2="95" stroke="#6d28d9" stroke-width="1.5"/>
+  <text x="724" y="86" fill="#4c1d95" font-size="7.5" font-weight="500">HTTPS</text>
+
+  <!-- ===== MICROSERVICES ROW ===== -->
+  <!-- Service boxes -->
+  <g filter="url(#shadowLight)">
+    <rect x="245" y="175" width="130" height="60" rx="8" fill="url(#serviceGreen)"/>
+    <text x="310" y="198" text-anchor="middle" fill="white" font-size="10" font-weight="700">Account</text>
+    <text x="310" y="213" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="9">:8081</text>
+    <text x="310" y="227" text-anchor="middle" fill="rgba(255,255,255,0.75)" font-size="8">Customers</text>
+  </g>
+
+  <g filter="url(#shadowLight)">
+    <rect x="395" y="175" width="130" height="60" rx="8" fill="url(#serviceGreen)"/>
+    <text x="460" y="198" text-anchor="middle" fill="white" font-size="10" font-weight="700">Inventory</text>
+    <text x="460" y="213" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="9">:8082</text>
+    <text x="460" y="227" text-anchor="middle" fill="rgba(255,255,255,0.75)" font-size="8">Products &amp; Stock</text>
+  </g>
+
+  <g filter="url(#shadowLight)">
+    <rect x="545" y="175" width="130" height="60" rx="8" fill="url(#serviceGreen)"/>
+    <text x="610" y="198" text-anchor="middle" fill="white" font-size="10" font-weight="700">Order</text>
+    <text x="610" y="213" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="9">:8083</text>
+    <text x="610" y="227" text-anchor="middle" fill="rgba(255,255,255,0.75)" font-size="8">Order Lifecycle</text>
+  </g>
+
+  <g filter="url(#shadowLight)">
+    <rect x="695" y="175" width="130" height="60" rx="8" fill="url(#serviceGreen)"/>
+    <text x="760" y="198" text-anchor="middle" fill="white" font-size="10" font-weight="700">Payment</text>
+    <text x="760" y="213" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="9">:8084</text>
+    <text x="760" y="227" text-anchor="middle" fill="rgba(255,255,255,0.75)" font-size="8">Payments &amp; Refunds</text>
+  </g>
+
+  <!-- Each service: embedded HZ icon -->
+  <g>
+    <circle cx="263" cy="188" r="7" fill="rgba(255,255,255,0.25)"/>
+    <text x="263" y="191" text-anchor="middle" fill="white" font-size="7" font-weight="700">E</text>
+    <circle cx="413" cy="188" r="7" fill="rgba(255,255,255,0.25)"/>
+    <text x="413" y="191" text-anchor="middle" fill="white" font-size="7" font-weight="700">E</text>
+    <circle cx="563" cy="188" r="7" fill="rgba(255,255,255,0.25)"/>
+    <text x="563" y="191" text-anchor="middle" fill="white" font-size="7" font-weight="700">E</text>
+    <circle cx="713" cy="188" r="7" fill="rgba(255,255,255,0.25)"/>
+    <text x="713" y="191" text-anchor="middle" fill="white" font-size="7" font-weight="700">E</text>
+  </g>
+
+  <!-- "E = Embedded Hazelcast + Jet Pipeline" label -->
+  <text x="245" y="252" fill="#64748b" font-size="8" font-style="italic">E = Embedded Hazelcast Instance + Jet Pipeline (standalone, no cluster join)</text>
+
+  <!-- MCP to services -->
+  <line x1="195" y1="120" x2="310" y2="175" stroke="#d97706" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+  <line x1="195" y1="120" x2="460" y2="175" stroke="#d97706" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+  <line x1="195" y1="120" x2="610" y2="175" stroke="#d97706" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+  <line x1="195" y1="120" x2="760" y2="175" stroke="#d97706" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+
+  <!-- Gateway to services -->
+  <line x1="630" y1="145" x2="310" y2="175" stroke="#6d28d9" stroke-width="1" opacity="0.4"/>
+  <line x1="665" y1="145" x2="460" y2="175" stroke="#6d28d9" stroke-width="1" opacity="0.4"/>
+  <line x1="715" y1="145" x2="610" y2="175" stroke="#6d28d9" stroke-width="1" opacity="0.4"/>
+  <line x1="765" y1="145" x2="760" y2="175" stroke="#6d28d9" stroke-width="1" opacity="0.4"/>
+
+  <!-- ===== HAZELCAST SHARED CLUSTER ===== -->
+  <g filter="url(#shadow)">
+    <rect x="245" y="275" width="580" height="130" rx="12" fill="url(#hzCluster)" stroke="#1a6dca" stroke-width="1.5"/>
+    <!-- Cluster header -->
+    <text x="535" y="298" text-anchor="middle" fill="white" font-size="13" font-weight="700">Hazelcast Shared Cluster</text>
+    <text x="535" y="312" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="9">Cross-service communication via client connections</text>
+
+    <!-- Nodes -->
+    <rect x="270" y="325" width="90" height="40" rx="6" fill="url(#hzBlue)"/>
+    <text x="315" y="345" text-anchor="middle" fill="white" font-size="9" font-weight="600">Node 1</text>
+    <text x="315" y="358" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="8">:5701</text>
+
+    <rect x="375" y="325" width="90" height="40" rx="6" fill="url(#hzBlue)"/>
+    <text x="420" y="345" text-anchor="middle" fill="white" font-size="9" font-weight="600">Node 2</text>
+    <text x="420" y="358" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="8">:5702</text>
+
+    <rect x="480" y="325" width="90" height="40" rx="6" fill="url(#hzBlue)"/>
+    <text x="525" y="345" text-anchor="middle" fill="white" font-size="9" font-weight="600">Node 3</text>
+    <text x="525" y="358" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="8">:5703</text>
+
+    <!-- Data structures -->
+    <rect x="600" y="322" width="200" height="46" rx="6" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+    <text x="700" y="339" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="8.5" font-weight="600">ITopic (Saga Events)</text>
+    <text x="700" y="353" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="8.5" font-weight="600">IMap (Saga State)</text>
+    <text x="700" y="364" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-size="7.5">HMAC-SHA256 Signed</text>
+  </g>
+
+  <!-- Service to cluster connections -->
+  <line x1="310" y1="235" x2="315" y2="275" stroke="#1a6dca" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="460" y1="235" x2="420" y2="275" stroke="#1a6dca" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="610" y1="235" x2="525" y2="275" stroke="#1a6dca" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="760" y1="235" x2="700" y2="275" stroke="#1a6dca" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="540" y="268" text-anchor="middle" fill="#1a6dca" font-size="7.5" font-weight="500">Client Connections</text>
+
+  <!-- ===== BOTTOM ROW: Observability + PostgreSQL ===== -->
+  <!-- Observability Stack -->
+  <g filter="url(#shadowLight)">
+    <rect x="50" y="435" width="115" height="60" rx="8" fill="url(#obsRed)"/>
+    <text x="107" y="458" text-anchor="middle" fill="white" font-size="9.5" font-weight="600">Prometheus</text>
+    <text x="107" y="472" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="8">Metrics :9090</text>
+  </g>
+
+  <g filter="url(#shadowLight)">
+    <rect x="180" y="435" width="115" height="60" rx="8" fill="url(#obsRed)"/>
+    <text x="237" y="458" text-anchor="middle" fill="white" font-size="9.5" font-weight="600">Grafana</text>
+    <text x="237" y="472" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="8">Dashboards :3000</text>
+  </g>
+
+  <g filter="url(#shadowLight)">
+    <rect x="310" y="435" width="115" height="60" rx="8" fill="url(#obsRed)"/>
+    <text x="367" y="458" text-anchor="middle" fill="white" font-size="9.5" font-weight="600">Jaeger</text>
+    <text x="367" y="472" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="8">Tracing :16686</text>
+  </g>
+
+  <!-- PostgreSQL -->
+  <g filter="url(#shadowLight)">
+    <rect x="680" y="435" width="145" height="60" rx="8" fill="url(#pgBlue)"/>
+    <text x="752" y="455" text-anchor="middle" fill="white" font-size="9.5" font-weight="600">PostgreSQL</text>
+    <text x="752" y="469" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="8">Write-Behind</text>
+    <text x="752" y="483" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-size="8">MapStore :5432</text>
+  </g>
+
+  <!-- Observability connections -->
+  <line x1="107" y1="435" x2="310" y2="235" stroke="#ef4444" stroke-width="0.8" opacity="0.3"/>
+  <line x1="107" y1="435" x2="460" y2="235" stroke="#ef4444" stroke-width="0.8" opacity="0.3"/>
+  <line x1="107" y1="435" x2="610" y2="235" stroke="#ef4444" stroke-width="0.8" opacity="0.3"/>
+  <line x1="107" y1="435" x2="760" y2="235" stroke="#ef4444" stroke-width="0.8" opacity="0.3"/>
+  <text x="155" y="420" fill="#dc2626" font-size="7.5" font-weight="500">Metrics &amp; Traces (OTLP)</text>
+
+  <!-- PostgreSQL connections -->
+  <line x1="752" y1="435" x2="535" y2="405" stroke="#336791" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+  <text x="655" y="420" fill="#336791" font-size="7.5" font-weight="500">Async Write-Behind</text>
+
+  <!-- ===== LEGEND BOX ===== -->
+  <rect x="50" y="275" width="175" height="130" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="137" y="296" text-anchor="middle" fill="#1e293b" font-size="9.5" font-weight="700">Key Capabilities</text>
+  <line x1="60" y1="303" x2="215" y2="303" stroke="#e2e8f0" stroke-width="1"/>
+  <circle cx="68" cy="318" r="3.5" fill="#22c55e"/>
+  <text x="78" y="321" fill="#334155" font-size="8">Event Sourcing + CQRS</text>
+  <circle cx="68" cy="335" r="3.5" fill="#1a6dca"/>
+  <text x="78" y="338" fill="#334155" font-size="8">Choreographed Sagas</text>
+  <circle cx="68" cy="352" r="3.5" fill="#8b5cf6"/>
+  <text x="78" y="355" fill="#334155" font-size="8">Orchestrated Sagas</text>
+  <circle cx="68" cy="369" r="3.5" fill="#ef4444"/>
+  <text x="78" y="372" fill="#334155" font-size="8">Circuit Breakers + DLQ</text>
+  <circle cx="68" cy="386" r="3.5" fill="#f59e0b"/>
+  <text x="78" y="389" fill="#334155" font-size="8">AI Integration (MCP)</text>
+</svg>
