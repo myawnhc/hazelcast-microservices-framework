@@ -216,25 +216,39 @@ LAP (13), PER (13), STO (12), NET (12), AUD (12), ACC (13), DIS (12), FUR (13)
 
 ---
 
-### Session 7: A-B Testing Framework — PENDING
+### Session 7: A-B Testing Framework — COMPLETED
 
-**Objectives:** Build A-B test harness, compare HD Memory vs On-Heap and TPC vs default threading (Enterprise features).
+**Objectives:** Build general-purpose A-B test harness, compare HD Memory vs On-Heap and TPC vs default threading (Enterprise features).
 
 **Deliverables:**
-- `scripts/perf/ab-test.sh` — Automated A-B runner
-- `docker/docker-compose-hd-memory.yml` — HD Memory override
-- `docker/docker-compose-tpc.yml` — TPC override
-- `docs/perf/ab-test-results.md`
+- `scripts/perf/ab-test.sh` — Automated A-B orchestrator (config profiles, health checks, k6 runs, Docker stats capture, manifest JSON for retained results)
+- `scripts/perf/ab-compare.sh` — Comparison engine (jq + bc, markdown report with ASCII bar charts)
+- `scripts/perf/ab-chart.py` — Optional matplotlib PNG chart generator (graceful fallback)
+- `scripts/perf/ab-configs/` — 6 config profiles (community-baseline, hd-memory, tpc, hd-memory-tpc, high-memory, profiling)
+- `docker/docker-compose-hd-memory.yml` — HD Memory override (Enterprise image, native-memory config, 1024M limits)
+- `docker/docker-compose-tpc.yml` — TPC override (Enterprise image, thread-per-core networking)
+- `docker/hazelcast/hazelcast-hd-memory.yaml` — HD Memory Hazelcast config (native-memory enabled, NATIVE in-memory-format)
+- `.claude/skills/ab-test/SKILL.md` — Claude `/ab-test` skill for guided A-B test setup
 
-**A-B flow:** Start config A -> health check -> load data -> run k6 -> save results -> stop -> start config B -> repeat -> compare.
+**A-B flow:** Clean slate (`docker compose down -v`) → compose up from config profile → health check (180s timeout) → load 100 customers + 100 products → 10s stabilization → k6 at constant 50 TPS for 3m → capture Docker stats → save results + manifest JSON → tear down → repeat for variant B → generate comparison report.
 
-**Configs:** A=Community baseline, B1=HD Memory, B2=TPC, B3=Both.
+**A-B test results (3 tests run, all at 50 TPS for 3 minutes):**
 
-**Measures:** TPS diff, latency percentiles diff, memory usage, GC pause frequency, thread count.
+| Test | Winner | Key Finding |
+|------|--------|-------------|
+| Baseline vs High Memory (512M→1024M) | Baseline 3/4 p95 | No meaningful difference — services not memory-constrained at this scale |
+| Baseline vs TPC (Enterprise) | TPC 3/4 p95 | Marginal gains (0.5-1.1ms faster p95), 14% lower max latency, fewer errors |
+| Baseline vs HD Memory (Enterprise) | Baseline 4/4 p95 | HD Memory adds serialization overhead crossing JVM heap boundary; not justified at small scale (~200 entries) |
 
-**Caveats to document:** Enterprise license required; laptop may not show TPC benefit (multi-core advantage); 100 products may not stress heap enough for HD Memory.
+**Key findings:**
+- At 50 TPS with ~200 entries, Enterprise features provide marginal or no benefit — the workload is neither I/O-bound enough for TPC nor memory-intensive enough for HD Memory
+- HD Memory has a measurable per-access cost (+3-24% p95 latency) from native off-heap serialization that only pays off with large datasets causing GC pressure
+- TPC shows promise for higher concurrency workloads where its event-loop architecture outperforms traditional I/O threading
+- The A-B framework itself is reusable for any configuration comparison (not limited to Enterprise features)
 
-**Success:** A-B script runs unattended, results clearly show where Enterprise features help/don't.
+**Reports:** `docs/performance/ab-baseline-vs-high-memory-*.md`, `ab-baseline-vs-tpc-*.md`, `ab-baseline-vs-hd-memory-*.md`
+
+**Success:** A-B script runs unattended (~9 min per test), results retained with manifest JSON for cross-run comparison, clear reports showing where Enterprise features help and don't.
 
 ---
 
@@ -339,7 +353,7 @@ Session 7,8,9 ──> Session 11 (K8s/Cloud)
 Session 10,11 ──> Session 12 (Documentation & Blog)
 ```
 
-Sessions 1-6 are complete. Sessions 7-9 are independent and can be done in any order. Session 10 is optional. Session 12 depends on having results.
+Sessions 1-7 are complete. Sessions 8-9 are independent and can be done in any order. Session 10 is optional. Session 12 depends on having results.
 
 ---
 
@@ -363,7 +377,17 @@ scripts/perf/
     customer-ids.json           # JSON array for k6 SharedArray
     product-ids.json            # JSON array for k6 SharedArray
   results/                      # k6 JSON output files
-  ab-test.sh                   # (Session 7)
+  ab-test.sh                   # A-B test orchestrator (Session 7)
+  ab-compare.sh                # Comparison engine — jq + bc + ASCII charts (Session 7)
+  ab-chart.py                  # Optional matplotlib PNG charts (Session 7)
+  ab-configs/                  # A-B config profiles (Session 7)
+    community-baseline.conf
+    hd-memory.conf
+    tpc.conf
+    hd-memory-tpc.conf
+    high-memory.conf
+    profiling.conf
+  ab-results/                  # A-B run results with manifests (gitignored)
   profile-service.sh           # (Session 5)
   simulator/                   # (Session 10, optional)
 
@@ -372,7 +396,9 @@ docs/perf/
   baseline-measurements.md      # TPS/latency at 10/25/50 TPS with Prometheus data
   flamegraph-analysis-session5.md   # (Session 5)
   optimization-iteration-1.md       # (Session 6)
-  ab-test-results.md                # (Session 7)
+  ab-baseline-vs-high-memory-*.md   # (Session 7) — no meaningful difference
+  ab-baseline-vs-tpc-*.md           # (Session 7) — TPC wins 3/4 p95 metrics
+  ab-baseline-vs-hd-memory-*.md     # (Session 7) — baseline wins 4/4 p95 metrics
   stability-analysis.md             # (Session 8)
   microbenchmark-results.md         # (Session 9)
   simulator-evaluation.md           # (Session 10, optional)
@@ -387,8 +413,9 @@ docker/grafana/dashboards/
 docker/profiling/               # (Session 5)
   Dockerfile.profiled
 docker/docker-compose-profiling.yml  # (Session 5)
-docker/docker-compose-hd-memory.yml  # (Session 7)
-docker/docker-compose-tpc.yml       # (Session 7)
+docker/docker-compose-hd-memory.yml  # (Session 7) — Enterprise image, native-memory, 1024M limits
+docker/docker-compose-tpc.yml       # (Session 7) — Enterprise image, TPC networking
+docker/hazelcast/hazelcast-hd-memory.yaml  # (Session 7) — native-memory config
 
 framework-core/src/jmh/        # (Session 9)
 ```
