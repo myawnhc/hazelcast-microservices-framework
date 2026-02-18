@@ -37,3 +37,6 @@ docker/profiling/output/
 # Performance test generated data and results
 scripts/perf/data/
 scripts/perf/results/
+
+# A/B test results (large JSON files, retained locally for cross-run comparison)
+scripts/perf/ab-results/

@@ -1,0 +1,28 @@
+# Docker Compose Override: TPC - Thread Per Core (Enterprise)
+#
+# Enables Hazelcast TPC (Thread-Per-Core) networking on all cluster nodes.
+# TPC replaces the traditional I/O threading model with a more scalable
+# event-loop-based architecture.
+# Requires HZ_LICENSEKEY environment variable to be set.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose-tpc.yml up -d
+
+services:
+  hazelcast-1:
+    environment:
+      HZ_LICENSEKEY: ${HZ_LICENSEKEY:?TPC requires HZ_LICENSEKEY}
+      HZ_TPC_ENABLED: "true"
+      HZ_TPC_EVENTLOOPCOUNT: "2"
+
+  hazelcast-2:
+    environment:
+      HZ_LICENSEKEY: ${HZ_LICENSEKEY:?TPC requires HZ_LICENSEKEY}
+      HZ_TPC_ENABLED: "true"
+      HZ_TPC_EVENTLOOPCOUNT: "2"
+
+  hazelcast-3:
+    environment:
+      HZ_LICENSEKEY: ${HZ_LICENSEKEY:?TPC requires HZ_LICENSEKEY}
+      HZ_TPC_ENABLED: "true"
+      HZ_TPC_EVENTLOOPCOUNT: "2"
