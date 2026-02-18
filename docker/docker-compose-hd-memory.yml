@@ -1,13 +1,14 @@
 # Docker Compose Override: HD Memory (Enterprise)
 #
 # Enables Hazelcast HD Memory (native off-heap storage) on all cluster nodes.
-# Requires HZ_LICENSEKEY environment variable to be set.
+# Requires Enterprise Edition image and HZ_LICENSEKEY environment variable.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose-hd-memory.yml up -d
 
 services:
   hazelcast-1:
+    image: hazelcast/hazelcast-enterprise:5.6.0
     environment:
       JAVA_OPTS: -Xms256m -Xmx512m -XX:MaxDirectMemorySize=512m
       HZ_LICENSEKEY: ${HZ_LICENSEKEY:?HD Memory requires HZ_LICENSEKEY}
@@ -19,6 +20,7 @@ services:
           memory: 1024M
 
   hazelcast-2:
+    image: hazelcast/hazelcast-enterprise:5.6.0
     environment:
       JAVA_OPTS: -Xms256m -Xmx512m -XX:MaxDirectMemorySize=512m
       HZ_LICENSEKEY: ${HZ_LICENSEKEY:?HD Memory requires HZ_LICENSEKEY}
@@ -30,6 +32,7 @@ services:
           memory: 1024M
 
   hazelcast-3:
+    image: hazelcast/hazelcast-enterprise:5.6.0
     environment:
       JAVA_OPTS: -Xms256m -Xmx512m -XX:MaxDirectMemorySize=512m
       HZ_LICENSEKEY: ${HZ_LICENSEKEY:?HD Memory requires HZ_LICENSEKEY}
