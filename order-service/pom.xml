@@ -24,6 +24,10 @@
             <groupId>com.theyawns</groupId>
             <artifactId>ecommerce-common</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.theyawns</groupId>
+            <artifactId>framework-postgres</artifactId>
+        </dependency>
 
         <!-- Spring Boot Web -->
         <dependency>
