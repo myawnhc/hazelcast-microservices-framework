@@ -523,6 +523,10 @@ if [ ! -f "$CONFIG_B" ]; then
     fi
 fi
 
+# Resolve to absolute paths (cwd changes during docker compose operations)
+CONFIG_A="$(cd "$(dirname "$CONFIG_A")" && pwd)/$(basename "$CONFIG_A")"
+CONFIG_B="$(cd "$(dirname "$CONFIG_B")" && pwd)/$(basename "$CONFIG_B")"
+
 # Check prerequisites
 for cmd in docker jq bc curl k6; do
     if ! command -v "$cmd" > /dev/null 2>&1; then
