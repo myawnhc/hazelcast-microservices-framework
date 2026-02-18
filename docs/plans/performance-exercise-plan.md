@@ -298,18 +298,38 @@ LAP (13), PER (13), STO (12), NET (12), AUD (12), ACC (13), DIS (12), FUR (13)
 
 ---
 
-### Session 9: JMH Micro-Benchmarks — PENDING
+### Session 9: JMH Micro-Benchmarks — COMPLETED
 
 **Objectives:** Create JMH benchmarks for framework internals, measure serialization/IMap/pipeline in isolation.
 
 **Deliverables:**
-- `framework-core/src/jmh/java/com/theyawns/framework/bench/` — Benchmark classes
-- Maven `benchmark` profile in `framework-core/pom.xml`
-- `docs/perf/microbenchmark-results.md`
+- `framework-core/src/jmh/java/com/theyawns/framework/bench/` — 8 benchmark classes (3 fixtures + 5 benchmarks)
+- Maven `benchmark` profile in `framework-core/pom.xml` (build-helper, shade, compiler annotation processing)
+- `docs/perf/microbenchmark-results.md` — Full results with analysis
 
-**Benchmarks:** GenericRecord serialization (toGenericRecord/fromGenericRecord), EventStore append (IMap.set), ViewStore update (executeOnKey), FlakeIdGenerator throughput, PartitionedSequenceKey creation.
+**Benchmarks (20 methods across 5 classes):**
+- SerializationBenchmark (6): event/domain obj toGenericRecord, fromGenericRecord, roundTrip
+- EventStoreAppendBenchmark (2): preBuilt record vs with serialization
+- ViewStoreUpdateBenchmark (3): executeOnKey update/creation, directPut baseline
+- FlakeIdGeneratorBenchmark (3): 1/4/8 thread scaling
+- PartitionedSequenceKeyBenchmark (6): creation, serialization, hashCode, equals
 
-**Success:** Benchmarks run via `mvn verify -Pbenchmark`, results documented, most expensive per-event operation identified.
+**Key results (JDK 24, Apple Silicon, 2 forks x 5 iterations x 5s):**
+
+| Operation | Cost (us/op) |
+|-----------|:------------:|
+| FlakeIdGenerator.newId() | 15.6 |
+| EventStore.append (IMap.set) | 11.2 |
+| ViewStore.executeOnKey | 9.3 |
+| Event.toGenericRecord (14 fields) | 1.1 |
+| Event.fromGenericRecord | 0.3 |
+| PartitionedSequenceKey.creation | 0.004 |
+
+**Most expensive operation:** FlakeIdGenerator.newId() at 15.6 us (42% of per-event cost), with severe contention scaling: 4 threads = 69 us, 8 threads = 151 us.
+
+**Key finding:** Total per-event framework internal cost is ~37 us — less than 0.5% of pipeline p50 (8.7 ms). System-level overhead (Jet scheduling, thread coordination, HTTP) dominates by 100-200x.
+
+**Success:** `mvn clean test` unaffected (benchmark sources ignored without `-Pbenchmark`), benchmarks.jar built and run, results documented, FlakeIdGenerator identified as most expensive per-event operation.
 
 ---
 
@@ -382,7 +402,7 @@ Session 7,8,9 ──> Session 11 (K8s/Cloud)
 Session 10,11 ──> Session 12 (Documentation & Blog)
 ```
 
-Sessions 1-8 are complete. Session 9 is next. Session 10 is optional. Session 12 depends on having results.
+Sessions 1-9 are complete. Session 10 is optional. Session 11-12 depend on having results.
 
 ---
 
