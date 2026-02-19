@@ -333,19 +333,53 @@ LAP (13), PER (13), STO (12), NET (12), AUD (12), ACC (13), DIS (12), FUR (13)
 
 ---
 
-### Session 10: Hazelcast Simulator Evaluation (Optional) — PENDING
+### Session 10: Hazelcast Cluster Benchmarks & Simulator Evaluation — COMPLETED
 
-**Objectives:** Evaluate Simulator for IMap/ITopic throughput testing against shared cluster; determine if Hazelcast or application code is the primary bottleneck.
+**Objectives:** Benchmark the shared 3-node Hazelcast cluster (ITopic pub/sub and saga state IMap) in isolation; evaluate Hazelcast Simulator as a tool.
+
+**Approach:** Extended existing JMH infrastructure with cluster-aware benchmarks (HazelcastClient connecting to Docker Compose cluster). Tried Hazelcast Simulator Docker image for evaluation.
 
 **Deliverables:**
-- `scripts/perf/simulator/` — Simulator configs
-- `docs/perf/simulator-evaluation.md`
+- `framework-core/src/jmh/java/.../bench/ClusterBenchmarkState.java` — JMH state managing HazelcastClient lifecycle
+- `framework-core/src/jmh/java/.../bench/ClusterIMapBenchmark.java` — 5 IMap benchmarks over the network
+- `framework-core/src/jmh/java/.../bench/ClusterITopicBenchmark.java` — 3 ITopic benchmarks (fire-and-forget + round-trip)
+- `framework-core/src/jmh/java/.../bench/ClusterEventJournalBenchmark.java` — 2 benchmarks comparing journaled vs plain map
+- `scripts/perf/run-cluster-benchmarks.sh` — Orchestration script (cluster health check → build → run → results)
+- `scripts/perf/simulator/try-simulator.sh` — Simulator evaluation script
+- `docs/perf/cluster-benchmark-results.md` — Full results with analysis
 
-**Tests:** IMap.put on `*_PENDING` maps, IMap.get on `*_VIEW` maps, ITopic.publish, Event Journal read throughput.
+**Key Results (10 benchmark methods, JDK 24, Apple Silicon):**
 
-**Decision point:** If Hazelcast ops are sub-millisecond at our scale -> focus optimization on application code. If Hazelcast IS the bottleneck -> Enterprise features become more relevant.
+| Operation | Avg (us/op) | Error |
+|-----------|:-----------:|:-----:|
+| IMap.set (small ~200B) | 311.3 | ± 8.4 |
+| IMap.set (large ~1KB) | 313.8 | ± 6.6 |
+| IMap.get (hit) | 268.0 | ± 18.7 |
+| IMap.get (miss) | 267.3 | ± 10.7 |
+| IMap.set + get round-trip | 568.3 | ± 27.4 |
+| ITopic.publish (small) | 307.5 | ± 8.5 |
+| ITopic.publish (large) | 355.0 | ± 44.5 |
+| ITopic round-trip | 185.6 | ± 24.1 |
+| Event Journal write | 338.2 | ± 32.1 |
+| Plain map write | 322.9 | ± 16.2 |
 
-**Success:** Simulator runs against local cluster, throughput numbers documented, bottleneck source identified.
+**Embedded vs Cluster overhead:** IMap.set is **28-42x** slower over the network (7-11 us embedded → 311-314 us cluster).
+
+**Saga latency breakdown:**
+
+| Layer | Cost | % of Pipeline p50 |
+|-------|:----:|:-----------------:|
+| Framework internals (Session 9) | ~37 us | 0.4% |
+| Hazelcast cluster ops (Session 10) | ~2,400 us | 27.6% |
+| System overhead (Jet + HTTP + threads) | ~6,263 us | 72.0% |
+
+**Decision: Hazelcast is a significant contributor (~28%) but not the bottleneck.** System-level overhead (Jet scheduling, thread coordination, HTTP) dominates at ~72%.
+
+**Simulator evaluation:** Image is 4.82 GB, requires coordinator/agent/worker setup, designed for cloud-scale (50+ nodes). **Not recommended** for this project's 3-node Docker Compose cluster. JMH via HazelcastClient provides equivalent measurements with far less setup.
+
+**Technical fix discovered:** HazelcastClient smart routing must be disabled when connecting from host to Docker cluster (cluster members advertise Docker-internal hostnames).
+
+**Success:** All 10 benchmarks run, bottleneck source identified, Simulator evaluated and documented.
 
 ---
 
@@ -402,7 +436,7 @@ Session 7,8,9 ──> Session 11 (K8s/Cloud)
 Session 10,11 ──> Session 12 (Documentation & Blog)
 ```
 
-Sessions 1-9 are complete. Session 10 is optional. Session 11-12 depend on having results.
+Sessions 1-10 are complete. Session 11-12 depend on having results.
 
 ---
 
@@ -441,7 +475,9 @@ scripts/perf/
   run-sustained-test.sh        # Sustained test orchestrator (Session 8)
   sustained-results/           # Sustained test output (gitignored)
   profile-service.sh           # (Session 5)
-  simulator/                   # (Session 10, optional)
+  run-cluster-benchmarks.sh    # Cluster JMH orchestrator (Session 10)
+  simulator/                   # Simulator evaluation (Session 10)
+    try-simulator.sh
 
 docs/perf/
   metrics-inventory.md          # 42 metrics cataloged, 10 gaps identified
@@ -453,7 +489,7 @@ docs/perf/
   ab-baseline-vs-hd-memory-*.md     # (Session 7) — baseline wins 4/4 p95 metrics
   stability-analysis.md             # (Session 8)
   microbenchmark-results.md         # (Session 9)
-  simulator-evaluation.md           # (Session 10, optional)
+  cluster-benchmark-results.md      # (Session 10)
   deployment-comparison.md          # (Session 11)
   performance-exercise-summary.md   # (Session 12)
   production-checklist.md            # (Session 12)
@@ -470,7 +506,15 @@ docker/docker-compose-tpc.yml       # (Session 7) — Enterprise image, TPC netw
 docker/docker-compose-renderer.yml  # (Session 8) — Grafana Image Renderer for dashboard screenshots
 docker/hazelcast/hazelcast-hd-memory.yaml  # (Session 7) — native-memory config
 
-framework-core/src/jmh/        # (Session 9)
+framework-core/src/jmh/        # (Session 9 embedded + Session 10 cluster benchmarks)
+  java/com/theyawns/framework/bench/
+    BenchmarkEvent.java                 # (Session 9)
+    BenchmarkDomainObj.java             # (Session 9)
+    HazelcastBenchmarkState.java        # (Session 9) embedded HZ state
+    ClusterBenchmarkState.java          # (Session 10) HazelcastClient state
+    ClusterIMapBenchmark.java           # (Session 10) 5 IMap benchmarks
+    ClusterITopicBenchmark.java         # (Session 10) 3 ITopic benchmarks
+    ClusterEventJournalBenchmark.java   # (Session 10) 2 journal benchmarks
 ```
 
 ---

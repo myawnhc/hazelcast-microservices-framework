@@ -1,0 +1,140 @@
+=== Simulator Evaluation Log ===
+Date: Thu Feb 19 05:24:56 EST 2026
+
+[05:24:56] Step 1: Checking if Docker Compose cluster is running...
+[05:24:56]   Node on port 5701: READY
+[05:24:56]   Node on port 5702: READY
+[05:24:56]   Node on port 5703: READY
+[05:24:56] Step 2: Pulling Hazelcast Simulator Docker image...
+
+Error response from daemon: pull access denied for hazelcast/hazelcast-simulator, repository does not exist or may require 'docker login'
+[05:24:57] WARNING: Failed to pull simulator image. It may not exist or Docker Hub may be down.
+
+=== PULL FAILED ===
+[05:24:57] Trying alternate image: hazelcast/simulator...
+latest: Pulling from hazelcast/simulator
+4f4fb700ef54: Pulling fs layer
+b8a35db46e38: Pulling fs layer
+3826c70b9476: Pulling fs layer
+75efda57a581: Pulling fs layer
+38854cf9f2fe: Pulling fs layer
+f7f303218216: Pulling fs layer
+a226007647d4: Pulling fs layer
+69bff3689576: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+43cc647ddc3c: Pulling fs layer
+ebac4ebdea9c: Pulling fs layer
+4611ace13019: Pulling fs layer
+f0e40d8c56cb: Pulling fs layer
+b5955e82f3ef: Pulling fs layer
+945bb3cf61c7: Pulling fs layer
+dee29867d05f: Pulling fs layer
+0c39434026dd: Pulling fs layer
+607cc0139b04: Pulling fs layer
+de9a4240ffb3: Pulling fs layer
+ec40577c1d70: Pulling fs layer
+8e2eed80f59b: Pulling fs layer
+8bd1aff9538f: Pulling fs layer
+0534bc59e323: Pulling fs layer
+f83ff4b17b1a: Pulling fs layer
+2c0a33cdd0a5: Pulling fs layer
+d8ee13c4d35f: Pulling fs layer
+65d35dd6a261: Pulling fs layer
+7f0571b94f07: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+ac018fbcd1da: Pulling fs layer
+4f4fb700ef54: Already exists
+4f4fb700ef54: Pull complete
+ec40577c1d70: Download complete
+de9a4240ffb3: Download complete
+38854cf9f2fe: Download complete
+8e2eed80f59b: Download complete
+dee29867d05f: Download complete
+a226007647d4: Download complete
+ebac4ebdea9c: Download complete
+8bd1aff9538f: Download complete
+b5955e82f3ef: Download complete
+0c39434026dd: Download complete
+4611ace13019: Download complete
+0534bc59e323: Download complete
+945bb3cf61c7: Download complete
+f7f303218216: Download complete
+7f0571b94f07: Download complete
+2c0a33cdd0a5: Download complete
+65d35dd6a261: Download complete
+ac018fbcd1da: Download complete
+69bff3689576: Download complete
+b8a35db46e38: Download complete
+b8a35db46e38: Pull complete
+f83ff4b17b1a: Download complete
+43cc647ddc3c: Download complete
+607cc0139b04: Download complete
+d8ee13c4d35f: Download complete
+75efda57a581: Download complete
+f0e40d8c56cb: Download complete
+3826c70b9476: Download complete
+3826c70b9476: Pull complete
+75efda57a581: Pull complete
+f7f303218216: Pull complete
+69bff3689576: Pull complete
+43cc647ddc3c: Pull complete
+4611ace13019: Pull complete
+ac018fbcd1da: Pull complete
+f0e40d8c56cb: Pull complete
+f83ff4b17b1a: Pull complete
+b5955e82f3ef: Pull complete
+0c39434026dd: Pull complete
+0534bc59e323: Pull complete
+945bb3cf61c7: Pull complete
+d8ee13c4d35f: Pull complete
+ec40577c1d70: Pull complete
+de9a4240ffb3: Pull complete
+38854cf9f2fe: Pull complete
+dee29867d05f: Pull complete
+a226007647d4: Pull complete
+ebac4ebdea9c: Pull complete
+8bd1aff9538f: Pull complete
+7f0571b94f07: Pull complete
+65d35dd6a261: Pull complete
+8e2eed80f59b: Pull complete
+2c0a33cdd0a5: Pull complete
+607cc0139b04: Pull complete
+Digest: sha256:ebe617bca1de1791a6ba09a64b168291883f59cc12196a742f5aef3d9b16a9be
+Status: Downloaded newer image for hazelcast/simulator:latest
+docker.io/hazelcast/simulator:latest
+[05:28:27] Image pull took 211s
+[05:28:27] Step 3: Checking available Simulator images...
+
+[05:28:27] Simulator images: hazelcast/simulator:latest (4.82GB)
+Available images:
+hazelcast/simulator:latest (4.82GB)
+[05:28:27] Step 4: Attempting to run Simulator built-in IntByteMapTest...
+
+=== RUN ATTEMPT ===
+[05:28:27] Found Docker network: docker_ecommerce-network
+[05:28:27] Attempting run with image: hazelcast/simulator:latest
+Running: docker run --rm --network docker_ecommerce-network hazelcast/simulator:latest
+[05:28:27] Simulator exited with code: 127
+Exit code: 127
+[05:28:27] Simulator produced 142 bytes of output
+
+=== SIMULATOR OUTPUT ===
+/Users/myawn/Documents/Github/hazelcast-microservices-framework/scripts/perf/simulator/try-simulator.sh: line 148: timeout: command not found
+=== EVALUATION SUMMARY ===
+
+RECOMMENDATION:
+Hazelcast Simulator is designed for large-scale distributed testing with
+coordinator/agent/worker architecture. For this project's 3-node Docker
+Compose cluster, JMH benchmarks via HazelcastClient provide equivalent
+measurements with significantly less setup overhead.
+
+Simulator would be valuable for:
+- Cloud deployment testing (50+ nodes)
+- Network partition testing
+- Long-duration stability tests
+- Comparing Hazelcast versions at scale
+
+Not recommended for:
+- Local Docker Compose development
+- Quick A-B comparisons
+- CI pipeline integration (too heavy)
