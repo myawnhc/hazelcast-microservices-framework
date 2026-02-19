@@ -272,10 +272,35 @@ generate_sweep_summary() {
         echo "**Date**: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         echo ""
 
+        echo "## Workload Description"
+        echo ""
+        echo "Each iteration executes **one** randomly-selected operation from a weighted mix:"
+        echo ""
+        echo "| Weight | Operation | Service | Complexity |"
+        echo "|--------|-----------|---------|------------|"
+        echo "| 60% | **Create Order** | order-service | Triggers 3-service saga (inventory reserve, payment, order confirm) via Hazelcast ITopic |"
+        echo "| 25% | **Reserve Stock** | inventory-service | Single-service event-sourced command |"
+        echo "| 15% | **Create Customer** | account-service | Single-service event-sourced command |"
+        echo ""
+        echo "> **Note:** 10% of orders (6% of all iterations) also poll for full saga completion, measured as \`saga_e2e_duration\`."
+        echo "> Each iteration generates 1 HTTP call to the target service. The 60% that create orders also trigger ~3 additional"
+        echo "> internal cross-service messages (stock reservation, payment processing, order confirmation) via Hazelcast ITopic —"
+        echo "> so actual internal throughput is significantly higher than the headline TPS number."
+        echo ""
         echo "## Results by TPS Level"
         echo ""
         echo "| TPS | Iterations | Iter/s | HTTP req/s | p50 (ms) | p95 (ms) | p99 (ms) | Error Rate |"
         echo "|-----|-----------|--------|------------|----------|----------|----------|------------|"
+
+        # Format helper: format number or return N/A
+        fmt_num() {
+            local val="$1" decimals="${2:-2}"
+            if [ -z "$val" ] || [ "$val" = "N/A" ] || [ "$val" = "null" ]; then
+                echo "N/A"
+            else
+                printf "%.${decimals}f" "$val" 2>/dev/null || echo "$val"
+            fi
+        }
 
         # Iterate over TPS levels
         local remaining="$TPS_LEVELS"
@@ -302,16 +327,6 @@ generate_sweep_summary() {
             p99=$(jq -r '.metrics.http_req_duration.values["p(99)"] // "N/A"' "$result_file" 2>/dev/null)
             fail_rate=$(jq -r '.metrics.http_req_failed.values.rate // "N/A"' "$result_file" 2>/dev/null)
 
-            # Format helper: format number or return N/A
-            fmt_num() {
-                local val="$1" decimals="${2:-2}"
-                if [ -z "$val" ] || [ "$val" = "N/A" ] || [ "$val" = "null" ]; then
-                    echo "N/A"
-                else
-                    printf "%.${decimals}f" "$val" 2>/dev/null || echo "$val"
-                fi
-            }
-
             # Format values
             local fmt_iter fmt_iter_rate fmt_http_rate fmt_p50 fmt_p95 fmt_p99 fmt_fail
             fmt_iter=$(fmt_num "$iterations" 0)
@@ -334,6 +349,54 @@ generate_sweep_summary() {
             fi
 
             echo "| ${tps} | ${fmt_iter} | ${fmt_iter_rate} | ${fmt_http_rate} | ${fmt_p50} | ${fmt_p95} | ${fmt_p99} | ${fmt_fail} |"
+        done
+
+        echo ""
+
+        # Per-operation latency breakdown
+        echo "## Per-Operation Latency Breakdown"
+        echo ""
+        echo "Latency by operation type at each TPS level (milliseconds)."
+        echo ""
+        echo "| TPS | Operation | p50 | p95 | avg | max |"
+        echo "|-----|-----------|-----|-----|-----|-----|"
+
+        local remaining_ops="$TPS_LEVELS"
+        while [ -n "$remaining_ops" ]; do
+            local tps_op="${remaining_ops%%,*}"
+            if [ "$tps_op" = "$remaining_ops" ]; then
+                remaining_ops=""
+            else
+                remaining_ops="${remaining_ops#*,}"
+            fi
+
+            local result_file_op="$run_dir/k6-results-${tps_op}tps.json"
+            if [ ! -f "$result_file_op" ]; then
+                continue
+            fi
+
+            for op_entry in \
+                "Create Order:order_create_duration" \
+                "Reserve Stock:stock_reserve_duration" \
+                "Create Customer:customer_create_duration" \
+                "Saga E2E:saga_e2e_duration"; do
+
+                local op_label="${op_entry%%:*}"
+                local op_metric="${op_entry##*:}"
+
+                local op_p50 op_p95 op_avg op_max
+                op_p50=$(jq -r ".metrics.\"$op_metric\".values.med // \"N/A\"" "$result_file_op" 2>/dev/null)
+                op_p95=$(jq -r ".metrics.\"$op_metric\".values[\"p(95)\"] // \"N/A\"" "$result_file_op" 2>/dev/null)
+                op_avg=$(jq -r ".metrics.\"$op_metric\".values.avg // \"N/A\"" "$result_file_op" 2>/dev/null)
+                op_max=$(jq -r ".metrics.\"$op_metric\".values.max // \"N/A\"" "$result_file_op" 2>/dev/null)
+
+                # Skip if metric not present (e.g., saga may not fire at very low TPS)
+                if [ "$op_p50" = "N/A" ] && [ "$op_avg" = "N/A" ]; then
+                    continue
+                fi
+
+                echo "| ${tps_op} | ${op_label} | $(fmt_num "$op_p50") | $(fmt_num "$op_p95") | $(fmt_num "$op_avg") | $(fmt_num "$op_max" 0) |"
+            done
         done
 
         echo ""

@@ -13,3 +13,17 @@ data:
   OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.tracing.endpoint | quote }}
   OTEL_SERVICE_NAME: "inventory-service"
   {{- end }}
+  {{- if .Values.persistence }}
+  FRAMEWORK_PERSISTENCE_ENABLED: {{ .Values.persistence.enabled | default "false" | quote }}
+  {{- if .Values.persistence.datasourceUrl }}
+  SPRING_DATASOURCE_URL: {{ .Values.persistence.datasourceUrl | quote }}
+  SPRING_DATASOURCE_USERNAME: {{ .Values.persistence.datasourceUsername | default "postgres" | quote }}
+  SPRING_DATASOURCE_PASSWORD: {{ .Values.persistence.datasourcePassword | default "postgres" | quote }}
+  {{- end }}
+  {{- if not .Values.persistence.enabled }}
+  SPRING_AUTOCONFIGURE_EXCLUDE: "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration,org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration"
+  {{- end }}
+  {{- else }}
+  FRAMEWORK_PERSISTENCE_ENABLED: "false"
+  SPRING_AUTOCONFIGURE_EXCLUDE: "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration,org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration"
+  {{- end }}

@@ -12,6 +12,11 @@
 #   - kubectl installed
 #   - helm installed
 #
+# Environment variables (optional):
+#   EKS_ADDITIONAL_ADMIN_ARN  Grant cluster-admin to another IAM principal
+#                             (e.g., root account for AWS Console EKS access)
+#                             Example: export EKS_ADDITIONAL_ADMIN_ARN="arn:aws:iam::123456789012:root"
+#
 # Duration: ~15-20 minutes (EKS cluster creation is the bottleneck)
 
 set -e
@@ -134,7 +139,7 @@ else
             --name "$CLUSTER_NAME" \
             --region "$REGION" \
             --profile "$PROFILE" \
-            --version 1.29 \
+            --version 1.32 \
             --without-nodegroup
 
         eksctl create nodegroup \
@@ -163,7 +168,7 @@ else
             --name "$CLUSTER_NAME" \
             --region "$REGION" \
             --profile "$PROFILE" \
-            --version 1.29 \
+            --version 1.32 \
             --node-type "$NODE_TYPE" \
             --nodes "$NODE_COUNT" \
             --nodes-min "$NODE_MIN" \
@@ -184,6 +189,42 @@ aws eks update-kubeconfig \
     --region "$REGION" \
     --profile "$PROFILE"
 echo ""
+
+# -----------------------------------------------
+# Grant additional admin access (optional)
+# -----------------------------------------------
+# Set EKS_ADDITIONAL_ADMIN_ARN to grant cluster-admin to another IAM principal
+# (e.g., your root account for AWS Console access to EKS resources).
+#
+# Example:
+#   export EKS_ADDITIONAL_ADMIN_ARN="arn:aws:iam::123456789012:root"
+#   ./scripts/k8s-aws/setup-cluster.sh --tier small
+#
+if [ -n "${EKS_ADDITIONAL_ADMIN_ARN:-}" ]; then
+    echo "Granting cluster-admin access to: ${EKS_ADDITIONAL_ADMIN_ARN}"
+
+    # Create access entry (ignore error if it already exists)
+    aws eks create-access-entry \
+        --cluster-name "$CLUSTER_NAME" \
+        --principal-arn "$EKS_ADDITIONAL_ADMIN_ARN" \
+        --region "$REGION" \
+        --profile "$PROFILE" 2>/dev/null \
+    && echo "  Access entry created." \
+    || echo "  Access entry already exists."
+
+    # Associate cluster-admin policy
+    aws eks associate-access-policy \
+        --cluster-name "$CLUSTER_NAME" \
+        --principal-arn "$EKS_ADDITIONAL_ADMIN_ARN" \
+        --policy-arn arn:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+        --access-scope type=cluster \
+        --region "$REGION" \
+        --profile "$PROFILE" 2>/dev/null \
+    && echo "  Cluster-admin policy associated." \
+    || echo "  Policy already associated."
+
+    echo ""
+fi
 
 # -----------------------------------------------
 # Create ECR repositories

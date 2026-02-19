@@ -27,6 +27,13 @@ hazelcast:
   clusterName: "ecommerce-cluster"
   port: 5701
 
+# Persistence (PostgreSQL) — disabled by default; enable when a database is available
+persistence:
+  enabled: false
+  # datasourceUrl: "jdbc:postgresql://postgres:5432/ecommerce"
+  # datasourceUsername: "postgres"
+  # datasourcePassword: "postgres"
+
 # Order service needs to call other services for saga orchestration
 services:
   inventory:
