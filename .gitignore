@@ -11,6 +11,12 @@
 # Stray build artifacts
 /io/
 
+# Maven Shade plugin output
+**/dependency-reduced-pom.xml
+
+# Python cache
+__pycache__/
+
 .idea/
 
 # Demo data (generated IDs from sample data loader)
