@@ -39,12 +39,32 @@ hazelcast:
     "*_ES":
       backup-count: 1
       eviction:
-        eviction-policy: NONE
+        eviction-policy: LRU
+        max-size-policy: FREE_HEAP_PERCENTAGE
+        size: 25
 
     "*_VIEW":
       backup-count: 1
       read-backup-data: true
+      eviction:
+        eviction-policy: LRU
+        max-size-policy: FREE_HEAP_PERCENTAGE
+        size: 25
 
     "*_COMPLETIONS":
       backup-count: 1
       time-to-live-seconds: 3600
+      eviction:
+        eviction-policy: LRU
+        max-size-policy: PER_NODE
+        size: 50000
+
+    "saga-state":
+      backup-count: 1
+      in-memory-format: BINARY
+      time-to-live-seconds: 3600
+      max-idle-seconds: 600
+      eviction:
+        eviction-policy: LRU
+        max-size-policy: PER_NODE
+        size: 50000

@@ -66,6 +66,24 @@ class SagaTimeoutConfigTest {
         void shouldHaveAutoCompensateEnabledByDefault() {
             assertTrue(config.isAutoCompensate());
         }
+
+        @Test
+        @DisplayName("should have purge enabled by default")
+        void shouldHavePurgeEnabledByDefault() {
+            assertTrue(config.isPurgeEnabled());
+        }
+
+        @Test
+        @DisplayName("should have purge older than 10 minutes by default")
+        void shouldHavePurgeOlderThanTenMinutesByDefault() {
+            assertEquals(Duration.ofMinutes(10), config.getPurgeOlderThan());
+        }
+
+        @Test
+        @DisplayName("should have purge interval checks of 60 by default")
+        void shouldHavePurgeIntervalChecksOfSixtyByDefault() {
+            assertEquals(60, config.getPurgeIntervalChecks());
+        }
     }
 
     @Nested
@@ -146,6 +164,51 @@ class SagaTimeoutConfigTest {
 
             config.setAutoCompensate(true);
             assertTrue(config.isAutoCompensate());
+        }
+
+        @Test
+        @DisplayName("setPurgeEnabled should update flag")
+        void setPurgeEnabledShouldUpdateFlag() {
+            config.setPurgeEnabled(false);
+            assertFalse(config.isPurgeEnabled());
+
+            config.setPurgeEnabled(true);
+            assertTrue(config.isPurgeEnabled());
+        }
+
+        @Test
+        @DisplayName("setPurgeOlderThan should update duration")
+        void setPurgeOlderThanShouldUpdateDuration() {
+            config.setPurgeOlderThan(Duration.ofMinutes(30));
+            assertEquals(Duration.ofMinutes(30), config.getPurgeOlderThan());
+        }
+
+        @Test
+        @DisplayName("setPurgeOlderThan should reject null")
+        void setPurgeOlderThanShouldRejectNull() {
+            assertThrows(NullPointerException.class, () ->
+                    config.setPurgeOlderThan(null));
+        }
+
+        @Test
+        @DisplayName("setPurgeIntervalChecks should update value")
+        void setPurgeIntervalChecksShouldUpdateValue() {
+            config.setPurgeIntervalChecks(120);
+            assertEquals(120, config.getPurgeIntervalChecks());
+        }
+
+        @Test
+        @DisplayName("setPurgeIntervalChecks should reject zero")
+        void setPurgeIntervalChecksShouldRejectZero() {
+            assertThrows(IllegalArgumentException.class, () ->
+                    config.setPurgeIntervalChecks(0));
+        }
+
+        @Test
+        @DisplayName("setPurgeIntervalChecks should reject negative")
+        void setPurgeIntervalChecksShouldRejectNegative() {
+            assertThrows(IllegalArgumentException.class, () ->
+                    config.setPurgeIntervalChecks(-1));
         }
     }
 
@@ -232,6 +295,9 @@ class SagaTimeoutConfigTest {
             assertTrue(str.contains("defaultDeadline="));
             assertTrue(str.contains("maxBatchSize=100"));
             assertTrue(str.contains("autoCompensate=true"));
+            assertTrue(str.contains("purgeEnabled=true"));
+            assertTrue(str.contains("purgeOlderThan="));
+            assertTrue(str.contains("purgeIntervalChecks=60"));
         }
     }
 }

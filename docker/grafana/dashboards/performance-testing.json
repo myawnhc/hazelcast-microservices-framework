@@ -173,19 +173,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.5, sum(rate(gateway_request_duration_seconds_bucket{application=~\"$service\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.5, sum(rate(gateway_request_duration_seconds_bucket[1m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.95, sum(rate(gateway_request_duration_seconds_bucket{application=~\"$service\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_request_duration_seconds_bucket[1m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(gateway_request_duration_seconds_bucket{application=~\"$service\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(gateway_request_duration_seconds_bucket[1m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -257,7 +257,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum by (status) (increase(gateway_request_duration_seconds_count{application=~\"$service\"}[5m]))",
+          "expr": "sum by (status) (increase(gateway_request_duration_seconds_count[5m]))",
           "legendFormat": "HTTP {{status}}",
           "refId": "A"
         }

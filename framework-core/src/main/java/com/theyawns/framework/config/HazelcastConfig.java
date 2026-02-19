@@ -220,8 +220,20 @@ public class HazelcastConfig {
                 new IndexConfig(IndexType.HASH, "status"));
         outboxMapConfig.addIndexConfig(
                 new IndexConfig(IndexType.SORTED, "createdAt"));
+
+        // TTL: delivered entries should be cleaned up within 1 hour
+        outboxMapConfig.setTimeToLiveSeconds(3600);
+
+        // Safety-net eviction to prevent unbounded growth
+        EvictionConfig outboxEviction = new EvictionConfig()
+                .setMaxSizePolicy(MaxSizePolicy.PER_NODE)
+                .setSize(10000)
+                .setEvictionPolicy(com.hazelcast.config.EvictionPolicy.LRU);
+        outboxMapConfig.setEvictionConfig(outboxEviction);
+
         config.addMapConfig(outboxMapConfig);
-        logger.debug("Configured outbox map with HASH(status) and SORTED(createdAt) indexes");
+        logger.debug("Configured outbox map with HASH(status) and SORTED(createdAt) indexes, " +
+                "1 hour TTL, LRU eviction max 10000 per node");
     }
 
     /**

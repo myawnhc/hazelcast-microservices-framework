@@ -415,6 +415,101 @@ class SagaTimeoutDetectorTest {
     }
 
     @Nested
+    @DisplayName("Saga purge")
+    class SagaPurgeTest {
+
+        @Test
+        @DisplayName("should purge completed sagas after configured number of check cycles")
+        void shouldPurgeAfterConfiguredCheckCycles() {
+            config.setPurgeEnabled(true);
+            config.setPurgeIntervalChecks(3);
+            config.setPurgeOlderThan(Duration.ofMinutes(10));
+
+            when(sagaStateStore.findTimedOutSagas()).thenReturn(Collections.emptyList());
+            when(sagaStateStore.purgeCompletedSagas(any(Duration.class))).thenReturn(5);
+
+            // Run 3 checks — purge should happen on the 3rd
+            detector.performTimeoutCheck();
+            detector.performTimeoutCheck();
+            detector.performTimeoutCheck();
+
+            verify(sagaStateStore, times(1)).purgeCompletedSagas(Duration.ofMinutes(10));
+        }
+
+        @Test
+        @DisplayName("should not purge before interval is reached")
+        void shouldNotPurgeBeforeIntervalReached() {
+            config.setPurgeEnabled(true);
+            config.setPurgeIntervalChecks(3);
+
+            when(sagaStateStore.findTimedOutSagas()).thenReturn(Collections.emptyList());
+
+            // Run 2 checks — purge should NOT happen yet
+            detector.performTimeoutCheck();
+            detector.performTimeoutCheck();
+
+            verify(sagaStateStore, never()).purgeCompletedSagas(any(Duration.class));
+        }
+
+        @Test
+        @DisplayName("should not purge when purge is disabled")
+        void shouldNotPurgeWhenDisabled() {
+            config.setPurgeEnabled(false);
+            config.setPurgeIntervalChecks(1);
+
+            when(sagaStateStore.findTimedOutSagas()).thenReturn(Collections.emptyList());
+
+            detector.performTimeoutCheck();
+
+            verify(sagaStateStore, never()).purgeCompletedSagas(any(Duration.class));
+        }
+
+        @Test
+        @DisplayName("should record purge removed metric")
+        void shouldRecordPurgeRemovedMetric() {
+            config.setPurgeEnabled(true);
+            config.setPurgeIntervalChecks(1);
+
+            when(sagaStateStore.findTimedOutSagas()).thenReturn(Collections.emptyList());
+            when(sagaStateStore.purgeCompletedSagas(any(Duration.class))).thenReturn(7);
+
+            detector.performTimeoutCheck();
+
+            double count = meterRegistry.counter("saga.purge.removed").count();
+            assertEquals(7.0, count, 0.001);
+        }
+
+        @Test
+        @DisplayName("should handle purge errors gracefully")
+        void shouldHandlePurgeErrorsGracefully() {
+            config.setPurgeEnabled(true);
+            config.setPurgeIntervalChecks(1);
+
+            when(sagaStateStore.findTimedOutSagas()).thenReturn(Collections.emptyList());
+            when(sagaStateStore.purgeCompletedSagas(any(Duration.class)))
+                    .thenThrow(new RuntimeException("Purge failed"));
+
+            // Should not throw — error is caught and logged
+            assertDoesNotThrow(() -> detector.performTimeoutCheck());
+        }
+
+        @Test
+        @DisplayName("should increment purge check counter")
+        void shouldIncrementPurgeCheckCounter() {
+            config.setPurgeEnabled(true);
+            config.setPurgeIntervalChecks(10);
+
+            when(sagaStateStore.findTimedOutSagas()).thenReturn(Collections.emptyList());
+
+            detector.performTimeoutCheck();
+            assertEquals(1, detector.getPurgeCheckCounter());
+
+            detector.performTimeoutCheck();
+            assertEquals(2, detector.getPurgeCheckCounter());
+        }
+    }
+
+    @Nested
     @DisplayName("Error handling")
     class ErrorHandling {
 

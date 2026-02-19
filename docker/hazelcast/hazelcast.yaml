@@ -42,26 +42,45 @@ hazelcast:
         capacity: 10000
         time-to-live-seconds: 0
 
-    # Event store (append-only)
+    # Event store (append-only, safety-net eviction to prevent OOM)
     "*_ES":
       backup-count: 1
       in-memory-format: BINARY
       eviction:
-        eviction-policy: NONE
+        eviction-policy: LRU
         max-size-policy: FREE_HEAP_PERCENTAGE
         size: 25
 
-    # Materialized views
+    # Materialized views (safety-net eviction to prevent OOM)
     "*_VIEW":
       backup-count: 1
       in-memory-format: BINARY
       read-backup-data: true
+      eviction:
+        eviction-policy: LRU
+        max-size-policy: FREE_HEAP_PERCENTAGE
+        size: 25
 
     # Completion tracking
     "*_COMPLETIONS":
       backup-count: 1
       in-memory-format: BINARY
       time-to-live-seconds: 3600
+      eviction:
+        eviction-policy: LRU
+        max-size-policy: PER_NODE
+        size: 50000
+
+    # Saga state (cross-service saga coordination)
+    "saga-state":
+      backup-count: 1
+      in-memory-format: BINARY
+      time-to-live-seconds: 3600
+      max-idle-seconds: 600
+      eviction:
+        eviction-policy: LRU
+        max-size-policy: PER_NODE
+        size: 50000
 
   # Jet configuration for stream processing
   jet:

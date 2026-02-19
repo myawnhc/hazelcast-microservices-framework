@@ -72,10 +72,12 @@ public class SagaTimeoutDetector {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicLong lastCheckTime = new AtomicLong(0);
     private final AtomicLong totalTimeoutsDetected = new AtomicLong(0);
+    private final AtomicLong purgeCheckCounter = new AtomicLong(0);
 
     // Metrics
     private final Counter timeoutsDetectedCounter;
     private final Counter compensationsTriggeredCounter;
+    private final Counter purgeRemovedCounter;
     private final Timer checkDurationTimer;
 
     /**
@@ -105,6 +107,7 @@ public class SagaTimeoutDetector {
         if (meterRegistry != null) {
             this.timeoutsDetectedCounter = meterRegistry.counter("saga.timeouts.detected");
             this.compensationsTriggeredCounter = meterRegistry.counter("saga.timeouts.compensations.triggered");
+            this.purgeRemovedCounter = meterRegistry.counter("saga.purge.removed");
             this.checkDurationTimer = meterRegistry.timer("saga.timeout.check.duration");
 
             // Register gauges
@@ -113,6 +116,7 @@ public class SagaTimeoutDetector {
         } else {
             this.timeoutsDetectedCounter = null;
             this.compensationsTriggeredCounter = null;
+            this.purgeRemovedCounter = null;
             this.checkDurationTimer = null;
         }
 
@@ -194,6 +198,9 @@ public class SagaTimeoutDetector {
             }
 
         } finally {
+            // Periodic purge of terminal sagas
+            performPurgeIfDue();
+
             running.set(false);
             lastCheckTime.set(System.currentTimeMillis());
 
@@ -251,6 +258,45 @@ public class SagaTimeoutDetector {
         } catch (Exception e) {
             logger.error("Failed to publish timeout event to Hazelcast topic", e);
         }
+    }
+
+    /**
+     * Checks whether a purge cycle is due and executes it if so.
+     * Purge removes terminal sagas (COMPLETED, COMPENSATED, FAILED, TIMED_OUT)
+     * older than the configured threshold to prevent unbounded memory growth.
+     */
+    private void performPurgeIfDue() {
+        if (!config.isPurgeEnabled()) {
+            return;
+        }
+
+        long count = purgeCheckCounter.incrementAndGet();
+        if (count % config.getPurgeIntervalChecks() != 0) {
+            return;
+        }
+
+        try {
+            int removed = sagaStateStore.purgeCompletedSagas(config.getPurgeOlderThan());
+            if (removed > 0) {
+                logger.info("Purged {} completed sagas older than {}", removed, config.getPurgeOlderThan());
+                if (purgeRemovedCounter != null) {
+                    purgeRemovedCounter.increment(removed);
+                }
+            } else {
+                logger.debug("Purge cycle: no completed sagas to remove");
+            }
+        } catch (Exception e) {
+            logger.error("Error during saga purge", e);
+        }
+    }
+
+    /**
+     * Returns the current purge check counter value (for testing).
+     *
+     * @return the number of timeout checks performed
+     */
+    public long getPurgeCheckCounter() {
+        return purgeCheckCounter.get();
     }
 
     /**

@@ -78,6 +78,29 @@ public class SagaTimeoutConfig {
     private boolean autoCompensate = true;
 
     /**
+     * Whether periodic purging of completed sagas is enabled.
+     * When enabled, terminal sagas older than {@link #purgeOlderThan} are removed
+     * from the saga state store to prevent unbounded memory growth.
+     * Default: true
+     */
+    private boolean purgeEnabled = true;
+
+    /**
+     * Minimum age of terminal sagas before they are eligible for purging.
+     * Only sagas in terminal states (COMPLETED, COMPENSATED, FAILED, TIMED_OUT)
+     * older than this duration will be removed.
+     * Default: 10 minutes
+     */
+    private Duration purgeOlderThan = Duration.ofMinutes(10);
+
+    /**
+     * Number of timeout check cycles between purge runs.
+     * Purge runs every {@code purgeIntervalChecks * checkInterval}.
+     * Default: 60 (with 5s check interval = purge every 5 minutes)
+     */
+    private int purgeIntervalChecks = 60;
+
+    /**
      * Creates a new SagaTimeoutConfig with default values.
      */
     public SagaTimeoutConfig() {
@@ -230,6 +253,63 @@ public class SagaTimeoutConfig {
         this.autoCompensate = autoCompensate;
     }
 
+    /**
+     * Returns whether periodic purging of completed sagas is enabled.
+     *
+     * @return true if purge is enabled
+     */
+    public boolean isPurgeEnabled() {
+        return purgeEnabled;
+    }
+
+    /**
+     * Sets whether periodic purging of completed sagas is enabled.
+     *
+     * @param purgeEnabled true to enable periodic purging
+     */
+    public void setPurgeEnabled(boolean purgeEnabled) {
+        this.purgeEnabled = purgeEnabled;
+    }
+
+    /**
+     * Returns the minimum age for purging terminal sagas.
+     *
+     * @return the purge age threshold
+     */
+    public Duration getPurgeOlderThan() {
+        return purgeOlderThan;
+    }
+
+    /**
+     * Sets the minimum age for purging terminal sagas.
+     *
+     * @param purgeOlderThan minimum age before purging
+     */
+    public void setPurgeOlderThan(Duration purgeOlderThan) {
+        this.purgeOlderThan = Objects.requireNonNull(purgeOlderThan, "purgeOlderThan cannot be null");
+    }
+
+    /**
+     * Returns the number of check cycles between purge runs.
+     *
+     * @return purge interval in check cycles
+     */
+    public int getPurgeIntervalChecks() {
+        return purgeIntervalChecks;
+    }
+
+    /**
+     * Sets the number of check cycles between purge runs.
+     *
+     * @param purgeIntervalChecks number of check cycles between purges (must be at least 1)
+     */
+    public void setPurgeIntervalChecks(int purgeIntervalChecks) {
+        if (purgeIntervalChecks < 1) {
+            throw new IllegalArgumentException("purgeIntervalChecks must be at least 1");
+        }
+        this.purgeIntervalChecks = purgeIntervalChecks;
+    }
+
     @Override
     public String toString() {
         return "SagaTimeoutConfig{" +
@@ -239,6 +319,9 @@ public class SagaTimeoutConfig {
                 ", sagaTypes=" + sagaTypes.size() +
                 ", maxBatchSize=" + maxBatchSize +
                 ", autoCompensate=" + autoCompensate +
+                ", purgeEnabled=" + purgeEnabled +
+                ", purgeOlderThan=" + purgeOlderThan +
+                ", purgeIntervalChecks=" + purgeIntervalChecks +
                 '}';
     }
 }
