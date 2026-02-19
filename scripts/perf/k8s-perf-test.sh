@@ -302,14 +302,24 @@ generate_sweep_summary() {
             p99=$(jq -r '.metrics.http_req_duration.values["p(99)"] // "N/A"' "$result_file" 2>/dev/null)
             fail_rate=$(jq -r '.metrics.http_req_failed.values.rate // "N/A"' "$result_file" 2>/dev/null)
 
+            # Format helper: format number or return N/A
+            fmt_num() {
+                local val="$1" decimals="${2:-2}"
+                if [ -z "$val" ] || [ "$val" = "N/A" ] || [ "$val" = "null" ]; then
+                    echo "N/A"
+                else
+                    printf "%.${decimals}f" "$val" 2>/dev/null || echo "$val"
+                fi
+            }
+
             # Format values
             local fmt_iter fmt_iter_rate fmt_http_rate fmt_p50 fmt_p95 fmt_p99 fmt_fail
-            fmt_iter=$(printf "%.0f" "$iterations" 2>/dev/null || echo "$iterations")
-            fmt_iter_rate=$(printf "%.2f" "$iter_rate" 2>/dev/null || echo "$iter_rate")
-            fmt_http_rate=$(printf "%.2f" "$http_rate" 2>/dev/null || echo "$http_rate")
-            fmt_p50=$(printf "%.2f" "$p50" 2>/dev/null || echo "$p50")
-            fmt_p95=$(printf "%.2f" "$p95" 2>/dev/null || echo "$p95")
-            fmt_p99=$(printf "%.2f" "$p99" 2>/dev/null || echo "$p99")
+            fmt_iter=$(fmt_num "$iterations" 0)
+            fmt_iter_rate=$(fmt_num "$iter_rate" 2)
+            fmt_http_rate=$(fmt_num "$http_rate" 2)
+            fmt_p50=$(fmt_num "$p50" 2)
+            fmt_p95=$(fmt_num "$p95" 2)
+            fmt_p99=$(fmt_num "$p99" 2)
 
             if [ "$fail_rate" != "N/A" ] && [ -n "$fail_rate" ]; then
                 fmt_fail=$(printf "%.4f" "$fail_rate" 2>/dev/null || echo "$fail_rate")
