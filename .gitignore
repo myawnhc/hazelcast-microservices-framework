@@ -50,5 +50,8 @@ scripts/perf/ab-results/
 # Sustained load test results (screenshots, stats logs, large JSON)
 scripts/perf/sustained-results/
 
+# K8s performance sweep results (large JSON, retained locally)
+scripts/perf/k8s-results/
+
 # AWS EKS port-forward PID files
 scripts/k8s-aws/*.pids
