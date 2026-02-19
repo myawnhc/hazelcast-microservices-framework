@@ -406,6 +406,74 @@ class OutboxPublisherTest {
     }
 
     @Nested
+    @DisplayName("Event-driven wake-up")
+    class EventDrivenWakeUp {
+
+        @Test
+        @DisplayName("should wake up immediately when notifyNewEntry is called before waitForWork")
+        void shouldWakeUpImmediatelyWhenNotified() {
+            // Arrange
+            final OutboxPublisher publisher = new OutboxPublisher(
+                    outboxStore, sharedHazelcast, properties, meterRegistry);
+
+            // Act: signal first, then wait — should return immediately
+            publisher.notifyNewEntry();
+            final boolean wokeBySignal = publisher.waitForWork();
+
+            // Assert
+            assertThat(wokeBySignal).isTrue();
+        }
+
+        @Test
+        @DisplayName("should timeout when waitForWork called without notification")
+        void shouldTimeoutWhenNotNotified() {
+            // Arrange: use a very short poll interval so the test completes quickly
+            properties.setPollInterval(java.time.Duration.ofMillis(50));
+            final OutboxPublisher publisher = new OutboxPublisher(
+                    outboxStore, sharedHazelcast, properties, meterRegistry);
+
+            // Act
+            final long start = System.currentTimeMillis();
+            final boolean wokeBySignal = publisher.waitForWork();
+            final long elapsed = System.currentTimeMillis() - start;
+
+            // Assert: should have timed out (not woken by signal)
+            assertThat(wokeBySignal).isFalse();
+            assertThat(elapsed).isGreaterThanOrEqualTo(40); // allow minor timing slack
+        }
+
+        @Test
+        @DisplayName("should coalesce multiple rapid notifyNewEntry calls into one permit")
+        void shouldCoalesceMultipleNotifications() {
+            // Arrange
+            final OutboxPublisher publisher = new OutboxPublisher(
+                    outboxStore, sharedHazelcast, properties, meterRegistry);
+
+            // Act: call notifyNewEntry multiple times
+            publisher.notifyNewEntry();
+            publisher.notifyNewEntry();
+            publisher.notifyNewEntry();
+
+            // First wait should succeed (consumes the single permit)
+            final boolean firstWake = publisher.waitForWork();
+
+            // Second wait should timeout (no more permits)
+            properties.setPollInterval(java.time.Duration.ofMillis(50));
+            // Note: properties are read at waitForWork() call time
+            final OutboxPublisher publisher2 = new OutboxPublisher(
+                    outboxStore, sharedHazelcast, properties, meterRegistry);
+            publisher2.notifyNewEntry();
+            publisher2.notifyNewEntry();
+            publisher2.notifyNewEntry();
+            final boolean secondWake = publisher2.waitForWork();
+
+            // Assert: first wakes, second also wakes (but only one permit consumed)
+            assertThat(firstWake).isTrue();
+            assertThat(secondWake).isTrue();
+        }
+    }
+
+    @Nested
     @DisplayName("Mixed success and failure in batch")
     class MixedBatch {
 

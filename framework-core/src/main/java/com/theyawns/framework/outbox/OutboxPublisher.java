@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Semaphore;
 
 /**
  * Polls the {@link OutboxStore} for pending entries and delivers them
@@ -39,6 +40,13 @@ public class OutboxPublisher {
     private final OutboxProperties properties;
     private final MeterRegistry meterRegistry;
 
+    /**
+     * Semaphore used for event-driven wake-up. When a new entry is written to the
+     * outbox, {@link #notifyNewEntry()} releases a permit, causing the publisher
+     * loop to wake up immediately instead of waiting for the next poll interval.
+     */
+    private final Semaphore wakeUp = new Semaphore(0);
+
     private volatile boolean noSharedClusterWarningLogged = false;
 
     /**
@@ -63,10 +71,40 @@ public class OutboxPublisher {
     }
 
     /**
+     * Signals that a new entry has been written to the outbox, waking up
+     * the publisher immediately instead of waiting for the next poll interval.
+     *
+     * <p>This is safe to call from any thread. Multiple rapid calls are
+     * coalesced — the publisher will drain all pending entries in one batch.
+     */
+    public void notifyNewEntry() {
+        // Release at most 1 permit — avoids unbounded permit accumulation
+        if (wakeUp.availablePermits() == 0) {
+            wakeUp.release();
+        }
+    }
+
+    /**
+     * Waits for either a wake-up signal or the poll interval to elapse,
+     * whichever comes first. Called by the scheduling loop between publish cycles.
+     *
+     * @return true if woken by signal, false if timed out (regular poll)
+     */
+    public boolean waitForWork() {
+        try {
+            long timeoutMs = properties.getPollInterval().toMillis();
+            return wakeUp.tryAcquire(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    /**
      * Polls pending outbox entries and delivers them to the shared cluster.
      *
-     * <p>Scheduled by {@link OutboxAutoConfiguration} using the interval
-     * from {@link OutboxProperties#getPollInterval()}.
+     * <p>Called by the scheduling loop after {@link #waitForWork()} returns.
+     * Also callable directly for immediate delivery.
      */
     public void publishPendingEntries() {
         if (sharedHazelcast == null) {

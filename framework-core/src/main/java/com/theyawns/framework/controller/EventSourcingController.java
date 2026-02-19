@@ -9,6 +9,7 @@ import com.hazelcast.topic.ITopic;
 import com.theyawns.framework.domain.DomainObject;
 import com.theyawns.framework.event.DomainEvent;
 import com.theyawns.framework.outbox.OutboxEntry;
+import com.theyawns.framework.outbox.OutboxPublisher;
 import com.theyawns.framework.outbox.OutboxStore;
 import com.theyawns.framework.pipeline.EventSourcingPipeline;
 import com.theyawns.framework.pipeline.HazelcastEventBus;
@@ -98,6 +99,7 @@ public class EventSourcingController<D extends DomainObject<K>,
     private final PipelineMetrics pipelineMetrics;
     private final EventSpanDecorator eventSpanDecorator;
     private final OutboxStore outboxStore;
+    private final OutboxPublisher outboxPublisher;
     private final EventAuthenticator eventAuthenticator;
     private final EventSourcingPipeline<D, K, E> pipeline;
 
@@ -129,6 +131,7 @@ public class EventSourcingController<D extends DomainObject<K>,
         this.pipelineMetrics = new PipelineMetrics(meterRegistry, domainName);
         this.eventSpanDecorator = builder.eventSpanDecorator;
         this.outboxStore = builder.outboxStore;
+        this.outboxPublisher = builder.outboxPublisher;
         this.eventAuthenticator = builder.eventAuthenticator;
 
         // Initialize Hazelcast structures
@@ -497,6 +500,9 @@ public class EventSourcingController<D extends DomainObject<K>,
                     recordToPublish
             );
             outboxStore.write(entry);
+            if (outboxPublisher != null) {
+                outboxPublisher.notifyNewEntry();
+            }
             logger.debug("Wrote event {} to outbox for deferred shared cluster delivery",
                     pending.eventType);
         } else {
@@ -616,6 +622,7 @@ public class EventSourcingController<D extends DomainObject<K>,
         private MeterRegistry meterRegistry;
         private EventSpanDecorator eventSpanDecorator;
         private OutboxStore outboxStore;
+        private OutboxPublisher outboxPublisher;
         private EventAuthenticator eventAuthenticator;
 
         /**
@@ -738,6 +745,21 @@ public class EventSourcingController<D extends DomainObject<K>,
          */
         public Builder<D, K, E> outboxStore(OutboxStore outboxStore) {
             this.outboxStore = outboxStore;
+            return this;
+        }
+
+        /**
+         * Sets the outbox publisher for event-driven wake-up (optional).
+         *
+         * <p>When set, the controller signals the publisher immediately after writing
+         * an entry to the outbox store, eliminating the poll-interval latency that
+         * would otherwise delay cross-cluster event delivery.
+         *
+         * @param outboxPublisher the outbox publisher
+         * @return this builder
+         */
+        public Builder<D, K, E> outboxPublisher(OutboxPublisher outboxPublisher) {
+            this.outboxPublisher = outboxPublisher;
             return this;
         }
 

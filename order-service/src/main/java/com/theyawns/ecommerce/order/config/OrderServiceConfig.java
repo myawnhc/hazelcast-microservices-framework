@@ -22,6 +22,7 @@ import com.theyawns.framework.config.HazelcastClientConfigCustomizer;
 import com.theyawns.framework.config.HazelcastConfigCustomizer;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
+import com.theyawns.framework.outbox.OutboxPublisher;
 import com.theyawns.framework.outbox.OutboxStore;
 import com.theyawns.framework.persistence.PersistenceProperties;
 import com.theyawns.framework.persistence.mapstore.EventStoreMapStore;
@@ -489,6 +490,8 @@ public class OrderServiceConfig {
             @org.springframework.beans.factory.annotation.Autowired(required = false)
             OutboxStore outboxStore,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
+            OutboxPublisher outboxPublisher,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
             EventAuthenticator eventAuthenticator) {
 
         controller = EventSourcingController.<Order, String, DomainEvent<Order, String>>builder()
@@ -500,6 +503,7 @@ public class OrderServiceConfig {
                 .viewUpdaterClass(OrderViewUpdater.class)
                 .meterRegistry(meterRegistry)
                 .outboxStore(outboxStore)
+                .outboxPublisher(outboxPublisher)
                 .eventAuthenticator(eventAuthenticator)
                 .build();
 

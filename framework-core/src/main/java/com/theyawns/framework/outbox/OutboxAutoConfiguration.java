@@ -56,8 +56,10 @@ public class OutboxAutoConfiguration implements SchedulingConfigurer {
     private OutboxProperties outboxProperties;
 
     /**
-     * Registers the outbox publisher as a scheduled task using the Duration-based
-     * poll interval from configuration.
+     * Registers the outbox publisher as a scheduled task. Uses an event-driven
+     * loop: the publisher sleeps until either a new entry signal arrives
+     * (via {@link OutboxPublisher#notifyNewEntry()}) or the poll interval elapses
+     * as a safety-net fallback.
      *
      * @param taskRegistrar the task registrar
      */
@@ -65,9 +67,15 @@ public class OutboxAutoConfiguration implements SchedulingConfigurer {
     public void configureTasks(final ScheduledTaskRegistrar taskRegistrar) {
         if (outboxPublisher != null) {
             final long intervalMs = outboxProperties.getPollInterval().toMillis();
-            taskRegistrar.addFixedDelayTask(
-                    outboxPublisher::publishPendingEntries, intervalMs);
-            logger.info("Scheduled outbox publisher with {}ms fixed delay", intervalMs);
+            // Use a minimal fixed delay (1ms) for the scheduling loop; actual wait
+            // time is controlled by OutboxPublisher.waitForWork() which blocks
+            // until signaled or the poll interval elapses.
+            taskRegistrar.addFixedDelayTask(() -> {
+                outboxPublisher.waitForWork();
+                outboxPublisher.publishPendingEntries();
+            }, 1);
+            logger.info("Scheduled outbox publisher with event-driven wake-up "
+                    + "(fallback poll interval: {}ms)", intervalMs);
         }
     }
 

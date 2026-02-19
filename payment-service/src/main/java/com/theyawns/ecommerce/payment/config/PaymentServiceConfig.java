@@ -18,6 +18,7 @@ import com.theyawns.framework.config.HazelcastClientConfigCustomizer;
 import com.theyawns.framework.config.HazelcastConfigCustomizer;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.event.DomainEvent;
+import com.theyawns.framework.outbox.OutboxPublisher;
 import com.theyawns.framework.outbox.OutboxStore;
 import com.theyawns.framework.persistence.PersistenceProperties;
 import com.theyawns.framework.persistence.mapstore.EventStoreMapStore;
@@ -364,6 +365,8 @@ public class PaymentServiceConfig {
             @org.springframework.beans.factory.annotation.Autowired(required = false)
             OutboxStore outboxStore,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
+            OutboxPublisher outboxPublisher,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
             EventAuthenticator eventAuthenticator) {
 
         controller = EventSourcingController.<Payment, String, DomainEvent<Payment, String>>builder()
@@ -375,6 +378,7 @@ public class PaymentServiceConfig {
                 .viewUpdaterClass(PaymentViewUpdater.class)
                 .meterRegistry(meterRegistry)
                 .outboxStore(outboxStore)
+                .outboxPublisher(outboxPublisher)
                 .eventAuthenticator(eventAuthenticator)
                 .build();
 
