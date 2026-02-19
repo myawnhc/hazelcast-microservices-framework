@@ -46,10 +46,10 @@ This directory contains Docker configuration for running the complete Hazelcast 
 
 ```bash
 # From project root
-./scripts/build-docker.sh   # Build Maven + Docker images
-./scripts/start-docker.sh   # Start all services
-./scripts/stop-docker.sh    # Stop services
-./scripts/stop-docker.sh --clean  # Stop and remove volumes
+./scripts/docker/build.sh   # Build Maven + Docker images
+./scripts/docker/start.sh   # Start all services
+./scripts/docker/stop.sh    # Stop services
+./scripts/docker/stop.sh --clean  # Stop and remove volumes
 ```
 
 ### Option 2: Manual Commands

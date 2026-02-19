@@ -6,6 +6,8 @@ global:
   storageClass: ""
   # Hazelcast cluster name — must match across all services
   clusterName: "ecommerce-cluster"
+  # Image pull secrets shared across all subcharts (for private registries like ECR)
+  imagePullSecrets: []
 
 # ----------------------------------------------
 # Hazelcast Cluster (StatefulSet)

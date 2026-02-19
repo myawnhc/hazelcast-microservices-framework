@@ -4,7 +4,7 @@
 #
 # Usage: ./scripts/load-sample-data.sh
 #
-# Prerequisites: Services must be running (use ./scripts/start-docker.sh first)
+# Prerequisites: Services must be running (use ./scripts/docker/start.sh first)
 #
 
 set -e
@@ -127,9 +127,9 @@ create_product() {
 
 # Check all services are healthy
 echo -e "${YELLOW}Step 1: Checking service health...${NC}"
-check_health "Account Service" "$ACCOUNT_SERVICE" || { echo "Account Service not ready. Run ./scripts/start-docker.sh first."; exit 1; }
-check_health "Inventory Service" "$INVENTORY_SERVICE" || { echo "Inventory Service not ready. Run ./scripts/start-docker.sh first."; exit 1; }
-check_health "Order Service" "$ORDER_SERVICE" || { echo "Order Service not ready. Run ./scripts/start-docker.sh first."; exit 1; }
+check_health "Account Service" "$ACCOUNT_SERVICE" || { echo "Account Service not ready. Run ./scripts/docker/start.sh first."; exit 1; }
+check_health "Inventory Service" "$INVENTORY_SERVICE" || { echo "Inventory Service not ready. Run ./scripts/docker/start.sh first."; exit 1; }
+check_health "Order Service" "$ORDER_SERVICE" || { echo "Order Service not ready. Run ./scripts/docker/start.sh first."; exit 1; }
 echo ""
 
 # Create Customers

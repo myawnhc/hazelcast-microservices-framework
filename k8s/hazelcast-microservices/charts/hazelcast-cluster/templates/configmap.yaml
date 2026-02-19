@@ -31,6 +31,19 @@ data:
             HEALTH_CHECK:
               enabled: true
 
+      {{- if .Values.partitionGroup.enabled }}
+      partition-group:
+        enabled: true
+        group-type: {{ .Values.partitionGroup.type }}
+      {{- end }}
+
+      {{- if .Values.backPressure.enabled }}
+      properties:
+        hazelcast.backpressure.enabled: true
+        hazelcast.backpressure.backoff.timeout.millis: 60000
+        hazelcast.backpressure.max.concurrent.invocations.per.partition: 100
+      {{- end }}
+
       jet:
         enabled: true
 

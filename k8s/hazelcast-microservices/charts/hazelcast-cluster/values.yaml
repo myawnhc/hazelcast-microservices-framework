@@ -9,10 +9,14 @@ image:
 # Hazelcast cluster name — must match what microservices connect to
 clusterName: "ecommerce-cluster"
 
+# Image pull secrets (for private registries like ECR)
+imagePullSecrets: []
+
 # JVM settings
 jvm:
   xms: "256m"
   xmx: "512m"
+  gcOpts: ""
 
 # Kubernetes resource requests and limits
 resources:
@@ -63,6 +67,25 @@ serviceAccount:
   create: true
   name: ""
   annotations: {}
+
+# Topology spread for multi-AZ scheduling
+topologySpreadConstraints: []
+
+# Graceful shutdown timeout (seconds) — allows Hazelcast to migrate partitions
+terminationGracePeriodSeconds: 600
+
+# RBAC for Kubernetes API discovery (required for EKS/GKE)
+rbac:
+  create: false
+
+# Hazelcast partition group (ZONE_AWARE for multi-AZ clusters)
+partitionGroup:
+  enabled: false
+  type: "ZONE_AWARE"
+
+# Back-pressure for high-throughput scenarios
+backPressure:
+  enabled: false
 
 # Pod-level settings
 podAnnotations: {}

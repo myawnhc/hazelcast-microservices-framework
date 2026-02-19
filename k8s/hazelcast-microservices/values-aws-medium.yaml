@@ -1,0 +1,203 @@
+# =============================================================================
+# AWS EKS Values — Medium Tier (Scaling Demo)
+# =============================================================================
+#
+# Target: 3x c7i.2xlarge (8 vCPU, 16GB each)
+# Cost:   ~$1.18/hr ($0.36/hr x3 nodes + $0.10 EKS control plane)
+# Use:    Multi-AZ resilience, HPA scaling demos, A-B performance testing
+#
+# Follows Hazelcast AWS best practices:
+#   - G1GC with heap <= 16GB
+#   - ZONE_AWARE partition groups for multi-AZ data safety
+#   - Back-pressure enabled for sustained throughput
+#   - RBAC for Kubernetes API discovery
+#
+# Deploy: helm install demo k8s/hazelcast-microservices/ \
+#           -f k8s/hazelcast-microservices/values-aws-medium.yaml \
+#           -n hazelcast-demo
+# =============================================================================
+
+# --- Hazelcast Cluster ---
+hazelcast-cluster:
+  replicaCount: 3
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "4g"
+    xmx: "4g"
+    gcOpts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+  resources:
+    requests:
+      memory: "5Gi"
+      cpu: "2000m"
+    limits:
+      memory: "6Gi"
+      cpu: "4000m"
+  rbac:
+    create: true
+  partitionGroup:
+    enabled: true
+    type: "ZONE_AWARE"
+  backPressure:
+    enabled: true
+  terminationGracePeriodSeconds: 600
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: hazelcast-cluster
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - hazelcast-cluster
+            topologyKey: kubernetes.io/hostname
+
+# --- Account Service ---
+account-service:
+  replicaCount: 1
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "768m"
+    xmx: "1g"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# --- Inventory Service ---
+inventory-service:
+  replicaCount: 1
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "768m"
+    xmx: "1g"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# --- Order Service ---
+order-service:
+  replicaCount: 1
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "768m"
+    xmx: "1g"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# --- Payment Service ---
+payment-service:
+  replicaCount: 1
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "768m"
+    xmx: "1g"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# --- API Gateway ---
+api-gateway:
+  replicaCount: 1
+  image:
+    pullPolicy: Always
+  ingress:
+    enabled: true
+    className: "alb"
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
+    hosts:
+      - host: ""
+        paths:
+          - path: /
+            pathType: Prefix
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+  resources:
+    requests:
+      memory: "192Mi"
+      cpu: "250m"
+    limits:
+      memory: "384Mi"
+      cpu: "1000m"
+
+# --- MCP Server ---
+mcp-server:
+  enabled: false
+
+# --- Monitoring ---
+monitoring:
+  enabled: false

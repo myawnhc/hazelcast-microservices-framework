@@ -301,6 +301,9 @@ k8s/hazelcast-microservices/
 ├── Chart.yaml                          # Umbrella chart definition
 ├── Chart.lock                          # Dependency lock file
 ├── values.yaml                         # Global default values
+├── values-aws-small.yaml               # AWS small tier overrides
+├── values-aws-medium.yaml              # AWS medium tier overrides
+├── values-aws-large.yaml               # AWS large tier overrides
 ├── templates/
 │   └── _helpers.tpl                    # Shared template helpers
 └── charts/
@@ -312,6 +315,7 @@ k8s/hazelcast-microservices/
     │       ├── service.yaml
     │       ├── service-headless.yaml
     │       ├── configmap.yaml
+    │       ├── rbac.yaml               # RBAC for K8s API discovery
     │       ├── pdb.yaml                # PDB (enabled by default)
     │       └── serviceaccount.yaml
     ├── account-service/                # Account microservice
@@ -364,8 +368,37 @@ k8s/hazelcast-microservices/
             └── serviceaccount.yaml
 ```
 
+## AWS EKS Deployment
+
+For deploying to Amazon EKS with tiered configurations (small/medium/large), use the AWS deployment scripts:
+
+```bash
+# Create EKS cluster
+./scripts/k8s-aws/setup-cluster.sh --tier small
+
+# Build and push to ECR
+./scripts/k8s-aws/build.sh
+
+# Deploy
+./scripts/k8s-aws/start.sh --tier small
+
+# Check status
+./scripts/k8s-aws/status.sh
+
+# Tear down
+./scripts/k8s-aws/teardown-cluster.sh
+```
+
+Tier-specific values files are available:
+- `values-aws-small.yaml` — 2x t3.xlarge, ~$0.76/hr
+- `values-aws-medium.yaml` — 3x c7i.2xlarge, ~$1.18/hr (ZONE_AWARE, HPA, back-pressure)
+- `values-aws-large.yaml` — 5x c7i.4xlarge, ~$3.50/hr (untested, production extrapolation)
+
+See the [AWS Deployment Guide](../docs/guides/aws-deployment-guide.md) for full details.
+
 ## Further Reading
 
+- [AWS EKS Deployment Guide](../docs/guides/aws-deployment-guide.md) — Tiered EKS deployments with cost estimates
 - [Cloud Deployment & Cost Guide](../docs/guides/cloud-deployment-guide.md) — AWS EKS, GCP GKE, Azure AKS pricing
 - [ADR 008: Dual-Instance Architecture](../docs/architecture/adr/008-dual-instance-hazelcast-architecture.md)
 - [Hazelcast Kubernetes Discovery](https://docs.hazelcast.com/hazelcast/5.6/kubernetes/deploying-in-kubernetes)

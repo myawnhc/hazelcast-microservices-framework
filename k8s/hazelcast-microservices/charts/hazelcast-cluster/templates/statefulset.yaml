@@ -22,11 +22,19 @@ spec:
         {{- include "hazelcast-cluster.labels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "hazelcast-cluster.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      terminationGracePeriodSeconds: 600
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 600 }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: hazelcast
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -41,7 +49,7 @@ spec:
               protocol: TCP
           env:
             - name: JAVA_OPTS
-              value: "-Xms{{ .Values.jvm.xms }} -Xmx{{ .Values.jvm.xmx }}"
+              value: "-Xms{{ .Values.jvm.xms }} -Xmx{{ .Values.jvm.xmx }}{{ if .Values.jvm.gcOpts }} {{ .Values.jvm.gcOpts }}{{ end }}"
             - name: HZ_LICENSEKEY
               valueFrom:
                 secretKeyRef:

@@ -148,9 +148,9 @@ Performance exceeds all targets.
 
 ### Scripts
 
-- [x] `build-docker.sh` - Build all Docker images
-- [x] `start-docker.sh` - Start entire stack
-- [x] `stop-docker.sh` - Stop entire stack
+- [x] `docker/build.sh` - Build all Docker images
+- [x] `docker/start.sh` - Start entire stack
+- [x] `docker/stop.sh` - Stop entire stack
 - [x] `load-sample-data.sh` - Load demo data
 - [x] `demo-scenarios.sh` - Run demo scenarios
 - [x] `load-test.sh` - Run performance tests

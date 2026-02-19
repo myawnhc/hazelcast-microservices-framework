@@ -35,9 +35,9 @@ Days 1-10 completed the framework core (Week 1) and all three eCommerce microser
 - Updated `application.yml` files for all three services with environment variable support.
 
 ### Helper Scripts
-- `build-docker.sh` — builds Maven artifacts and Docker images.
-- `start-docker.sh` — starts the full stack with health checks.
-- `stop-docker.sh` — tears down the Docker environment.
+- `docker/build.sh` — builds Maven artifacts and Docker images.
+- `docker/start.sh` — starts the full stack with health checks.
+- `docker/stop.sh` — tears down the Docker environment.
 
 ### Build Optimization
 - `.dockerignore` added to reduce build context and speed up Docker builds.
@@ -70,8 +70,8 @@ No new tests were added in this commit. The focus was on infrastructure and cont
 | `order-service/Dockerfile` | Created -- multi-stage build for order service |
 | `order-service/.../OrderServiceConfig.java` | Modified -- fix bean naming conflict |
 | `order-service/src/main/resources/application.yml` | Modified -- add environment variable support |
-| `scripts/build-docker.sh` | Created -- build script for Maven + Docker |
-| `scripts/start-docker.sh` | Created -- startup script with health checks |
-| `scripts/stop-docker.sh` | Created -- teardown script |
+| `scripts/docker/build.sh` | Created -- build script for Maven + Docker |
+| `scripts/docker/start.sh` | Created -- startup script with health checks |
+| `scripts/docker/stop.sh` | Created -- teardown script |
 
 **Totals**: 19 files changed, 1,019 insertions, 13 deletions.

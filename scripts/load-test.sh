@@ -9,7 +9,7 @@
 #   -c, --concurrency Number of concurrent requests (default: 10)
 #   -t, --target      Target TPS (default: 100)
 #
-# Prerequisites: Services must be running (use ./scripts/start-docker.sh first)
+# Prerequisites: Services must be running (use ./scripts/docker/start.sh first)
 #
 
 set -e
@@ -76,7 +76,7 @@ for service_url in "$ACCOUNT_SERVICE" "$INVENTORY_SERVICE" "$ORDER_SERVICE"; do
         echo -e "  ${service_url}: ${GREEN}OK${NC}"
     else
         echo -e "  ${service_url}: ${RED}FAILED${NC}"
-        echo -e "${RED}Please start services first: ./scripts/start-docker.sh${NC}"
+        echo -e "${RED}Please start services first: ./scripts/docker/start.sh${NC}"
         exit 1
     fi
 done

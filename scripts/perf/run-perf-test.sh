@@ -19,7 +19,7 @@
 #
 # Prerequisites:
 #   - k6 must be installed (brew install k6)
-#   - Services must be running (./scripts/start-docker.sh)
+#   - Services must be running (./scripts/docker/start.sh)
 #   - Sample data should be loaded (./scripts/load-sample-data.sh)
 #
 

@@ -160,7 +160,7 @@ cd hazelcast-microservices-framework
 mvn clean package -DskipTests
 
 # Start all services
-./scripts/start-docker.sh
+./scripts/docker/start.sh
 
 # Load sample data
 ./scripts/load-sample-data.sh

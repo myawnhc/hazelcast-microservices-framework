@@ -60,7 +60,7 @@ mvn clean package -DskipTests
 
 ```bash
 # Using the convenience script
-./scripts/start-docker.sh
+./scripts/docker/start.sh
 
 # Or directly with docker-compose
 cd docker && docker-compose up -d
@@ -131,16 +131,16 @@ Best for demos and complete environment testing.
 
 ```bash
 # Start all services
-./scripts/start-docker.sh
+./scripts/docker/start.sh
 
 # View logs
 docker-compose logs -f
 
 # Stop services
-./scripts/stop-docker.sh
+./scripts/docker/stop.sh
 
 # Stop and clean volumes
-./scripts/stop-docker.sh --clean
+./scripts/docker/stop.sh --clean
 ```
 
 **Services started:**

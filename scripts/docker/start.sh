@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 
 echo "============================================"
 echo "Hazelcast Microservices Framework - Starting"
@@ -17,7 +17,7 @@ cd "$PROJECT_ROOT/docker"
 # Check if images exist
 if ! docker images | grep -q "docker-account-service\|docker_account-service"; then
     echo "Docker images not found. Building first..."
-    "$SCRIPT_DIR/build-docker.sh"
+    "$SCRIPT_DIR/build.sh"
 fi
 
 echo "Starting services..."

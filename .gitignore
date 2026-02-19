@@ -43,3 +43,6 @@ scripts/perf/ab-results/
 
 # Sustained load test results (screenshots, stats logs, large JSON)
 scripts/perf/sustained-results/
+
+# AWS EKS port-forward PID files
+scripts/k8s-aws/*.pids

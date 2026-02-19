@@ -9,7 +9,7 @@
 #   ./scripts/demo-scenarios.sh all       # Run all scenarios
 #
 # Prerequisites:
-#   1. Services running (./scripts/start-docker.sh)
+#   1. Services running (./scripts/docker/start.sh)
 #   2. Sample data loaded (./scripts/load-sample-data.sh)
 #
 
@@ -946,7 +946,7 @@ scenario_6_timeout() {
         print_success "Payment service is running at $PAYMENT_SERVICE"
     else
         print_error "Payment service is not reachable (HTTP $health_check)"
-        echo "  Ensure services are running: ./scripts/start-docker.sh"
+        echo "  Ensure services are running: ./scripts/docker/start.sh"
         return 1
     fi
     wait_for_keypress

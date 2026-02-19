@@ -1,0 +1,211 @@
+# =============================================================================
+# AWS EKS Values — Large Tier (Production Extrapolation)
+# =============================================================================
+#
+# WARNING: This tier is documented for reference but UNTESTED. It extrapolates
+# from medium-tier benchmarks to show what a production configuration might
+# look like. Validate with load testing before production use.
+#
+# Target: 5x c7i.4xlarge (16 vCPU, 32GB each)
+#         2 node groups: hazelcast-dedicated (3 nodes) + services (2 nodes)
+# Cost:   ~$3.50/hr ($0.68/hr x5 nodes + $0.10 EKS control plane)
+# Use:    Production extrapolation, capacity planning documentation
+#
+# Deploy: helm install demo k8s/hazelcast-microservices/ \
+#           -f k8s/hazelcast-microservices/values-aws-large.yaml \
+#           -n hazelcast-demo
+# =============================================================================
+
+# --- Hazelcast Cluster ---
+hazelcast-cluster:
+  replicaCount: 5
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "8g"
+    xmx: "8g"
+    gcOpts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:InitiatingHeapOccupancyPercent=70"
+  resources:
+    requests:
+      memory: "10Gi"
+      cpu: "4000m"
+    limits:
+      memory: "12Gi"
+      cpu: "8000m"
+  rbac:
+    create: true
+  partitionGroup:
+    enabled: true
+    type: "ZONE_AWARE"
+  backPressure:
+    enabled: true
+  terminationGracePeriodSeconds: 900
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 3
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: hazelcast-cluster
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - hazelcast-cluster
+          topologyKey: kubernetes.io/hostname
+  # Dedicate Hazelcast to its own node group via taints/tolerations
+  nodeSelector:
+    nodegroup: hazelcast-dedicated
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "hazelcast"
+      effect: "NoSchedule"
+
+# --- Account Service ---
+account-service:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "1536m"
+    xmx: "2g"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+    limits:
+      memory: "3Gi"
+      cpu: "4000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# --- Inventory Service ---
+inventory-service:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "1536m"
+    xmx: "2g"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+    limits:
+      memory: "3Gi"
+      cpu: "4000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# --- Order Service ---
+order-service:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "1536m"
+    xmx: "2g"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+    limits:
+      memory: "3Gi"
+      cpu: "4000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# --- Payment Service ---
+payment-service:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+  jvm:
+    xms: "1536m"
+    xmx: "2g"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+    limits:
+      memory: "3Gi"
+      cpu: "4000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+# --- API Gateway ---
+api-gateway:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+  ingress:
+    enabled: true
+    className: "alb"
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
+    hosts:
+      - host: ""
+        paths:
+          - path: /
+            pathType: Prefix
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "500m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+
+# --- MCP Server ---
+mcp-server:
+  enabled: false
+
+# --- Monitoring ---
+monitoring:
+  enabled: false

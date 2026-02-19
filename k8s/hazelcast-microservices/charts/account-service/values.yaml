@@ -5,6 +5,9 @@ image:
   tag: "latest"
   pullPolicy: IfNotPresent
 
+# Image pull secrets (for private registries like ECR)
+imagePullSecrets: []
+
 service:
   type: ClusterIP
   port: 8081

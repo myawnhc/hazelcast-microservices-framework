@@ -15,8 +15,8 @@ Before running the demo, ensure you have:
 
 ```bash
 # 1. Build and start all services
-./scripts/build-docker.sh
-./scripts/start-docker.sh
+./scripts/docker/build.sh
+./scripts/docker/start.sh
 
 # 2. Load sample data
 ./scripts/load-sample-data.sh
@@ -671,7 +671,7 @@ docker-compose -f docker/docker-compose.yml logs -f order-service
 
 ```bash
 # Start everything
-./scripts/start-docker.sh
+./scripts/docker/start.sh
 ./scripts/load-sample-data.sh
 
 # Show the happy path
@@ -691,7 +691,7 @@ docker-compose -f docker/docker-compose.yml logs -f order-service
 
 ```bash
 # Start everything
-./scripts/start-docker.sh
+./scripts/docker/start.sh
 ./scripts/load-sample-data.sh
 
 # Run all scenarios with explanations

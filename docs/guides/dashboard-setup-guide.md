@@ -7,7 +7,7 @@ This guide covers the observability stack — Grafana dashboards, Prometheus met
 The observability stack runs as part of the Docker Compose deployment. Start all services:
 
 ```bash
-./scripts/start-docker.sh
+./scripts/docker/start.sh
 ```
 
 Or manually:

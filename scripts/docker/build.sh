@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 
 echo "============================================"
 echo "Hazelcast Microservices Framework - Docker Build"
@@ -43,5 +43,5 @@ echo ""
 echo "To start the stack, run:"
 echo "  cd docker && docker-compose up -d"
 echo ""
-echo "Or use: ./scripts/start-docker.sh"
+echo "Or use: ./scripts/docker/start.sh"
 echo "============================================"
