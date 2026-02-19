@@ -249,10 +249,9 @@
   }
 
 
-  /* ===== PAGE 2 ===== */
+  /* ===== PAGE 2+ HEADERS ===== */
 
-  /* Page 2 Header */
-  .page2-header {
+  .page-header {
     background: var(--hz-navy);
     color: white;
     padding: 0.16in 0.5in;
@@ -261,15 +260,17 @@
     align-items: center;
   }
 
-  .page2-header h2 {
+  .page-header h2 {
     font-size: 13pt;
     font-weight: 700;
   }
 
-  .page2-header .page-num {
+  .page-header .page-num {
     font-size: 8pt;
     opacity: 0.6;
   }
+
+  /* ===== PAGE 2: FEATURES ===== */
 
   /* Feature Grid */
   .features-section {
@@ -287,6 +288,11 @@
     border-radius: 6px;
     border: 1px solid var(--gray-200);
     background: white;
+  }
+
+  .feature-card.ai-highlight {
+    border-color: var(--orange);
+    background: #fffbeb;
   }
 
   .feature-card-title {
@@ -313,15 +319,40 @@
     line-height: 1.4;
   }
 
-  /* Dashboard Showcase */
-  .dashboard-section {
-    padding: 0.12in 0.5in 0.1in;
+  /* Deployment Callout */
+  .deployment-callout {
+    margin: 0.15in 0.5in 0.1in;
+    padding: 10px 14px;
+    background: var(--hz-light);
+    border-left: 4px solid var(--hz-blue);
+    border-radius: 0 6px 6px 0;
+    font-size: 8.5pt;
+    color: var(--gray-700);
+    line-height: 1.5;
   }
 
-  .dashboard-row {
+  .deployment-callout strong {
+    color: var(--hz-dark);
+  }
+
+  /* ===== PAGE 3: DASHBOARDS ===== */
+
+  .dashboard-showcase {
+    padding: 0.2in 0.5in 0.15in;
+  }
+
+  .dashboard-intro {
+    font-size: 9pt;
+    color: var(--gray-700);
+    line-height: 1.5;
+    margin-bottom: 0.15in;
+  }
+
+  .dashboard-grid-large {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    grid-template-rows: auto auto auto;
+    gap: 12px;
   }
 
   .dashboard-card {
@@ -337,15 +368,24 @@
 
   .dashboard-card-caption {
     background: var(--gray-100);
-    padding: 4px 10px;
+    padding: 5px 10px;
     font-size: 7.5pt;
     color: var(--gray-700);
     font-weight: 600;
   }
 
+  .dashboard-card-desc {
+    font-size: 7pt;
+    color: var(--gray-500);
+    font-weight: 400;
+    margin-top: 1px;
+  }
+
+  /* ===== PAGE 4: TECH + CTA ===== */
+
   /* Tech Stack + Modules side-by-side */
   .bottom-section {
-    padding: 0.12in 0.5in 0.12in;
+    padding: 0.2in 0.5in 0.12in;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
@@ -405,15 +445,28 @@
     color: var(--gray-600);
   }
 
+  /* Blog Series Callout */
+  .blog-callout {
+    margin: 0.15in 0.5in 0.1in;
+    padding: 10px 14px;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 8.5pt;
+    color: var(--gray-700);
+    line-height: 1.5;
+  }
+
+  .blog-callout strong {
+    color: var(--hz-dark);
+  }
+
   /* Call to Action */
   .cta-section {
     background: linear-gradient(135deg, var(--hz-navy) 0%, var(--hz-blue) 100%);
     color: white;
     padding: 0.18in 0.5in;
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    margin-top: 0.15in;
   }
 
   .cta-section h3 {
@@ -475,7 +528,7 @@
   <div class="hero">
     <div class="hero-top">
       <div class="hero-logo">HAZELCAST</div>
-      <div class="hero-badge">Internal Technical Brief</div>
+      <div class="hero-badge">SA Technical Brief</div>
     </div>
     <h1>Microservices Framework</h1>
     <div class="hero-subtitle">
@@ -515,13 +568,12 @@
   <!-- Value Proposition -->
   <div class="value-prop">
     <p>
-      <strong>The gap:</strong> Customers evaluating Hazelcast for microservices ask "show me event sourcing,"
-      "show me sagas," "show me how Jet fits." We point them at docs and samples. Competitors ship turnkey
-      frameworks with dashboards and demos. <strong>This framework closes that gap</strong> &mdash; a complete,
-      instrumented, four-service eCommerce system that exercises every Hazelcast distributed-systems primitive
-      end-to-end: IMap event stores, Jet pipelines, ITopic event bus, saga coordination, circuit breakers,
-      write-behind persistence, and AI integration via MCP &mdash; all with pre-provisioned Grafana dashboards
-      that make the value visible in real time.
+      Hazelcast is a great platform for supporting microservice architectures. But for customers
+      who aren't fully there yet, transitioning from a monolith to microservices is more than just
+      breaking things apart &mdash; do it wrong and you end up with many tightly-coupled pieces where
+      any failure breaks the whole system. Using microservice patterns effectively is the key.
+      This demo and the accompanying series of blog posts walks prospects or customers through the
+      right way to implement a Hazelcast-centric microservice architecture.
     </p>
   </div>
 
@@ -553,8 +605,8 @@
   </div>
 
   <div class="page-footer">
-    <span>Hazelcast Microservices Framework &mdash; Internal Technical Brief</span>
-    <span>Page 1 of 2</span>
+    <span>Hazelcast Microservices Framework &mdash; SA Technical Brief</span>
+    <span>Page 1 of 4</span>
   </div>
 </div>
 
@@ -562,9 +614,9 @@
 <div class="page">
 
   <!-- Page 2 Header -->
-  <div class="page2-header">
+  <div class="page-header">
     <h2>Capabilities &amp; Technical Details</h2>
-    <span class="page-num">Page 2 of 2</span>
+    <span class="page-num">Page 2 of 4</span>
   </div>
 
   <!-- Feature Grid -->
@@ -607,19 +659,20 @@
         </div>
       </div>
 
-      <div class="feature-card">
+      <div class="feature-card ai-highlight">
         <div class="feature-card-title">
           <span class="feature-dot" style="background:#8b5cf6"></span>
-          API Gateway
+          AI-Powered Similarity Search
         </div>
         <div class="feature-card-body">
-          Spring Cloud Gateway with path-based routing, Hazelcast-backed
-          rate limiting (shared state across instances), per-route circuit
-          breakers, JWT auth, CORS, and correlation ID propagation.
+          Hazelcast VectorCollection with HNSW indexing for product similarity.
+          Supports cosine, dot-product, and euclidean metrics.
+          <code style="font-size: 7pt;">GET /api/products/{id}/similar</code>.
+          Enterprise opt-in with Community NoOp fallback.
         </div>
       </div>
 
-      <div class="feature-card">
+      <div class="feature-card ai-highlight">
         <div class="feature-card-title">
           <span class="feature-dot" style="background:#d97706"></span>
           AI Integration (MCP)
@@ -670,19 +723,103 @@
     </div>
   </div>
 
-  <!-- Dashboard Screenshots -->
-  <div class="dashboard-section">
-    <div class="section-title">Grafana Dashboard Suite</div>
-    <div class="dashboard-row">
+  <!-- Deployment Callout -->
+  <div class="deployment-callout">
+    <strong>Deployment:</strong> Runs on a developer laptop via Docker Compose or deploys to
+    AWS EKS with provided Helm charts and Terraform scripts. Other cloud providers
+    (GCP GKE, Azure AKS) can be targeted by request.
+  </div>
+
+  <div class="page-footer">
+    <span>Hazelcast Microservices Framework &mdash; SA Technical Brief</span>
+    <span>Page 2 of 4</span>
+  </div>
+</div>
+
+<!-- ==================== PAGE 3 ==================== -->
+<div class="page">
+
+  <!-- Page 3 Header -->
+  <div class="page-header">
+    <h2>Live Observability &mdash; Grafana Dashboard Suite</h2>
+    <span class="page-num">Page 3 of 4</span>
+  </div>
+
+  <!-- Dashboard Showcase -->
+  <div class="dashboard-showcase">
+    <p class="dashboard-intro">
+      Six pre-provisioned Grafana dashboards provide real-time visibility into every layer of the
+      framework &mdash; from high-level system health down to individual event flow, saga coordination,
+      materialized view performance, and database persistence. Dashboards are auto-provisioned via
+      Docker Compose and Helm charts &mdash; no manual setup required.
+    </p>
+
+    <div class="dashboard-grid-large">
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-system-overview.png" alt="System Overview Dashboard">
+        <div class="dashboard-card-caption">
+          System Overview
+          <div class="dashboard-card-desc">Service health, JVM metrics, throughput, latency percentiles, error rates</div>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-performance-testing.png" alt="Performance Testing Dashboard">
+        <div class="dashboard-card-caption">
+          Performance Testing
+          <div class="dashboard-card-desc">TPS targets, pipeline throughput, saga completion rates, resource utilization</div>
+        </div>
+      </div>
+
       <div class="dashboard-card">
         <img src="../perf/screenshots/final-event-flow.png" alt="Event Flow Dashboard">
-        <div class="dashboard-card-caption">Event Flow &mdash; Throughput, latency percentiles, pipeline stage timing</div>
+        <div class="dashboard-card-caption">
+          Event Flow
+          <div class="dashboard-card-desc">Event throughput, latency percentiles, pipeline stage timing, event types</div>
+        </div>
       </div>
+
       <div class="dashboard-card">
         <img src="../perf/screenshots/final-saga-dashboard.png" alt="Saga Dashboard">
-        <div class="dashboard-card-caption">Saga Coordination &mdash; 54K sagas, compensation tracking, duration percentiles</div>
+        <div class="dashboard-card-caption">
+          Saga Coordination
+          <div class="dashboard-card-desc">54K+ sagas, compensation tracking, step duration percentiles, timeout detection</div>
+        </div>
       </div>
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-materialized-views.png" alt="Materialized Views Dashboard">
+        <div class="dashboard-card-caption">
+          Materialized Views
+          <div class="dashboard-card-desc">View rebuild latency, cache hit rates, entry counts, near cache performance</div>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-persistence-layer.png" alt="Persistence Layer Dashboard">
+        <div class="dashboard-card-caption">
+          Persistence Layer
+          <div class="dashboard-card-desc">Write-behind queue depth, batch sizes, PostgreSQL latency, eviction metrics</div>
+        </div>
+      </div>
+
     </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Hazelcast Microservices Framework &mdash; SA Technical Brief</span>
+    <span>Page 3 of 4</span>
+  </div>
+</div>
+
+<!-- ==================== PAGE 4 ==================== -->
+<div class="page">
+
+  <!-- Page 4 Header -->
+  <div class="page-header">
+    <h2>Technology Stack &amp; Resources</h2>
+    <span class="page-num">Page 4 of 4</span>
   </div>
 
   <!-- Tech Stack + Modules -->
@@ -697,7 +834,7 @@
         <tr><td>Stream Processing</td><td>Hazelcast Jet</td></tr>
         <tr><td>Database</td><td>PostgreSQL 16+ (write-behind)</td></tr>
         <tr><td>Gateway</td><td>Spring Cloud Gateway</td></tr>
-        <tr><td>AI Integration</td><td>Spring AI MCP Server 1.0</td></tr>
+        <tr><td>AI / ML</td><td>Spring AI MCP Server 1.0, VectorCollection</td></tr>
         <tr><td>Metrics</td><td>Micrometer / Prometheus</td></tr>
         <tr><td>Dashboards</td><td>Grafana 10.3</td></tr>
         <tr><td>Tracing</td><td>Jaeger (OTLP)</td></tr>
@@ -717,22 +854,32 @@
         <li><span class="module-name">api-gateway</span> <span class="module-desc">Routing, rate limiting, auth (:8080)</span></li>
         <li><span class="module-name">mcp-server</span> <span class="module-desc">AI assistant integration (:8085)</span></li>
       </ul>
-
-      <div style="margin-top: 10px;">
-        <div class="section-title" style="font-size: 10pt;">Hazelcast Primitives Used</div>
-        <div style="font-size: 7.8pt; color: var(--gray-600); line-height: 1.6;">
-          <strong>IMap</strong> (event store, views, saga state, outbox, DLQ)&ensp;&bull;&ensp;
-          <strong>ITopic</strong> (event bus)&ensp;&bull;&ensp;
-          <strong>Jet Pipeline</strong> (stream processing)&ensp;&bull;&ensp;
-          <strong>Event Journal</strong> (change stream)&ensp;&bull;&ensp;
-          <strong>Entry Processor</strong> (atomic updates)&ensp;&bull;&ensp;
-          <strong>FlakeIdGenerator</strong> (sequences)&ensp;&bull;&ensp;
-          <strong>Near Cache</strong> (query acceleration)&ensp;&bull;&ensp;
-          <strong>MapStore</strong> (write-behind persistence)&ensp;&bull;&ensp;
-          <strong>VectorCollection</strong> (similarity search, EE)
-        </div>
-      </div>
     </div>
+  </div>
+
+  <!-- Hazelcast Primitives -->
+  <div style="padding: 0in 0.5in 0.1in;">
+    <div class="section-title" style="font-size: 10pt;">Hazelcast Primitives Used</div>
+    <div style="font-size: 7.8pt; color: var(--gray-600); line-height: 1.6;">
+      <strong>IMap</strong> (event store, views, saga state, outbox, DLQ)&ensp;&bull;&ensp;
+      <strong>ITopic</strong> (event bus)&ensp;&bull;&ensp;
+      <strong>Jet Pipeline</strong> (stream processing)&ensp;&bull;&ensp;
+      <strong>Event Journal</strong> (change stream)&ensp;&bull;&ensp;
+      <strong>Entry Processor</strong> (atomic updates)&ensp;&bull;&ensp;
+      <strong>FlakeIdGenerator</strong> (sequences)&ensp;&bull;&ensp;
+      <strong>Near Cache</strong> (query acceleration)&ensp;&bull;&ensp;
+      <strong>MapStore</strong> (write-behind persistence)&ensp;&bull;&ensp;
+      <strong>VectorCollection</strong> (similarity search, EE)
+    </div>
+  </div>
+
+  <!-- Blog Series Callout -->
+  <div class="blog-callout">
+    <strong>Accompanying Blog Series:</strong> A 10-part blog series walks through
+    every architectural decision, from event sourcing fundamentals through saga patterns,
+    persistence, AI integration, resilience, and production deployment. Each post maps to
+    a working code milestone in the framework &mdash; ideal for customer-facing technical
+    enablement or self-guided learning.
   </div>
 
   <!-- Call to Action -->
@@ -748,7 +895,7 @@
         </div>
       </div>
       <div class="cta-links">
-        <div><strong>Repository:</strong> github.com/theyawns/hazelcast-microservices-framework</div>
+        <div><strong>Repository:</strong> Available upon request</div>
         <div><strong>Quick Start:</strong> ./scripts/docker/start.sh</div>
         <div><strong>Demo:</strong> ./scripts/demo-scenarios.sh</div>
         <div><strong>Contact:</strong> mike.yawn@hazelcast.com</div>
@@ -756,6 +903,10 @@
     </div>
   </div>
 
+  <div class="page-footer">
+    <span>Hazelcast Microservices Framework &mdash; SA Technical Brief</span>
+    <span>Page 4 of 4</span>
+  </div>
 </div>
 
 </body>
