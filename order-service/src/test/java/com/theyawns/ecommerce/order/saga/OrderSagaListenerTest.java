@@ -8,6 +8,7 @@ import com.theyawns.ecommerce.common.domain.Order;
 import com.theyawns.ecommerce.order.service.OrderOperations;
 import com.theyawns.framework.resilience.ResilienceException;
 import com.theyawns.framework.resilience.ResilientOperations;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -48,7 +49,7 @@ class OrderSagaListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new OrderSagaListener(orderService, hazelcast);
+        listener = new OrderSagaListener(orderService, hazelcast, new SimpleMeterRegistry());
     }
 
     @Nested
@@ -325,7 +326,7 @@ class OrderSagaListenerTest {
 
         @BeforeEach
         void setUp() {
-            resilientListener = new OrderSagaListener(orderService, hazelcast);
+            resilientListener = new OrderSagaListener(orderService, hazelcast, new SimpleMeterRegistry());
             resilientListener.setResilientOperations(resilientServiceInvoker);
         }
 

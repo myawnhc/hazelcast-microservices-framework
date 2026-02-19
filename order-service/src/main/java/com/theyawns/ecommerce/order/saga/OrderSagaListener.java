@@ -7,7 +7,10 @@ import com.hazelcast.topic.Message;
 import com.hazelcast.topic.MessageListener;
 import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.common.events.PaymentProcessedEvent;
+import com.theyawns.ecommerce.common.events.StockReservationFailedEvent;
 import com.theyawns.ecommerce.order.service.OrderOperations;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.theyawns.framework.dlq.DeadLetterEntry;
 import com.theyawns.framework.dlq.DeadLetterQueueOperations;
 import com.theyawns.framework.idempotency.IdempotencyGuard;
@@ -50,6 +53,7 @@ public class OrderSagaListener {
 
     private final OrderOperations orderService;
     private final HazelcastInstance hazelcast;
+    private final Counter sagaCompensatedCounter;
     private EventSpanDecorator eventSpanDecorator;
     private ResilientOperations resilientServiceInvoker;
     private IdempotencyGuard idempotencyGuard;
@@ -61,11 +65,17 @@ public class OrderSagaListener {
      *
      * @param orderService the order service for order operations
      * @param hazelcast the shared Hazelcast client for cross-service topic subscriptions
+     * @param meterRegistry the Micrometer meter registry for metrics
      */
     public OrderSagaListener(OrderOperations orderService,
-                             @Qualifier("hazelcastClient") HazelcastInstance hazelcast) {
+                             @Qualifier("hazelcastClient") HazelcastInstance hazelcast,
+                             MeterRegistry meterRegistry) {
         this.orderService = orderService;
         this.hazelcast = hazelcast;
+        this.sagaCompensatedCounter = Counter.builder("saga.compensated")
+                .description("Number of sagas that completed via compensation (e.g., out-of-stock)")
+                .tag("saga_type", "OrderFulfillment")
+                .register(meterRegistry);
     }
 
     /**
@@ -162,6 +172,9 @@ public class OrderSagaListener {
 
         ITopic<GenericRecord> paymentFailedTopic = hazelcast.getTopic("PaymentFailed");
         paymentFailedTopic.addMessageListener(new PaymentFailedListener());
+
+        ITopic<GenericRecord> stockReservationFailedTopic = hazelcast.getTopic("StockReservationFailed");
+        stockReservationFailedTopic.addMessageListener(new StockReservationFailedListener());
 
         logger.info("Order saga listeners registered successfully");
     }
@@ -330,6 +343,81 @@ public class OrderSagaListener {
             } catch (Exception e) {
                 logger.error("Error initiating order cancellation for saga compensation: {} (orderId: {})",
                         sagaId, orderId, e);
+                if (eventSpanDecorator != null) {
+                    eventSpanDecorator.recordError(currentSpan, e);
+                    eventSpanDecorator.endSpan(currentSpan);
+                }
+            }
+        }
+    }
+
+    /**
+     * Listener for StockReservationFailed events.
+     *
+     * <p>When stock reservation fails due to insufficient inventory (a business
+     * error, not an infrastructure failure), cancels the order and marks the
+     * saga as COMPENSATED. This prevents saga timeouts for expected business
+     * outcomes like out-of-stock conditions.
+     */
+    class StockReservationFailedListener implements MessageListener<GenericRecord> {
+
+        @Override
+        public void onMessage(Message<GenericRecord> message) {
+            GenericRecord record = unwrapEvent(message.getMessageObject());
+
+            String eventId = record.getString("eventId");
+            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+                logger.debug("Duplicate event {} already processed, skipping", eventId);
+                return;
+            }
+
+            String sagaId = record.getString("sagaId");
+            if (sagaId == null || sagaId.isEmpty()) {
+                logger.debug("StockReservationFailed event without sagaId - not a saga event, ignoring");
+                return;
+            }
+
+            String orderId = record.getString("orderId");
+            String reason = record.getString("reason");
+
+            logger.info("Received StockReservationFailed saga event: orderId={}, sagaId={}, reason={}",
+                    orderId, sagaId, reason);
+
+            Span span = null;
+            if (eventSpanDecorator != null) {
+                span = eventSpanDecorator.startSagaSpan("StockReservationFailed", sagaId,
+                        "OrderFulfillment", 0);
+            }
+            final Span currentSpan = span;
+
+            try {
+                // Cancel the order — no circuit breaker needed for this path
+                // since the service is healthy, only the stock was insufficient
+                orderService.cancelOrderForSaga(
+                        orderId,
+                        "Stock reservation failed: " + reason,
+                        sagaId,
+                        record.getString("correlationId")
+                ).whenComplete((order, error) -> {
+                    if (error != null) {
+                        logger.error("Failed to cancel order for stock reservation failure: orderId={}, sagaId={}",
+                                orderId, sagaId, error);
+                        sendToDeadLetterQueue(record, "StockReservationFailed", error);
+                        if (eventSpanDecorator != null) {
+                            eventSpanDecorator.recordError(currentSpan, error);
+                        }
+                    } else {
+                        sagaCompensatedCounter.increment();
+                        logger.info("Order cancelled due to out-of-stock (saga COMPENSATED): " +
+                                "orderId={}, status={}, sagaId={}", orderId, order.getStatus(), sagaId);
+                    }
+                    if (eventSpanDecorator != null) {
+                        eventSpanDecorator.endSpan(currentSpan);
+                    }
+                });
+            } catch (Exception e) {
+                logger.error("Error cancelling order for stock reservation failure: orderId={}, sagaId={}",
+                        orderId, sagaId, e);
                 if (eventSpanDecorator != null) {
                     eventSpanDecorator.recordError(currentSpan, e);
                     eventSpanDecorator.endSpan(currentSpan);

@@ -1,15 +1,24 @@
 package com.theyawns.framework.resilience;
 
 /**
- * Marker interface for exceptions that should not trigger retry attempts.
+ * Marker interface for exceptions that should not trigger retry attempts and should
+ * not count as failures in the circuit breaker's failure rate calculation.
  *
  * <p>Business exceptions like "insufficient stock" or "payment declined" will never
  * succeed on retry — they represent deterministic failures that must be handled
- * immediately rather than retried with exponential backoff.
+ * immediately rather than retried with exponential backoff. Additionally, these
+ * business errors should not trip the circuit breaker, because the underlying
+ * service is healthy — the request simply cannot be fulfilled for business reasons.
  *
- * <p>Implement this interface on any exception class to skip retry. The exception
- * will still propagate through the circuit breaker (counting as a failure) and be
- * wrapped in {@link ResilienceException}.
+ * <p>Implement this interface on any exception class to:
+ * <ul>
+ *   <li>Skip retry — the exception will not be retried with exponential backoff</li>
+ *   <li>Bypass circuit breaker recording — the exception will not count toward
+ *       the failure rate threshold that opens the circuit</li>
+ * </ul>
+ *
+ * <p>The exception will still propagate to the caller and be wrapped in
+ * {@link ResilienceException}.
  *
  * <p>This is a marker interface (rather than a base class) because service exceptions
  * already extend {@code RuntimeException} — a marker lets them opt in without

@@ -8,7 +8,10 @@ import com.hazelcast.topic.MessageListener;
 import com.theyawns.ecommerce.common.events.OrderCancelledEvent;
 import com.theyawns.ecommerce.common.events.OrderCreatedEvent;
 import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
+import com.theyawns.ecommerce.common.events.StockReservationFailedEvent;
+import com.theyawns.ecommerce.inventory.exception.InsufficientStockException;
 import com.theyawns.ecommerce.inventory.service.ProductService;
+import com.theyawns.framework.saga.SagaCompensationConfig;
 import com.theyawns.framework.dlq.DeadLetterEntry;
 import com.theyawns.framework.dlq.DeadLetterQueueOperations;
 import com.theyawns.framework.idempotency.IdempotencyGuard;
@@ -211,6 +214,39 @@ public class InventorySagaListener {
     }
 
     /**
+     * Publishes a StockReservationFailed event to the shared cluster for saga compensation.
+     *
+     * <p>This is called when stock reservation fails due to insufficient stock (a business
+     * error, not an infrastructure failure). The order service listens for this event and
+     * transitions the saga to COMPENSATED.
+     *
+     * @param productId the product that had insufficient stock
+     * @param orderId the order that requested the reservation
+     * @param sagaId the saga instance ID
+     * @param correlationId the correlation ID
+     * @param requestedQuantity the quantity requested
+     * @param availableQuantity the quantity actually available
+     * @param reason the failure reason
+     */
+    private void publishStockReservationFailed(
+            String productId, String orderId, String sagaId, String correlationId,
+            int requestedQuantity, int availableQuantity, String reason) {
+
+        logger.info("Publishing StockReservationFailed: orderId={}, productId={}, sagaId={}, " +
+                        "requested={}, available={}", orderId, productId, sagaId,
+                requestedQuantity, availableQuantity);
+
+        StockReservationFailedEvent event = new StockReservationFailedEvent(
+                productId, orderId, requestedQuantity, availableQuantity, reason);
+        event.setSagaId(sagaId);
+        event.setSagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA);
+        event.setCorrelationId(correlationId);
+
+        ITopic<GenericRecord> topic = hazelcast.getTopic("StockReservationFailed");
+        topic.publish(event.toGenericRecord());
+    }
+
+    /**
      * Listener for OrderCreated events.
      *
      * <p>When an order is created as part of a saga, reserves stock for each
@@ -284,7 +320,23 @@ public class InventorySagaListener {
                             )
                     ).whenComplete((product, error) -> {
                         if (error != null) {
-                            sendToDeadLetterQueue(record, "OrderCreated", error);
+                            Throwable cause = error;
+                            // Unwrap CompletionException to get the actual cause
+                            if (cause.getCause() != null) {
+                                cause = cause.getCause();
+                            }
+
+                            if (cause instanceof InsufficientStockException stockError) {
+                                // Business error — publish compensation event, NOT DLQ
+                                publishStockReservationFailed(
+                                        productId, orderId, sagaId, correlationId,
+                                        stockError.getRequestedQuantity(),
+                                        stockError.getAvailableQuantity(),
+                                        stockError.getMessage()
+                                );
+                            } else {
+                                sendToDeadLetterQueue(record, "OrderCreated", error);
+                            }
                             if (eventSpanDecorator != null) {
                                 eventSpanDecorator.recordError(currentSpan, error);
                             }
@@ -296,6 +348,17 @@ public class InventorySagaListener {
                             eventSpanDecorator.endSpan(currentSpan);
                         }
                     });
+                } catch (InsufficientStockException stockError) {
+                    // Synchronous throw — business error, publish compensation event
+                    publishStockReservationFailed(
+                            productId, orderId, sagaId, correlationId,
+                            stockError.getRequestedQuantity(),
+                            stockError.getAvailableQuantity(),
+                            stockError.getMessage()
+                    );
+                    if (eventSpanDecorator != null) {
+                        eventSpanDecorator.endSpan(currentSpan);
+                    }
                 } catch (Exception e) {
                     logger.error("Error initiating stock reservation for product {} in saga: {} (orderId: {})",
                             productId, sagaId, orderId, e);

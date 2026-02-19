@@ -2,6 +2,7 @@ package com.theyawns.ecommerce.inventory;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Spring Boot application entry point for the Inventory Service.
@@ -28,6 +29,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
         "com.theyawns.ecommerce.inventory",
         "com.theyawns.framework"
 })
+@EnableScheduling
 public class InventoryServiceApplication {
 
     /**

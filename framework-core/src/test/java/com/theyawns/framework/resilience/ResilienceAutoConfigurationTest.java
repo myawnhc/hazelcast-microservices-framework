@@ -151,6 +151,75 @@ class ResilienceAutoConfigurationTest {
     }
 
     @Nested
+    @DisplayName("Circuit breaker exception classification")
+    class CircuitBreakerExceptionClassification {
+
+        @Test
+        @DisplayName("should not count NonRetryableException toward circuit breaker failure rate")
+        void shouldNotCountNonRetryableExceptionAsFailure() {
+            contextRunner
+                    .withUserConfiguration(MeterRegistryConfig.class)
+                    .withPropertyValues(
+                            "framework.resilience.circuit-breaker.sliding-window-size=5",
+                            "framework.resilience.circuit-breaker.minimum-number-of-calls=5",
+                            "framework.resilience.circuit-breaker.failure-rate-threshold=50"
+                    )
+                    .run(context -> {
+                        final CircuitBreakerRegistry registry = context.getBean(CircuitBreakerRegistry.class);
+                        final io.github.resilience4j.circuitbreaker.CircuitBreaker cb =
+                                registry.circuitBreaker("cbExclusionTest");
+
+                        // Throw NonRetryableException 5 times — should NOT trip the CB
+                        for (int i = 0; i < 5; i++) {
+                            try {
+                                io.github.resilience4j.circuitbreaker.CircuitBreaker.decorateSupplier(cb, () -> {
+                                    throw new TestNonRetryableException("business error");
+                                }).get();
+                            } catch (TestNonRetryableException ignored) {
+                                // expected
+                            }
+                        }
+
+                        // CB should still be CLOSED because NonRetryableException is excluded
+                        assertThat(cb.getState())
+                                .isEqualTo(io.github.resilience4j.circuitbreaker.CircuitBreaker.State.CLOSED);
+                    });
+        }
+
+        @Test
+        @DisplayName("should count regular exceptions toward circuit breaker failure rate")
+        void shouldCountRegularExceptionsAsFailure() {
+            contextRunner
+                    .withUserConfiguration(MeterRegistryConfig.class)
+                    .withPropertyValues(
+                            "framework.resilience.circuit-breaker.sliding-window-size=5",
+                            "framework.resilience.circuit-breaker.minimum-number-of-calls=5",
+                            "framework.resilience.circuit-breaker.failure-rate-threshold=50"
+                    )
+                    .run(context -> {
+                        final CircuitBreakerRegistry registry = context.getBean(CircuitBreakerRegistry.class);
+                        final io.github.resilience4j.circuitbreaker.CircuitBreaker cb =
+                                registry.circuitBreaker("cbRegularTest");
+
+                        // Throw regular RuntimeException 5 times — should trip the CB
+                        for (int i = 0; i < 5; i++) {
+                            try {
+                                io.github.resilience4j.circuitbreaker.CircuitBreaker.decorateSupplier(cb, () -> {
+                                    throw new RuntimeException("infrastructure error");
+                                }).get();
+                            } catch (RuntimeException ignored) {
+                                // expected
+                            }
+                        }
+
+                        // CB should be OPEN because 100% failure rate (>50% threshold)
+                        assertThat(cb.getState())
+                                .isEqualTo(io.github.resilience4j.circuitbreaker.CircuitBreaker.State.OPEN);
+                    });
+        }
+    }
+
+    @Nested
     @DisplayName("Retry configuration")
     class RetryConfiguration {
 

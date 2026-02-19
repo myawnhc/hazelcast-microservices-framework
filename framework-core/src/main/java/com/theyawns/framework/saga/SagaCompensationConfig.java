@@ -68,6 +68,7 @@ public class SagaCompensationConfig {
     public static final String PAYMENT_PROCESSED = "PaymentProcessed";
     public static final String PAYMENT_FAILED = "PaymentFailed";
     public static final String PAYMENT_REFUNDED = "PaymentRefunded";
+    public static final String STOCK_RESERVATION_FAILED = "StockReservationFailed";
 
     // Service name constants
     public static final String ORDER_SERVICE = "order-service";

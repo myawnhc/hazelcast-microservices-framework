@@ -243,6 +243,39 @@ public class InventoryController {
     }
 
     /**
+     * Replenishes stock for a product.
+     *
+     * <p>Adds the specified quantity to the product's on-hand stock. Useful for
+     * manual stock replenishment during demos or when automatic replenishment
+     * is disabled.
+     *
+     * @param productId the product ID
+     * @param request the replenishment request
+     * @return the updated product
+     */
+    @PostMapping("/{productId}/stock/replenish")
+    @Operation(summary = "Replenish stock", description = "Adds stock to a product's on-hand inventory")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Stock replenished successfully",
+                    content = @Content(schema = @Schema(implementation = ProductDTO.class))),
+            @ApiResponse(responseCode = "404", description = "Product not found")
+    })
+    public CompletableFuture<ResponseEntity<ProductDTO>> replenishStock(
+            @Parameter(description = "Product ID", required = true) @PathVariable String productId,
+            @Valid @RequestBody StockReplenishRequest request) {
+        logger.info("REST: Replenishing {} units of product {} (reason: {})",
+                request.quantity(), productId, request.reason());
+
+        return productService.replenishStock(productId, request.quantity(), request.reason())
+                .thenApply(product -> {
+                    ProductDTO response = product.toDTO();
+                    logger.info("REST: Stock replenished for product {}, quantityOnHand: {}",
+                            productId, response.getQuantityOnHand());
+                    return ResponseEntity.ok(response);
+                });
+    }
+
+    /**
      * Lists all products, up to the specified limit.
      *
      * @param limit the maximum number of products to return (default: 10)
@@ -314,6 +347,21 @@ public class InventoryController {
 
             @NotBlank(message = "Order ID is required")
             String orderId,
+
+            @NotBlank(message = "Reason is required")
+            String reason
+    ) {
+    }
+
+    /**
+     * Request body for stock replenishment.
+     *
+     * @param quantity the quantity to add
+     * @param reason the replenishment reason (e.g., "MANUAL", "RESTOCK")
+     */
+    public record StockReplenishRequest(
+            @Min(value = 1, message = "Quantity must be at least 1")
+            int quantity,
 
             @NotBlank(message = "Reason is required")
             String reason

@@ -59,6 +59,12 @@ framework:
   vectorstore:
     dimension: 128
     collection-name: product-vectors
+  inventory:
+    replenishment:
+      enabled: true
+      reorder-point: 100
+      reorder-quantity: 1000
+      check-interval-ms: 10000
   resilience:
     enabled: true
     circuit-breaker:

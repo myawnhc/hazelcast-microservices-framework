@@ -7,6 +7,7 @@ import com.theyawns.ecommerce.common.domain.Product;
 import com.theyawns.ecommerce.common.dto.ProductDTO;
 import com.theyawns.ecommerce.common.events.ProductCreatedEvent;
 import com.theyawns.ecommerce.common.events.StockReleasedEvent;
+import com.theyawns.ecommerce.common.events.StockReplenishedEvent;
 import com.theyawns.ecommerce.common.events.StockReservedEvent;
 import com.theyawns.ecommerce.common.util.GenericRecordConverter;
 import com.theyawns.ecommerce.inventory.exception.InsufficientStockException;
@@ -412,6 +413,35 @@ public class InventoryService implements ProductService {
         return controller.handleEvent(event)
                 .thenApply(completionInfo -> {
                     logger.debug("Stock released event processed: {}", completionInfo.getEventId());
+                    return getProductOrThrow(productId);
+                });
+    }
+
+    /**
+     * Replenishes stock for a product.
+     *
+     * <p>Adds the specified quantity to the product's on-hand stock and
+     * processes the event through the event sourcing pipeline.
+     *
+     * @param productId the product ID
+     * @param quantity the quantity to add
+     * @param reason the replenishment reason (e.g., "AUTO_REORDER", "MANUAL")
+     * @return a future that completes with the updated product
+     * @throws ProductNotFoundException if product does not exist
+     */
+    @Override
+    public CompletableFuture<Product> replenishStock(String productId, int quantity, String reason) {
+        logger.info("Replenishing {} units of product {} (reason: {})", quantity, productId, reason);
+
+        Product product = getProductOrThrow(productId);
+
+        int newQuantityOnHand = product.getQuantityOnHand() + quantity;
+        StockReplenishedEvent event = new StockReplenishedEvent(
+                productId, quantity, newQuantityOnHand, reason);
+
+        return controller.handleEvent(event)
+                .thenApply(completionInfo -> {
+                    logger.debug("Stock replenished event processed: {}", completionInfo.getEventId());
                     return getProductOrThrow(productId);
                 });
     }

@@ -66,6 +66,7 @@ public class ResilienceAutoConfiguration {
                 .slidingWindowType(mapSlidingWindowType(cbProps.getSlidingWindowType()))
                 .minimumNumberOfCalls(cbProps.getMinimumNumberOfCalls())
                 .permittedNumberOfCallsInHalfOpenState(cbProps.getPermittedNumberOfCallsInHalfOpenState())
+                .ignoreException(e -> e instanceof NonRetryableException)
                 .build();
 
         final CircuitBreakerRegistry registry = CircuitBreakerRegistry.of(defaultConfig);

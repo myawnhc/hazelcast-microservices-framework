@@ -30,6 +30,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Trend, Rate, Counter } from 'k6/metrics';
+import { SharedArray } from 'k6/data';
 import { textSummary } from 'https://jslib.k6.io/k6-summary/0.0.2/index.js';
 import {
     SERVICES,
@@ -52,6 +53,28 @@ const orderCount             = new Counter('order_count');
 const stockReserveCount      = new Counter('stock_reserve_count');
 const customerCreateCount    = new Counter('customer_create_count');
 const totalIterations        = new Counter('total_iterations');
+
+// ---------------------------------------------------------------------------
+// Multi-product data (loaded at init time, shared across VUs)
+// ---------------------------------------------------------------------------
+let productIds = null;
+try {
+    productIds = new SharedArray('productIds', function () {
+        return JSON.parse(open('../data/product-ids.json'));
+    });
+} catch (e) {
+    // product-ids.json not found — fall back to single PRODUCT_ID env var
+    productIds = null;
+}
+
+let customerIds = null;
+try {
+    customerIds = new SharedArray('customerIds', function () {
+        return JSON.parse(open('../data/customer-ids.json'));
+    });
+} catch (e) {
+    customerIds = null;
+}
 
 // ---------------------------------------------------------------------------
 // Test data from environment
@@ -130,8 +153,16 @@ export function setup() {
         console.warn('WARNING: Not all services are healthy. Test results may be unreliable.');
     }
 
-    console.log(`  Customer ID: ${CUSTOMER_ID}`);
-    console.log(`  Product ID:  ${PRODUCT_ID}`);
+    if (productIds && productIds.length > 0) {
+        console.log(`  Products:    ${productIds.length} (multi-product mode via product-ids.json)`);
+    } else {
+        console.log(`  Product ID:  ${PRODUCT_ID} (single-product mode)`);
+    }
+    if (customerIds && customerIds.length > 0) {
+        console.log(`  Customers:   ${customerIds.length} (multi-customer mode via customer-ids.json)`);
+    } else {
+        console.log(`  Customer ID: ${CUSTOMER_ID} (single-customer mode)`);
+    }
     console.log(`  Target TPS:  ${TPS}`);
     console.log(`  Duration:    ${DURATION}`);
     console.log(`  Checkpoint:  every ${CHECKPOINT_INTERVAL}s`);
@@ -265,8 +296,15 @@ function maybeLogCheckpoint() {
 // Main executor function
 // ---------------------------------------------------------------------------
 export function sustainedWorkload(data) {
-    const customerId = data ? data.customerId : CUSTOMER_ID;
-    const productId  = data ? data.productId : PRODUCT_ID;
+    // Select random product from pool, or fall back to single PRODUCT_ID
+    const productId = (productIds && productIds.length > 0)
+        ? productIds[Math.floor(Math.random() * productIds.length)]
+        : (data ? data.productId : PRODUCT_ID);
+
+    // Select random customer from pool, or fall back to single CUSTOMER_ID
+    const customerId = (customerIds && customerIds.length > 0)
+        ? customerIds[Math.floor(Math.random() * customerIds.length)]
+        : (data ? data.customerId : CUSTOMER_ID);
 
     totalIterations.add(1);
     itersSinceCheckpoint++;

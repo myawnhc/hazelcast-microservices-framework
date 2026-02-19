@@ -101,6 +101,19 @@ public interface ProductService {
     CompletableFuture<Product> releaseReservedStockForOrder(String orderId, String reason);
 
     /**
+     * Replenishes stock for a product.
+     *
+     * <p>Adds the specified quantity to the product's on-hand stock.
+     * Used by the automatic replenishment monitor and manual REST endpoint.
+     *
+     * @param productId the product ID
+     * @param quantity the quantity to add
+     * @param reason the replenishment reason (e.g., "AUTO_REORDER", "MANUAL")
+     * @return a future that completes with the updated product
+     */
+    CompletableFuture<Product> replenishStock(String productId, int quantity, String reason);
+
+    /**
      * Checks if a product exists.
      *
      * @param productId the product ID
