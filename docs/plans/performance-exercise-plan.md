@@ -383,19 +383,46 @@ LAP (13), PER (13), STO (12), NET (12), AUD (12), ACC (13), DIS (12), FUR (13)
 
 ---
 
-### Session 11: Multi-Deployment Testing — PENDING
+### Session 11: Multi-Deployment Testing — COMPLETED (Large tier pending)
 
 **Objectives:** Run performance tests on Kubernetes, demonstrate vertical scaling, compare Docker Compose vs K8s.
 
 **Deliverables:**
-- `scripts/perf/k8s-perf-test.sh`
-- `docs/perf/deployment-comparison.md`
+- `scripts/perf/k8s-perf-test.sh` — TPS sweep orchestrator with per-level metrics capture
+- `scripts/k8s-aws/setup-cluster.sh` — EKS cluster creation (small/medium/large tiers)
+- `scripts/k8s-aws/build.sh` — Maven build + ECR push
+- `scripts/k8s-aws/start.sh` — Helm deploy with tier-specific values files
+- `scripts/k8s-aws/teardown-cluster.sh` — EKS cluster teardown
+- `k8s/hazelcast-microservices/values-aws-{small,medium,large}.yaml` — Tier-specific Helm values
+- `docs/perf/deployment-comparison.md` — 3-tier comparison report with saga timeout analysis
 
-**Work:** Deploy via Helm -> run k6 against K8s services -> compare with Docker Compose baseline. Scaling test: 1 replica vs increased resources. Cloud testing if available: EKS/GKE/AKS at 100/200/500 TPS.
+**Work completed (Feb 19-20, 2 sessions):**
 
-**Note:** ADR 010 is single-replica; multi-replica requires PostgreSQL state sharing. Test validates vertical scaling (more CPU/memory helps).
+Session 1 (Feb 19): Built K8s perf test infrastructure, initial local + AWS Small runs (pre-fix baseline).
+Session 2 (Feb 20): Re-ran all tiers after eviction fix, saga timeout fix, and outbox wiring.
 
-**Success:** Performance numbers from Docker Compose and K8s, comparison table, vertical scaling demonstrated.
+| Tier | Nodes | TPS Tested | Max Error Rate | Key Finding |
+|------|-------|------------|----------------|-------------|
+| Local (Docker Desktop) | 1 | 10, 25, 50 | 0.02% | Lowest latency (13ms p50), no metrics-server |
+| AWS Small (2x t3.xlarge) | 2 | 10, 25, 50, 100 | 0.05% | 0% errors at 100 TPS (was 1.73% pre-fix) |
+| AWS Medium (3x c7i.2xlarge) | 3 | 10, 25, 50, 100, 200 | 0.10% | 0% errors at 200 TPS, HPA scaled to 3 replicas |
+| AWS Large (5x c7i.4xlarge) | 5 | — | — | Blocked by vCPU service quota (16 → 96 requested) |
+
+**HPA auto-scaling validated (Medium tier):**
+- Inventory and order services scaled from 1 to 3 replicas by 100 TPS
+- Payment service scaled from 1 to 3 replicas by 200 TPS
+- Account service stayed at 1 (only 15% of traffic)
+
+**Saga timeout analysis:** At 50+ TPS on Medium, saga E2E completion hits 10s polling timeout. Root cause: single-writer pattern (ADR 008/010) — order-service primary pod owns saga state, HPA-scaled replicas handle HTTP but don't participate in saga completion. Nodes at 8-19% CPU — not resource-bound. Fix path: PostgreSQL-backed partitioned saga state (future work).
+
+**Infrastructure fixes applied:**
+- EKS K8s version upgraded from 1.32 to 1.33
+- Large tier: replicaCount 5→3 (matches 3 dedicated nodes with hard anti-affinity), PDB minAvailable 3→2
+- Setup script: fixed `--node-taints` (not a valid eksctl CLI flag) → `kubectl taint` post-creation
+
+**Pending:** AWS Large tier test — requires vCPU quota increase from 16 to 96 for c7i.4xlarge instances. Once approved, run `setup-cluster.sh --tier large` and sweep at 10/25/50/100/200/500 TPS.
+
+**Success:** Performance numbers from 3 tiers, comparison table with cost-performance analysis, HPA scaling demonstrated, architectural bottleneck documented.
 
 ---
 
@@ -436,7 +463,7 @@ Session 7,8,9 ──> Session 11 (K8s/Cloud)
 Session 10,11 ──> Session 12 (Documentation & Blog)
 ```
 
-Sessions 1-10 are complete. Session 11-12 depend on having results.
+Sessions 1-11 are complete (Session 11 large tier pending vCPU quota). Session 12 depends on having results.
 
 ---
 
