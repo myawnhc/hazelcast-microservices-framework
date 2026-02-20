@@ -127,6 +127,46 @@ The framework runs fully on Hazelcast Community Edition. Enterprise features are
           └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
+### Data Flow & Representation
+
+Data changes format as it moves through the architecture. DTOs live at the REST boundary, domain POJOs in the service layer, and GenericRecord everywhere inside the framework — the pipeline, event store, view store, ITopic, and outbox never touch Java domain objects.
+
+```
+Write path:  JSON → DTO → DomainEvent POJO ──[.toGenericRecord()]──→ GenericRecord
+                                                                         │
+                    ┌────────────────────────────────────────────────────┘
+                    ▼
+             Pending Map → Jet Pipeline → Event Store (event schema)
+                                        → View Store  (domain schema)
+                                        → ITopic / Outbox (event schema)
+
+Read path:   View Store (GenericRecord) ──[.fromGenericRecord()]──→ Domain POJO → DTO → JSON
+```
+
+| Layer | Format | Example | Notes |
+|-------|--------|---------|-------|
+| HTTP request/response | JSON | `{"email":"...","name":"..."}` | Jackson serialization |
+| REST controller | DTO | `CustomerDTO` | Jakarta Validation, mutable POJO |
+| Service layer | DomainEvent | `CustomerCreatedEvent` | Extends `DomainEvent<D,K>`, Java POJO |
+| *Serialization boundary* | `.toGenericRecord()` | | Event POJO → GenericRecord |
+| Pending map, Event store | GenericRecord | Schema: `"CustomerCreatedEvent"` | Event schema with all metadata fields |
+| Jet pipeline (6 stages) | GenericRecord | Wrapped in `EventContext<K>` | Never deserialized back to Java |
+| Cross-service ITopic | GenericRecord | Schema: `"OrderCreatedEvent"` | Saga listeners read fields directly |
+| Outbox | GenericRecord | Schema: `"OutboxEntry"` | Nested event GenericRecord inside |
+| Materialized view store | GenericRecord | Schema: `"Customer"` | Domain schema, not event schema |
+| *Deserialization boundary* | `.fromGenericRecord()` | | GenericRecord → Domain POJO |
+| Service read path | DomainObject | `Customer` | Implements `DomainObject<K>` |
+| REST response | DTO | `CustomerDTO` | Via `.toDTO()` on domain object |
+| Event history endpoint | `Map<String,Object>` | Via `GenericRecordConverter.toMap()` | No Java event class needed |
+
+**Key points:**
+
+- **GenericRecord dominates the interior.** Everything between the two serialization boundaries is GenericRecord. The pipeline, stores, ITopic, and outbox never instantiate Java domain objects.
+- **Two schema families.** Event schemas (`"CustomerCreatedEvent"`, `"OrderCreatedEvent"`) carry the full event payload including metadata. Domain schemas (`"Customer"`, `"Order"`) represent current materialized state.
+- **ViewUpdater bridges schemas.** `applyEvent(eventRecord, currentState)` reads from an event-schema GenericRecord and produces a domain-schema GenericRecord.
+- **Type mappings.** `Instant` → `int64` epoch millis, `BigDecimal` → `String`, nested objects → `GenericRecord[]` (e.g., `OrderLineItem` array in `OrderCreatedEvent`).
+- **Saga listeners work purely with GenericRecord** — they call `record.getString("key")` and `record.getArrayOfGenericRecord("lineItems")` directly, never reconstituting Java event objects.
+
 ## Modules
 
 | Module | Description |
