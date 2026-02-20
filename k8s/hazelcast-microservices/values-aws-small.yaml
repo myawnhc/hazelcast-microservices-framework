@@ -49,6 +49,8 @@ account-service:
     limits:
       memory: "1536Mi"
       cpu: "1000m"
+  persistence:
+    enabled: false
   autoscaling:
     enabled: false
   podDisruptionBudget:
@@ -70,6 +72,8 @@ inventory-service:
     limits:
       memory: "1536Mi"
       cpu: "1000m"
+  persistence:
+    enabled: false
   autoscaling:
     enabled: false
   podDisruptionBudget:
@@ -91,6 +95,8 @@ order-service:
     limits:
       memory: "1536Mi"
       cpu: "1000m"
+  persistence:
+    enabled: false
   autoscaling:
     enabled: false
   podDisruptionBudget:
@@ -112,6 +118,8 @@ payment-service:
     limits:
       memory: "1536Mi"
       cpu: "1000m"
+  persistence:
+    enabled: false
   autoscaling:
     enabled: false
   podDisruptionBudget:

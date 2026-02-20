@@ -12,13 +12,19 @@ global:
 # ----------------------------------------------
 # Hazelcast Cluster (StatefulSet)
 # ----------------------------------------------
+# NOTE: These are the shared-cluster nodes for ITopic/saga state only.
+# They do NOT run Jet pipelines — services run Jet on embedded instances.
+# With IMap eviction enabled (maxSize=10000), memory is bounded.
 hazelcast-cluster:
   enabled: true
-  replicaCount: 3
+  replicaCount: 2   # 2 nodes sufficient for local testing (saves ~512Mi)
   image:
     repository: hazelcast/hazelcast
     tag: "5.6.0"
     pullPolicy: IfNotPresent
+  jvm:
+    xms: "256m"
+    xmx: "384m"     # 75% of 512Mi limit — leaves room for JVM overhead
   resources:
     requests:
       memory: "256Mi"
@@ -39,18 +45,24 @@ account-service:
     pullPolicy: IfNotPresent
   service:
     port: 8081
+  persistence:
+    enabled: false
   # autoscaling:
   #   enabled: true
   #   minReplicas: 2
   #   maxReplicas: 5
   # podDisruptionBudget:
   #   enabled: true
+  jvm:
+    xms: "256m"
+    xmx: "512m"     # 67% of 768Mi limit
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
   resources:
     requests:
       memory: "384Mi"
       cpu: "250m"
     limits:
-      memory: "1Gi"
+      memory: "768Mi"
       cpu: "1000m"
 
 # ----------------------------------------------
@@ -65,18 +77,24 @@ inventory-service:
     pullPolicy: IfNotPresent
   service:
     port: 8082
+  persistence:
+    enabled: false
   # autoscaling:
   #   enabled: true
   #   minReplicas: 2
   #   maxReplicas: 5
   # podDisruptionBudget:
   #   enabled: true
+  jvm:
+    xms: "256m"
+    xmx: "512m"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
   resources:
     requests:
       memory: "384Mi"
       cpu: "250m"
     limits:
-      memory: "1Gi"
+      memory: "768Mi"
       cpu: "1000m"
 
 # ----------------------------------------------
@@ -91,18 +109,24 @@ order-service:
     pullPolicy: IfNotPresent
   service:
     port: 8083
+  persistence:
+    enabled: false
   # autoscaling:
   #   enabled: true
   #   minReplicas: 2
   #   maxReplicas: 5
   # podDisruptionBudget:
   #   enabled: true
+  jvm:
+    xms: "256m"
+    xmx: "512m"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
   resources:
     requests:
       memory: "384Mi"
       cpu: "250m"
     limits:
-      memory: "1Gi"
+      memory: "768Mi"
       cpu: "1000m"
 
 # ----------------------------------------------
@@ -117,18 +141,24 @@ payment-service:
     pullPolicy: IfNotPresent
   service:
     port: 8084
+  persistence:
+    enabled: false
   # autoscaling:
   #   enabled: true
   #   minReplicas: 2
   #   maxReplicas: 5
   # podDisruptionBudget:
   #   enabled: true
+  jvm:
+    xms: "256m"
+    xmx: "512m"
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
   resources:
     requests:
       memory: "384Mi"
       cpu: "250m"
     limits:
-      memory: "1Gi"
+      memory: "768Mi"
       cpu: "1000m"
 
 # ----------------------------------------------
@@ -159,6 +189,10 @@ api-gateway:
   #   maxReplicas: 5
   # podDisruptionBudget:
   #   enabled: true
+  jvm:
+    xms: "128m"
+    xmx: "192m"     # 75% of 256Mi limit
+    opts: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
   resources:
     requests:
       memory: "128Mi"

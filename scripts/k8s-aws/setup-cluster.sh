@@ -139,7 +139,7 @@ else
             --name "$CLUSTER_NAME" \
             --region "$REGION" \
             --profile "$PROFILE" \
-            --version 1.32 \
+            --version 1.33 \
             --without-nodegroup
 
         eksctl create nodegroup \
@@ -151,8 +151,7 @@ else
             --nodes 3 \
             --nodes-min 3 \
             --nodes-max 3 \
-            --node-labels "nodegroup=hazelcast-dedicated" \
-            --node-taints "dedicated=hazelcast:NoSchedule"
+            --node-labels "nodegroup=hazelcast-dedicated"
 
         eksctl create nodegroup \
             --cluster "$CLUSTER_NAME" \
@@ -163,12 +162,16 @@ else
             --nodes 2 \
             --nodes-min 2 \
             --nodes-max 4
+
+        # Apply taint to hazelcast-dedicated nodes (CLI doesn't support --node-taints)
+        echo "  Applying taint to hazelcast-dedicated nodes..."
+        kubectl taint nodes -l nodegroup=hazelcast-dedicated dedicated=hazelcast:NoSchedule --overwrite
     else
         eksctl create cluster \
             --name "$CLUSTER_NAME" \
             --region "$REGION" \
             --profile "$PROFILE" \
-            --version 1.32 \
+            --version 1.33 \
             --node-type "$NODE_TYPE" \
             --nodes "$NODE_COUNT" \
             --nodes-min "$NODE_MIN" \
