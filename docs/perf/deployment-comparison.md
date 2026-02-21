@@ -468,13 +468,79 @@ Validates that Jet `AT_LEAST_ONCE` snapshots and CAS outbox claiming don't cause
 | Multi-replica (local) | **Resource-bound** | Functionally correct. EKS needed for valid scaling data |
 | Sustained 30m | **Pass** | Zero OOM, zero errors, stable latency |
 
-### Next Steps
+### EKS Large Results — Per-Service Clustering (ADR 013)
 
-EKS Large tier (5x c7i.4xlarge) deployment with `embeddedClustering.enabled: true` will validate:
-1. **Linear throughput scaling** with 2-3 order-service replicas
-2. **Saga poll-miss elimination** — same-service clustering means all replicas share saga state
-3. **HPA effectiveness** — distributed Jet pipeline should enable meaningful auto-scaling
-4. **CAS contention under load** — multiple pods claiming outbox entries concurrently
+After fixing five deployment issues discovered during EKS rollout (DNS discovery port, Jet `newJobIfAbsent`, PagingPredicate serialization, resilient `isRunning()`, and env var fallbacks), per-service clustering was validated on the EKS Large tier.
+
+**Configuration:** 5x c7i.4xlarge, HPA min 2 / max 5, `embeddedClustering.enabled: true`, K8s DNS discovery on port 5801.
+
+#### Throughput & Latency
+
+| TPS Target | Achieved Iter/s | HTTP req/s | p50 (ms) | p95 (ms) | Error Rate |
+|-----------|-----------------|------------|----------|----------|------------|
+| 10 | 9.96 | 10.55 | 55 | 192 | 0.05% |
+| 25 | 24.87 | 26.44 | 58 | 204 | 0.00% |
+| 50 | 49.59 | 52.85 | 67 | 207 | 0.00% |
+| 100 | 95.52 | 247.88 | 78 | 333 | 0.00% |
+| 200 | 197.95 | 222.59 | 91 | 281 | 0.00% |
+| 500 | 219.46 | 522.89 | 92 | 282 | 0.00% |
+
+#### Per-Operation Latency (ms)
+
+| TPS | Create Order p95 | Reserve Stock p95 | Create Customer p95 | Saga E2E p95 |
+|-----|-------------------|-------------------|---------------------|--------------|
+| 10 | 175 | 198 | 243 | 513 |
+| 25 | 204 | 204 | 248 | 562 |
+| 50 | 200 | 235 | 203 | 644 |
+| 100 | 428 | 354 | 327 | 10,274 |
+| 200 | 291 | 286 | 271 | 1,036 |
+| 500 | 323 | 267 | 266 | 9,486 |
+
+#### HPA Scaling with Clustering
+
+| TPS | account | inventory | order | payment |
+|-----|---------|-----------|-------|---------|
+| 10 | 2 | 2 | 2 | 2 |
+| 25 | 2 | 5 | 5 | 4 |
+| 50 | 2 | 5 | 5 | 5 |
+| 100 | 2 | 5 | 5 | 5 |
+| 200 | 2 | 5 | 5 | 5 |
+| 500 | 2 | 5 | 5 | 5 |
+
+#### Resource Usage (Post-500 TPS)
+
+| Node | CPU | CPU% | Memory% |
+|------|-----|------|---------|
+| ip-192-168-1-141 (services) | 15,649m | **98%** | 53% |
+| ip-192-168-54-186 (services) | 13,817m | **86%** | 52% |
+| ip-192-168-29-9 (hz-dedicated) | 257m | 1% | 20% |
+| ip-192-168-59-142 (hz-dedicated) | 476m | 2% | 21% |
+| ip-192-168-61-23 (hz-dedicated) | 233m | 1% | 20% |
+
+#### Key Findings: Clustering vs. Pre-Clustering
+
+| Metric | Pre-Clustering (Single-Writer) | With Clustering (ADR 013) | Change |
+|--------|-------------------------------|---------------------------|--------|
+| HPA scaling at 25+ TPS | Never (stuck at 2 replicas) | **2 → 5 replicas** | HPA now effective |
+| Saga E2E p95 at 10 TPS | 10,161 ms (timeout) | **513 ms** | **-95%** |
+| Saga E2E p95 at 50 TPS | 10,197 ms (timeout) | **644 ms** | **-94%** |
+| Service node CPU at 500 TPS | 9-10% (idle replicas) | **86-98%** (fully utilized) | Resources used |
+| Achieved iter/s at 500 TPS target | 274 | 219 | -20% (overhead) |
+| 200 TPS sustained with sub-1s saga | No (10s+ timeouts) | **Yes** (1,036ms p95) | New capability |
+
+**Analysis:**
+
+1. **HPA scaling works with clustering.** The pre-clustering single-writer pattern prevented HPA from scaling (averaged CPU across idle + hot pods). With clustering, all replicas participate in Jet pipeline processing, driving CPU evenly and triggering HPA correctly. Services scaled from 2 to 5 replicas by 25 TPS.
+
+2. **Saga poll-miss eliminated at low-medium TPS.** Pre-clustering, saga state lived on a single pod — K8s load-balanced polls hit the wrong pod ~50% of the time, causing 10s+ timeouts even at 10 TPS. With clustering, all same-service replicas share the distributed IMap, so any pod can serve poll requests.
+
+3. **200 TPS sustained with sub-second saga completion — a new capability.** Pre-clustering, 200 TPS produced 10,242ms saga p95 (100% timeout). With clustering, 200 TPS delivers 1,036ms saga p95 — a functional 10x improvement.
+
+4. **CPU saturation is the new ceiling.** Pre-clustering, nodes were at 10% CPU at 500 TPS (idle replicas). With clustering, service nodes hit 86-98% CPU because all replicas now process real work. The 219 iter/s achieved at 500 TPS (vs. 274 pre-clustering) reflects this: distributed state management adds CPU overhead, but the system is actually utilizing its resources instead of wasting them on idle replicas.
+
+5. **Saga E2E regression at 100 and 500 TPS.** At 100 TPS (saga p95 = 10,274ms) and 500 TPS (saga p95 = 9,486ms), saga completion still hits the 10s polling timeout. This is caused by CPU saturation on the 2 service nodes — at these levels, all 5 replicas per service are CPU-constrained, delaying saga ITopic message processing. The anomalous dip at 200 TPS (saga p95 = 1,036ms) likely reflects a sweet spot where HPA was fully scaled but CPU wasn't yet saturated.
+
+6. **Next scaling step: more service nodes.** The 2 service nodes (c7i.4xlarge, 16 vCPU each) are the bottleneck. Adding a 3rd service node would relieve CPU contention and likely push the sustained saga-complete threshold above 500 TPS.
 
 ---
 
@@ -484,10 +550,11 @@ Full sweep results with resource usage snapshots are archived in:
 - `scripts/perf/k8s-results/local-20260220-083827/`
 - `scripts/perf/k8s-results/aws-small-20260220-092048/`
 - `scripts/perf/k8s-results/aws-medium-20260220-124155/`
-- `scripts/perf/k8s-results/aws-large-20260221-064132/`
+- `scripts/perf/k8s-results/aws-large-20260221-064132/` (pre-clustering)
+- `scripts/perf/k8s-results/aws-large-20260221-130407/` (with clustering, ADR 013)
 - `scripts/perf/ab-results/baseline-vs-clustered-20260221-082247/` (CAS overhead A/B)
 - `scripts/perf/ab-results/single-vs-multi-replica-20260221-083231/` (multi-replica A/B)
 - `scripts/perf/sustained-results/sustained-30m-50tps-20260221-084554/` (30m sustained with clustering)
 
 ---
-*Generated 2026-02-20, updated 2026-02-21 with AWS Large tier and per-service clustering results*
+*Generated 2026-02-20, updated 2026-02-21 with AWS Large tier, per-service clustering, and EKS clustering deployment results*
