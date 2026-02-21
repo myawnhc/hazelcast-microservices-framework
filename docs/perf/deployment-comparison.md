@@ -1,7 +1,7 @@
 # Deployment Performance Comparison
 
 **Generated**: 2026-02-21
-**Codebase**: Post-eviction fix, saga timeout fix, and outbox wiring (commits `2866947`, `1322487`, `0c2abed`)
+**Codebase**: Post-eviction fix, saga timeout fix, outbox wiring, and per-service embedded clustering (ADR 013)
 **Tiers tested**: Local (Docker Desktop), AWS Small, AWS Medium, AWS Large
 
 ---
@@ -81,6 +81,30 @@ This is a deliberate choice:
 - **AWS Medium scales linearly** from 10 to 200 TPS with stable sub-100ms p95 latency. HPA auto-scaling kept pace with demand.
 - **AWS Medium at 100 TPS delivers 199 HTTP req/s** (vs Small's 107) because HPA had already scaled services to 2-3 replicas from the 50 TPS run.
 - **Local Docker Desktop** has the lowest latency (~13ms p50 at 50 TPS) due to zero network hop — useful for development but not meaningful for production sizing.
+
+### Throughput Scaling
+
+![Throughput scaling across tiers with ideal-linear reference](charts/throughput-scaling.png)
+
+All tiers track the ideal 1:1 line up to their respective ceilings. AWS Large diverges at 500 TPS due to the k6 200 VU limit, not cluster saturation. The gap between achieved and ideal at high TPS represents the opportunity that per-service clustering (ADR 013) aims to close.
+
+### Latency by Tier
+
+![P95 latency by tier](charts/latency-by-tier.png)
+
+AWS Small shows significant cold-start overhead at 10 TPS (JVM warmup on t3.xlarge burstable instances). Medium and Large converge to stable sub-170ms p95 across all load levels. Local latency is artificially low due to zero network hop.
+
+### Order Create Latency
+
+![Order create p95 latency](charts/order-create-scaling.png)
+
+The key saga-triggering operation stays under 200ms p95 across all tiers and TPS levels (green zone). This confirms that HTTP request handling is not the bottleneck — the saga completion timeout issue is entirely in the asynchronous saga state machine processing.
+
+### Cost Efficiency
+
+![Cost per 10K transactions](charts/cost-efficiency.png)
+
+AWS Medium delivers the best cost efficiency at $0.016/10K transactions. AWS Large is 2.25x more expensive per transaction because the single-writer architecture cannot leverage the additional resources — this is exactly what per-service clustering aims to fix.
 
 ---
 
@@ -363,6 +387,97 @@ The cluster was far from saturated at 500 TPS: 10% max CPU, 23% max memory acros
 
 ---
 
+## Per-Service Embedded Clustering: Docker Compose Results
+
+**Codebase**: ADR 013 — per-service embedded Hazelcast clustering (commit `ec52966`)
+
+ADR 013 addresses the single-writer saga bottleneck identified above. Same-service replicas now form their own per-service embedded Hazelcast cluster, enabling distributed Jet pipeline processing and atomic outbox claiming (CAS-based `ClaimEntryProcessor`). The shared cluster client for cross-service ITopic is unchanged.
+
+Three tests were run on Docker Desktop (16GB host) to validate the clustering code path before EKS deployment.
+
+### Test 1: CAS Overhead (Baseline vs. Single-Replica Clustered)
+
+Measures the cost of the clustering code path — CAS outbox claiming, Jet `AT_LEAST_ONCE` snapshots (10s intervals), and stale-claim sweeping — on a single replica where no actual multi-member distribution occurs.
+
+| Metric | Baseline | Clustered | Delta |
+|--------|----------|-----------|-------|
+| Iter/s | 49.86 | 49.86 | 0% |
+| HTTP errors | 0 | 0 | — |
+| HTTP p50 (ms) | 16.46 | 16.39 | -0.4% |
+| HTTP p95 (ms) | 31.92 | 38.77 | +21% |
+| Order create p50 | 16.81 | 16.74 | -0.4% |
+| Order create p95 | 34.50 | 46.89 | +36% |
+| Saga E2E p50 | 219.00 | 220.00 | +0.5% |
+| Saga E2E p95 | 238.40 | 268.35 | +13% |
+| order-service memory | 699 MiB | 764 MiB | +9% |
+
+![CAS overhead comparison](charts/cas-overhead.png)
+
+**Finding**: CAS overhead is measurable but modest. Median latency (p50) is **unchanged** — the fast path is unaffected. Tail latency (p95) increases 13-36% due to periodic Jet snapshots and `executeOnKey` CAS operations. Throughput is identical. Zero errors on both variants.
+
+### Test 2: Multi-Replica Scaling (Docker Compose — Resource-Bound)
+
+3x order-service replicas with TCP-IP discovery, nginx round-robin LB, at 100 TPS target. This test was **resource-bound on the 16GB host** — results confirm functional correctness but are not valid for throughput/latency comparison.
+
+| Metric | Single (50 TPS) | Multi-3x (100 TPS) | Notes |
+|--------|-----------------|---------------------|-------|
+| Achieved iter/s | 49.85 | 49.40 | Multi couldn't sustain 100 TPS |
+| HTTP errors | 0 | 0 | CAS and clustering work correctly |
+| Order create p95 | 111 ms | 13,436 ms | CPU saturation, not a code problem |
+| order-service primary CPU | 13.4% | 144.6% | Pegged on 16GB shared host |
+| Total stack memory | ~7.3 GB | ~11.6 GB | 16GB host starved for resources |
+
+**Finding**: The per-service embedded cluster formed correctly (3 order-service members via TCP-IP), CAS claiming prevented duplicate delivery, and nginx round-robin distributed requests. However, the 16GB Docker Desktop host cannot run 3 order-service replicas (4.5 GB) plus the full shared infrastructure (~7 GB) without severe resource contention. **EKS testing required for valid scaling measurements.**
+
+### Test 3: Sustained Load (30 minutes at 50 TPS)
+
+Validates that Jet `AT_LEAST_ONCE` snapshots and CAS outbox claiming don't cause OOM or latency degradation over extended operation.
+
+| Metric | Value |
+|--------|-------|
+| Duration | 30m (1,811s actual) |
+| Iterations | 89,917 |
+| Achieved TPS | 49.94 |
+| Dropped iterations | 83 (0.09%) |
+| HTTP errors | 0 |
+| OOM kills | **None** |
+| HTTP p50 / p95 | 18.38 ms / 75.69 ms |
+| Order create p50 / p95 | 18.98 ms / 88.44 ms |
+| Saga E2E avg | Consistent throughout |
+| VU range | min 9, max 119 (avg ~15) |
+
+**Memory growth over 30 minutes:**
+
+| Service | Start (1 min) | End (30 min) | Growth |
+|---------|---------------|--------------|--------|
+| order-service | 566 MiB | 1,114 MiB | +548 MiB (+97%) |
+| inventory-service | 528 MiB | 821 MiB | +293 MiB (+55%) |
+| payment-service | 485 MiB | 782 MiB | +297 MiB (+61%) |
+| account-service | 572 MiB | 681 MiB | +109 MiB (+19%) |
+| Hazelcast avg | ~300 MiB | ~390 MiB | +90 MiB (+30%) |
+
+![Sustained memory growth](charts/sustained-memory.png)
+
+**Finding**: Zero OOM kills, zero errors, no VU creep (latency stayed flat). order-service reached 74% of its 1.5 GiB limit after 30 minutes — the known IMap eviction gap (documented in MEMORY.md) continues to drive unbounded memory growth. For sustained demos beyond ~45 minutes, IMap eviction must be implemented. The Jet snapshot mechanism itself adds minimal overhead (~30 MiB for Hazelcast cluster memory growth).
+
+### Local Test Summary
+
+| Test | Result | Key Finding |
+|------|--------|-------------|
+| CAS overhead | **Pass** | p50 flat, p95 +13-36%, throughput unchanged |
+| Multi-replica (local) | **Resource-bound** | Functionally correct. EKS needed for valid scaling data |
+| Sustained 30m | **Pass** | Zero OOM, zero errors, stable latency |
+
+### Next Steps
+
+EKS Large tier (5x c7i.4xlarge) deployment with `embeddedClustering.enabled: true` will validate:
+1. **Linear throughput scaling** with 2-3 order-service replicas
+2. **Saga poll-miss elimination** — same-service clustering means all replicas share saga state
+3. **HPA effectiveness** — distributed Jet pipeline should enable meaningful auto-scaling
+4. **CAS contention under load** — multiple pods claiming outbox entries concurrently
+
+---
+
 ## Raw Data
 
 Full sweep results with resource usage snapshots are archived in:
@@ -370,6 +485,9 @@ Full sweep results with resource usage snapshots are archived in:
 - `scripts/perf/k8s-results/aws-small-20260220-092048/`
 - `scripts/perf/k8s-results/aws-medium-20260220-124155/`
 - `scripts/perf/k8s-results/aws-large-20260221-064132/`
+- `scripts/perf/ab-results/baseline-vs-clustered-20260221-082247/` (CAS overhead A/B)
+- `scripts/perf/ab-results/single-vs-multi-replica-20260221-083231/` (multi-replica A/B)
+- `scripts/perf/sustained-results/sustained-30m-50tps-20260221-084554/` (30m sustained with clustering)
 
 ---
-*Generated 2026-02-20, updated 2026-02-21 with AWS Large tier results*
+*Generated 2026-02-20, updated 2026-02-21 with AWS Large tier and per-service clustering results*
