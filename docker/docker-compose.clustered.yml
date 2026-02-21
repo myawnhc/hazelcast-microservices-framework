@@ -1,0 +1,33 @@
+# Docker Compose Override: Embedded Clustering (Single Replica)
+#
+# Enables the per-service embedded clustering code path on all 4 microservices
+# while running a single replica per service. This measures the overhead of
+# CAS-based outbox claiming and Jet AT_LEAST_ONCE snapshots without actual
+# multi-member distribution.
+#
+# Since no peers are specified, each service remains a cluster-of-1 but
+# exercises the full claiming/sweeping logic.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.clustered.yml up -d
+
+services:
+  account-service:
+    environment:
+      - HAZELCAST_EMBEDDED_CLUSTERING_ENABLED=true
+      - HAZELCAST_EMBEDDED_PORT=5801
+
+  inventory-service:
+    environment:
+      - HAZELCAST_EMBEDDED_CLUSTERING_ENABLED=true
+      - HAZELCAST_EMBEDDED_PORT=5801
+
+  order-service:
+    environment:
+      - HAZELCAST_EMBEDDED_CLUSTERING_ENABLED=true
+      - HAZELCAST_EMBEDDED_PORT=5801
+
+  payment-service:
+    environment:
+      - HAZELCAST_EMBEDDED_CLUSTERING_ENABLED=true
+      - HAZELCAST_EMBEDDED_PORT=5801

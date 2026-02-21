@@ -44,13 +44,18 @@ public final class EmbeddedClusteringConfigurer {
      * Kubernetes DNS-based discovery is activated using the given {@code serviceDns} hostname.
      * This lets same-service replicas find each other and form a per-service embedded cluster.
      *
+     * <p>When {@code enabled} is {@code true} and {@code discoveryMode} is {@code "tcp-ip"},
+     * TCP/IP discovery is activated using the given {@code serviceDns} as a comma-separated
+     * list of member addresses (e.g., {@code "order-service:5801,order-service-2:5801"}).
+     * This mode is used for Docker Compose multi-replica testing.
+     *
      * <p>When {@code enabled} is {@code false} (the default), all discovery mechanisms
      * are disabled and the instance runs as a standalone cluster-of-1.
      *
      * @param config        the Hazelcast Config to modify (mutated in place)
      * @param enabled       whether per-service clustering is enabled
-     * @param discoveryMode the discovery mechanism ({@code "dns"} for Kubernetes)
-     * @param serviceDns    the headless service DNS name for Kubernetes discovery (nullable)
+     * @param discoveryMode the discovery mechanism ({@code "dns"} for Kubernetes, {@code "tcp-ip"} for Docker Compose)
+     * @param serviceDns    the headless service DNS name (dns mode) or comma-separated members (tcp-ip mode)
      * @param port          the port for the embedded instance (default: 5801)
      */
     public static void configure(final Config config, final boolean enabled,
@@ -64,12 +69,25 @@ public final class EmbeddedClusteringConfigurer {
         join.getAutoDetectionConfig().setEnabled(false);
         join.getMulticastConfig().setEnabled(false);
 
-        if (enabled && "dns".equals(discoveryMode) && serviceDns != null && !serviceDns.isBlank()) {
-            join.getKubernetesConfig()
-                    .setEnabled(true)
-                    .setProperty("service-dns", serviceDns);
-            logger.info("Embedded clustering ENABLED: mode={}, serviceDns={}, port={}",
-                    discoveryMode, serviceDns, port);
+        if (enabled && serviceDns != null && !serviceDns.isBlank()) {
+            if ("dns".equals(discoveryMode)) {
+                join.getKubernetesConfig()
+                        .setEnabled(true)
+                        .setProperty("service-dns", serviceDns);
+                logger.info("Embedded clustering ENABLED: mode=dns, serviceDns={}, port={}",
+                        serviceDns, port);
+            } else if ("tcp-ip".equals(discoveryMode)) {
+                join.getTcpIpConfig().setEnabled(true);
+                for (String member : serviceDns.split(",")) {
+                    join.getTcpIpConfig().addMember(member.trim());
+                }
+                logger.info("Embedded clustering ENABLED: mode=tcp-ip, members={}, port={}",
+                        serviceDns, port);
+            } else {
+                logger.warn("Unknown discovery mode '{}' — falling back to standalone", discoveryMode);
+            }
+        } else if (enabled) {
+            logger.info("Embedded clustering enabled but no service address configured — standalone mode, port={}", port);
         } else {
             logger.info("Embedded clustering DISABLED: standalone mode, port={}", port);
         }

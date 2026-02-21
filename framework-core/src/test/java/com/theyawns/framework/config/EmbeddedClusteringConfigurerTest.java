@@ -149,6 +149,58 @@ class EmbeddedClusteringConfigurerTest {
     }
 
     @Nested
+    @DisplayName("TCP-IP clustering mode")
+    class TcpIpMode {
+
+        @Test
+        @DisplayName("should enable TCP-IP discovery when mode is tcp-ip")
+        void shouldEnableTcpIpDiscovery() {
+            EmbeddedClusteringConfigurer.configure(config, true, "tcp-ip",
+                    "order-service:5801,order-service-2:5801", 5801);
+
+            assertThat(config.getNetworkConfig().getJoin().getTcpIpConfig().isEnabled()).isTrue();
+        }
+
+        @Test
+        @DisplayName("should add all members from comma-separated list")
+        void shouldAddAllMembers() {
+            EmbeddedClusteringConfigurer.configure(config, true, "tcp-ip",
+                    "order-service:5801,order-service-2:5801,order-service-3:5801", 5801);
+
+            assertThat(config.getNetworkConfig().getJoin().getTcpIpConfig().getMembers())
+                    .contains("order-service:5801", "order-service-2:5801", "order-service-3:5801");
+        }
+
+        @Test
+        @DisplayName("should not enable Kubernetes discovery in TCP-IP mode")
+        void shouldNotEnableKubernetesInTcpIpMode() {
+            EmbeddedClusteringConfigurer.configure(config, true, "tcp-ip",
+                    "order-service:5801", 5801);
+
+            assertThat(config.getNetworkConfig().getJoin().getKubernetesConfig().isEnabled()).isFalse();
+        }
+
+        @Test
+        @DisplayName("should still disable multicast in TCP-IP mode")
+        void shouldStillDisableMulticastInTcpIpMode() {
+            EmbeddedClusteringConfigurer.configure(config, true, "tcp-ip",
+                    "order-service:5801", 5801);
+
+            assertThat(config.getNetworkConfig().getJoin().getMulticastConfig().isEnabled()).isFalse();
+        }
+
+        @Test
+        @DisplayName("should trim whitespace from member addresses")
+        void shouldTrimWhitespaceFromMembers() {
+            EmbeddedClusteringConfigurer.configure(config, true, "tcp-ip",
+                    "order-service:5801 , order-service-2:5801 ", 5801);
+
+            assertThat(config.getNetworkConfig().getJoin().getTcpIpConfig().getMembers())
+                    .contains("order-service:5801", "order-service-2:5801");
+        }
+    }
+
+    @Nested
     @DisplayName("Default port constant")
     class DefaultPort {
 
