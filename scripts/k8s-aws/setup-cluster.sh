@@ -139,7 +139,7 @@ else
             --name "$CLUSTER_NAME" \
             --region "$REGION" \
             --profile "$PROFILE" \
-            --version 1.33 \
+            --version 1.35 \
             --without-nodegroup
 
         eksctl create nodegroup \
@@ -171,7 +171,7 @@ else
             --name "$CLUSTER_NAME" \
             --region "$REGION" \
             --profile "$PROFILE" \
-            --version 1.33 \
+            --version 1.35 \
             --node-type "$NODE_TYPE" \
             --nodes "$NODE_COUNT" \
             --nodes-min "$NODE_MIN" \

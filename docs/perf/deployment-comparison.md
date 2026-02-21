@@ -38,7 +38,7 @@ This is a deliberate choice:
 
 | Setting | Local | AWS Small | AWS Medium | AWS Large |
 |---------|-------|-----------|------------|-----------|
-| Infrastructure | Docker Desktop | EKS 1.33 | EKS 1.33 | EKS 1.33 |
+| Infrastructure | Docker Desktop | EKS 1.35 | EKS 1.35 | EKS 1.35 |
 | Nodes | 1 (shared) | 2x t3.xlarge | 3x c7i.2xlarge | 5x c7i.4xlarge (planned) |
 | vCPU / node | Shared (host) | 4 vCPU | 8 vCPU | 16 vCPU |
 | RAM / node | Shared (host) | 16 GB | 16 GB | 32 GB |

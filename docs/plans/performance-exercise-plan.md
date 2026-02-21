@@ -420,7 +420,7 @@ Session 2 (Feb 20): Re-ran all tiers after eviction fix, saga timeout fix, and o
 - Large tier: replicaCount 5→3 (matches 3 dedicated nodes with hard anti-affinity), PDB minAvailable 3→2
 - Setup script: fixed `--node-taints` (not a valid eksctl CLI flag) → `kubectl taint` post-creation
 
-**Pending:** AWS Large tier test — requires vCPU quota increase from 16 to 96 for c7i.4xlarge instances. Once approved, run `setup-cluster.sh --tier large` and sweep at 10/25/50/100/200/500 TPS.
+**Pending:** AWS Large tier test — vCPU quota increase approved. EKS upgraded from 1.33 to 1.35. Run `setup-cluster.sh --tier large` and sweep at 10/25/50/100/200/500 TPS.
 
 **Success:** Performance numbers from 3 tiers, comparison table with cost-performance analysis, HPA scaling demonstrated, architectural bottleneck documented.
 
