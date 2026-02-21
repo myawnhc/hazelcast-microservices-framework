@@ -383,7 +383,7 @@ LAP (13), PER (13), STO (12), NET (12), AUD (12), ACC (13), DIS (12), FUR (13)
 
 ---
 
-### Session 11: Multi-Deployment Testing — COMPLETED (Large tier pending)
+### Session 11: Multi-Deployment Testing — COMPLETED
 
 **Objectives:** Run performance tests on Kubernetes, demonstrate vertical scaling, compare Docker Compose vs K8s.
 
@@ -394,35 +394,74 @@ LAP (13), PER (13), STO (12), NET (12), AUD (12), ACC (13), DIS (12), FUR (13)
 - `scripts/k8s-aws/start.sh` — Helm deploy with tier-specific values files
 - `scripts/k8s-aws/teardown-cluster.sh` — EKS cluster teardown
 - `k8s/hazelcast-microservices/values-aws-{small,medium,large}.yaml` — Tier-specific Helm values
-- `docs/perf/deployment-comparison.md` — 3-tier comparison report with saga timeout analysis
+- `docs/perf/deployment-comparison.md` — Full historical comparison report
+- `docs/perf/deployment-comparison-final.md` — Clean final comparison with best results per tier
 
-**Work completed (Feb 19-20, 2 sessions):**
+**Work completed (Feb 19-21, 4 sessions):**
 
 Session 1 (Feb 19): Built K8s perf test infrastructure, initial local + AWS Small runs (pre-fix baseline).
 Session 2 (Feb 20): Re-ran all tiers after eviction fix, saga timeout fix, and outbox wiring.
+Session 3 (Feb 21): AWS Large tier without clustering — discovered multi-replica saga polling effect.
+Session 4 (Feb 21): Implemented per-service embedded clustering (ADR 013) — breakthrough results.
+
+**Results by tier:**
 
 | Tier | Nodes | TPS Tested | Max Error Rate | Key Finding |
 |------|-------|------------|----------------|-------------|
 | Local (Docker Desktop) | 1 | 10, 25, 50 | 0.02% | Lowest latency (13ms p50), no metrics-server |
 | AWS Small (2x t3.xlarge) | 2 | 10, 25, 50, 100 | 0.05% | 0% errors at 100 TPS (was 1.73% pre-fix) |
 | AWS Medium (3x c7i.2xlarge) | 3 | 10, 25, 50, 100, 200 | 0.10% | 0% errors at 200 TPS, HPA scaled to 3 replicas |
-| AWS Large (5x c7i.4xlarge) | 5 | — | — | Blocked by vCPU service quota (16 → 96 requested) |
+| AWS Large (5x c7i.4xlarge) | 5 | 10, 25, 50, 100, 200, 500 | 0.05% | **With clustering**: HPA 2→5 replicas, 200 TPS sustained with sub-1s saga |
 
-**HPA auto-scaling validated (Medium tier):**
+**HPA auto-scaling validated:**
+
+Medium tier (without clustering):
 - Inventory and order services scaled from 1 to 3 replicas by 100 TPS
 - Payment service scaled from 1 to 3 replicas by 200 TPS
 - Account service stayed at 1 (only 15% of traffic)
+- Saga processing remained on primary pod — replicas couldn't help
 
-**Saga timeout analysis:** At 50+ TPS on Medium, saga E2E completion hits 10s polling timeout. Root cause: single-writer pattern (ADR 008/010) — order-service primary pod owns saga state, HPA-scaled replicas handle HTTP but don't participate in saga completion. Nodes at 8-19% CPU — not resource-bound. Fix path: PostgreSQL-backed partitioned saga state (future work).
+Large tier (with per-service clustering, ADR 013):
+- Services scaled from 2 to 5 replicas by 25 TPS
+- **All replicas participated in distributed Jet pipeline processing**
+- CPU utilization reached 86-98% on service nodes at 500 TPS (fully utilized)
+
+**Per-service embedded clustering (ADR 013) — the breakthrough:**
+
+| Metric | Without Clustering | With Clustering | Impact |
+|--------|-------------------|-----------------|--------|
+| Saga E2E p95 at 10 TPS | 10,161 ms (timeout) | 513 ms | **-95%** |
+| Saga E2E p95 at 50 TPS | 10,197 ms (timeout) | 644 ms | **-94%** |
+| 200 TPS with sub-1s saga | Impossible | Yes (1,036ms p95) | New capability |
+| Service node CPU at 500 TPS | 9-10% (idle replicas) | 86-98% (fully utilized) | Resources used |
+| HPA scaling at 25+ TPS | Stuck at base replicas | 2 → 5 replicas | HPA now effective |
+
+Root cause: Pre-clustering, each embedded HazelcastInstance was standalone (cluster-of-1). K8s load-balanced saga polls hit pods that didn't own saga state (~50% miss rate). With clustering, same-service replicas form their own embedded cluster via K8s DNS discovery — all replicas share the distributed IMap and can serve polls and process saga events.
+
+**5 deployment fixes required for clustering:**
+1. DNS discovery needs both `service-dns` AND `service-port` properties
+2. Jet job submission: `newJob()` → `newJobIfAbsent()` for multi-member safety
+3. PagingPredicate comparators: lambda → named `Serializable` class for cross-member IMap ops
+4. `isRunning()`: wrap in try/catch (remote call fails on non-coordinator members)
+5. `@Value` not populated during `BeanFactoryPostProcessor` phase → `System.getenv()` fallbacks
 
 **Infrastructure fixes applied:**
-- EKS K8s version upgraded from 1.32 to 1.33
+- EKS K8s version upgraded from 1.32 to 1.35
 - Large tier: replicaCount 5→3 (matches 3 dedicated nodes with hard anti-affinity), PDB minAvailable 3→2
 - Setup script: fixed `--node-taints` (not a valid eksctl CLI flag) → `kubectl taint` post-creation
 
-**AWS Large tier completed (2026-02-21):** vCPU quota increase approved, EKS 1.35 cluster created (5x c7i.4xlarge, 3 dedicated Hazelcast nodes + 2 service nodes). TPS sweep at 10/25/50/100/200/500 completed — 0.00% HTTP error rate at all levels, 576 HTTP req/s at 500 TPS. Cluster barely utilized (10% max CPU). Multi-replica saga polling effect discovered: 2 base replicas cause saga timeouts even at 10 TPS due to K8s load-balancing polls to non-primary pods. Results in `scripts/perf/k8s-results/aws-large-20260221-064132/`.
+**Cost-performance analysis:**
 
-**Success:** Performance numbers from 4 tiers (Local, AWS Small/Medium/Large), comparison table with cost-performance analysis, HPA scaling demonstrated, architectural bottleneck documented across single-replica and multi-replica configurations.
+| Tier | Cost/hr | Max Sustained TPS | Saga Completion | Cost per 10K Txn |
+|------|---------|-------------------|-----------------|------------------|
+| Local | $0 | 50 | Sub-300ms p95 | $0 |
+| AWS Small | ~$0.76 | 100 | Sub-650ms p95 | ~$0.021 |
+| AWS Medium | ~$1.18 | 200 | Timeout at 50+ TPS | ~$0.016 |
+| AWS Large (clustered) | ~$3.50 | 200 | Sub-1s p95 | ~$0.049 |
+
+**Raw data:** `scripts/perf/k8s-results/` — 4 directories (local, aws-small, aws-medium, aws-large with clustering).
+
+**Success:** Performance numbers from 4 tiers across 4 sessions, per-service clustering implemented and validated as the scaling breakthrough, comprehensive comparison with cost analysis, ADR 013 written.
 
 ---
 
@@ -463,7 +502,7 @@ Session 7,8,9 ──> Session 11 (K8s/Cloud)
 Session 10,11 ──> Session 12 (Documentation & Blog)
 ```
 
-Sessions 1-11 are complete (Session 11 large tier pending vCPU quota). Session 12 depends on having results.
+Sessions 1-11 are complete. Session 12 (Documentation, Guide, Blog Post) is the final session.
 
 ---
 
@@ -517,7 +556,8 @@ docs/perf/
   stability-analysis.md             # (Session 8)
   microbenchmark-results.md         # (Session 9)
   cluster-benchmark-results.md      # (Session 10)
-  deployment-comparison.md          # (Session 11)
+  deployment-comparison.md          # (Session 11) full historical comparison
+  deployment-comparison-final.md    # (Session 11) clean final version with best results per tier
   performance-exercise-summary.md   # (Session 12)
   production-checklist.md            # (Session 12)
   flamegraphs/                       # HTML files (Session 5)
