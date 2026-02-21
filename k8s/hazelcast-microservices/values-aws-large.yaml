@@ -1,15 +1,11 @@
 # =============================================================================
-# AWS EKS Values — Large Tier (Production Extrapolation)
+# AWS EKS Values — Large Tier (Production-Scale)
 # =============================================================================
-#
-# WARNING: This tier is documented for reference but UNTESTED. It extrapolates
-# from medium-tier benchmarks to show what a production configuration might
-# look like. Validate with load testing before production use.
 #
 # Target: 5x c7i.4xlarge (16 vCPU, 32GB each)
 #         2 node groups: hazelcast-dedicated (3 nodes) + services (2 nodes)
 # Cost:   ~$3.50/hr ($0.68/hr x5 nodes + $0.10 EKS control plane)
-# Use:    Production extrapolation, capacity planning documentation
+# Use:    Production-scale benchmarking and capacity planning
 #
 # Deploy: helm install demo k8s/hazelcast-microservices/ \
 #           -f k8s/hazelcast-microservices/values-aws-large.yaml \

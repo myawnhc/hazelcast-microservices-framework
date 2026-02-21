@@ -420,9 +420,9 @@ Session 2 (Feb 20): Re-ran all tiers after eviction fix, saga timeout fix, and o
 - Large tier: replicaCount 5→3 (matches 3 dedicated nodes with hard anti-affinity), PDB minAvailable 3→2
 - Setup script: fixed `--node-taints` (not a valid eksctl CLI flag) → `kubectl taint` post-creation
 
-**Pending:** AWS Large tier test — vCPU quota increase approved. EKS upgraded from 1.33 to 1.35. Run `setup-cluster.sh --tier large` and sweep at 10/25/50/100/200/500 TPS.
+**AWS Large tier completed (2026-02-21):** vCPU quota increase approved, EKS 1.35 cluster created (5x c7i.4xlarge, 3 dedicated Hazelcast nodes + 2 service nodes). TPS sweep at 10/25/50/100/200/500 completed — 0.00% HTTP error rate at all levels, 576 HTTP req/s at 500 TPS. Cluster barely utilized (10% max CPU). Multi-replica saga polling effect discovered: 2 base replicas cause saga timeouts even at 10 TPS due to K8s load-balancing polls to non-primary pods. Results in `scripts/perf/k8s-results/aws-large-20260221-064132/`.
 
-**Success:** Performance numbers from 3 tiers, comparison table with cost-performance analysis, HPA scaling demonstrated, architectural bottleneck documented.
+**Success:** Performance numbers from 4 tiers (Local, AWS Small/Medium/Large), comparison table with cost-performance analysis, HPA scaling demonstrated, architectural bottleneck documented across single-replica and multi-replica configurations.
 
 ---
 

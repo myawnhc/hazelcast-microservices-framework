@@ -1,9 +1,8 @@
 # Deployment Performance Comparison
 
-**Generated**: 2026-02-20
+**Generated**: 2026-02-21
 **Codebase**: Post-eviction fix, saga timeout fix, and outbox wiring (commits `2866947`, `1322487`, `0c2abed`)
-**Tiers tested**: Local (Docker Desktop), AWS Small, AWS Medium
-**AWS Large**: Deferred — pending vCPU service quota increase (see [Pending Work](#pending-work))
+**Tiers tested**: Local (Docker Desktop), AWS Small, AWS Medium, AWS Large
 
 ---
 
@@ -39,7 +38,7 @@ This is a deliberate choice:
 | Setting | Local | AWS Small | AWS Medium | AWS Large |
 |---------|-------|-----------|------------|-----------|
 | Infrastructure | Docker Desktop | EKS 1.35 | EKS 1.35 | EKS 1.35 |
-| Nodes | 1 (shared) | 2x t3.xlarge | 3x c7i.2xlarge | 5x c7i.4xlarge (planned) |
+| Nodes | 1 (shared) | 2x t3.xlarge | 3x c7i.2xlarge | 5x c7i.4xlarge |
 | vCPU / node | Shared (host) | 4 vCPU | 8 vCPU | 16 vCPU |
 | RAM / node | Shared (host) | 16 GB | 16 GB | 32 GB |
 | Hazelcast replicas | 2 | 3 | 3 | 3 (dedicated node group) |
@@ -47,7 +46,7 @@ This is a deliberate choice:
 | HPA enabled | No | No | Yes (70% CPU) | Yes (70% CPU) |
 | Service memory limit | 1Gi | 1Gi | 2Gi | 3Gi |
 | Hz memory limit | 512Mi | 512Mi | 2Gi | 12Gi |
-| TPS levels tested | 10, 25, 50 | 10, 25, 50, 100 | 10, 25, 50, 100, 200 | — |
+| TPS levels tested | 10, 25, 50 | 10, 25, 50, 100 | 10, 25, 50, 100, 200 | 10, 25, 50, 100, 200, 500 |
 | Est. cost / hour | $0 | ~$0.76 | ~$1.18 | ~$3.50 |
 
 ---
@@ -68,10 +67,17 @@ This is a deliberate choice:
 | 100 | AWS Small | 99.16 | 106.87 | 66.85 | 125.47 | 0.00% |
 | 100 | AWS Medium | 94.12 | 199.20 | 45.47 | 87.27 | 0.00% |
 | 200 | AWS Medium | 187.75 | 455.52 | 49.43 | 99.05 | 0.00% |
+| 10 | AWS Large | 9.59 | 15.64 | 46.26 | 114.21 | 0.00% |
+| 25 | AWS Large | 24.02 | 44.04 | 43.20 | 73.65 | 0.01% |
+| 50 | AWS Large | 47.24 | 98.78 | 41.78 | 68.11 | 0.00% |
+| 100 | AWS Large | 94.59 | 195.89 | 50.83 | 105.22 | 0.00% |
+| 200 | AWS Large | 185.50 | 380.65 | 56.62 | 144.85 | 0.00% |
+| 500 | AWS Large | 274.07 | 576.55 | 63.71 | 161.87 | 0.00% |
 
 ### Key Observations
 
-- **Zero HTTP errors** at every TPS level across all tiers (the 0.02-0.10% are isolated single-request failures during warmup, not systemic). Previous runs showed 1.73% at 100 TPS on AWS Small — the saga timeout fix eliminated this entirely.
+- **Zero HTTP errors** at every TPS level across all tiers (the 0.01-0.10% are isolated single-request failures during warmup, not systemic). Previous runs showed 1.73% at 100 TPS on AWS Small — the saga timeout fix eliminated this entirely.
+- **AWS Large handles 500 TPS target** with 0.00% HTTP error rate, though actual throughput capped at 274 iter/s due to the 200 VU limit in the k6 test script. The cluster itself was far from saturated (max 10% CPU on any node).
 - **AWS Medium scales linearly** from 10 to 200 TPS with stable sub-100ms p95 latency. HPA auto-scaling kept pace with demand.
 - **AWS Medium at 100 TPS delivers 199 HTTP req/s** (vs Small's 107) because HPA had already scaled services to 2-3 replicas from the 50 TPS run.
 - **Local Docker Desktop** has the lowest latency (~13ms p50 at 50 TPS) due to zero network hop — useful for development but not meaningful for production sizing.
@@ -109,9 +115,24 @@ This is a deliberate choice:
 
 > **Note on Saga E2E at AWS Medium:** HTTP operation latency stays excellent (sub-120ms p95 even at 200 TPS), but saga end-to-end completion hits the 10-second polling timeout starting at 50 TPS. See [Saga Timeout Analysis](#saga-timeout-analysis) below for the root cause.
 
+### AWS Large (5x c7i.4xlarge)
+
+| TPS | Create Order p95 | Reserve Stock p95 | Create Customer p95 | Saga E2E p95 |
+|-----|-------------------|-------------------|---------------------|--------------|
+| 10 | 115.30 | 116.77 | 128.13 | 10,160.90 |
+| 25 | 82.36 | 89.48 | 115.28 | 10,169.45 |
+| 50 | 73.73 | 79.09 | 84.46 | 10,196.95 |
+| 100 | 115.19 | 116.36 | 129.19 | 10,233.90 |
+| 200 | 154.28 | 148.01 | 154.63 | 10,242.30 |
+| 500 | 169.49 | 151.23 | 157.46 | 10,253.00 |
+
+> **Note on Saga E2E at AWS Large:** Saga timeouts appear at **all** TPS levels, even 10 TPS — unlike Medium where timeouts started at 50 TPS. This is caused by the multi-replica effect: with 2 base replicas per service, K8s load-balances saga poll requests across both pods, but only the primary pod holds saga state. ~50% of polls hit the "wrong" pod and miss. See [Saga Timeout Analysis](#saga-timeout-analysis).
+
 ---
 
-## HPA Auto-Scaling Observations (AWS Medium)
+## HPA Auto-Scaling Observations
+
+### AWS Medium (min 1 / max 3)
 
 HPA was configured with `targetCPUUtilizationPercentage: 70` and min 1 / max 3 replicas for all services.
 
@@ -129,13 +150,34 @@ HPA was configured with `targetCPUUtilizationPercentage: 70` and min 1 / max 3 r
 - Account-service never scaled beyond 1 — it handles only 15% of traffic (customer creates), well within single-pod capacity.
 - API-gateway stayed at 1 — it was not part of the port-forward test path (services accessed directly).
 
+### AWS Large (min 2 / max 5)
+
+HPA was configured with `targetCPUUtilizationPercentage: 70` and min 2 / max 5 replicas. All services started at 2 replicas.
+
+| TPS | account | inventory | order | payment | api-gateway |
+|-----|---------|-----------|-------|---------|-------------|
+| 10 | 2 | 2 | 2 | 2 | 2 |
+| 25 | 2 | 2 | 2 | 2 | 2 |
+| 50 | 2 | 2 | 2 | 2 | 2 |
+| 100 | 2 | 2 | 2 | 2 | 2 |
+| 200 | 2 | 2 | 2 | 2 | 2 |
+| 500 | 2 | 2 | 2 | 2 | 2 |
+
+**Findings:**
+- **HPA never scaled beyond the base 2 replicas**, even at 500 TPS. This is a direct consequence of the single-writer pattern: only one pod per service runs the Jet pipeline and handles saga processing, so load is unevenly distributed.
+- With 2 replicas, HPA averages CPU across both pods. At 500 TPS: order-service primary pod consumed 1,302m CPU (130% of the 1,000m request), but the secondary pod was at 121m (12%). The average (711m, 71%) barely crosses the 70% threshold — not enough to trigger sustained scale-up within each 3-minute test window.
+- **Contrast with Medium:** Medium started with 1 replica, so the single pod bore 100% of load and easily crossed the 70% threshold, triggering scale-up to 2-3 pods. Large's 2-replica baseline masks the hot-primary pattern.
+- **Implication:** For the single-writer architecture, starting with more replicas does not improve throughput — it provides HTTP request distribution but doesn't help saga processing. The fix path (ADR 010) is partitioned saga state across replicas.
+
 ---
 
 ## Saga Timeout Analysis
 
 ### The Problem
 
-At 50+ TPS on AWS Medium, the saga end-to-end (E2E) completion metric hits the 10-second polling timeout:
+Saga E2E completion hits the 10-second polling timeout. The onset depends on tier configuration:
+
+**AWS Medium (1 base replica, HPA 1-3):**
 
 | TPS | Saga E2E p50 | Saga E2E p95 | % Timing Out |
 |-----|--------------|--------------|--------------|
@@ -145,36 +187,56 @@ At 50+ TPS on AWS Medium, the saga end-to-end (E2E) completion metric hits the 1
 | 100 | 316 ms | 10,207 ms | ~40-50% |
 | 200 | 10,037 ms | 10,230 ms | ~80-90% |
 
+**AWS Large (2 base replicas, HPA 2-5):**
+
+| TPS | Saga E2E p50 | Saga E2E p95 | % Timing Out |
+|-----|--------------|--------------|--------------|
+| 10 | 291 ms | 10,161 ms | ~5-10% |
+| 25 | 291 ms | 10,169 ms | ~5-10% |
+| 50 | 300 ms | 10,197 ms | ~25-30% |
+| 100 | 367 ms | 10,234 ms | ~40-50% |
+| 200 | 441 ms | 10,242 ms | ~50-60% |
+| 500 | 1,764 ms | 10,253 ms | ~70-80% |
+
 ### Root Cause: Not a Resource Bottleneck
 
-At 200 TPS, all three AWS Medium nodes show **minimal CPU utilization**:
+At 500 TPS on AWS Large, all five nodes show **minimal CPU utilization**:
 
 | Node | CPU | CPU% | Memory% |
 |------|-----|------|---------|
-| ip-192-168-15-4 | 665m | 8% | 34% |
-| ip-192-168-47-80 | 1,465m | 18% | 47% |
-| ip-192-168-59-117 | 1,535m | 19% | 36% |
+| ip-192-168-11-244 | 150m | 0% | 15% |
+| ip-192-168-24-171 | 1,555m | 9% | 23% |
+| ip-192-168-26-66 | 136m | 0% | 12% |
+| ip-192-168-39-191 | 232m | 1% | 18% |
+| ip-192-168-53-127 | 1,688m | 10% | 22% |
 
-Meanwhile, HTTP request latency remains excellent — all three operation types hold sub-120ms p95 at 200 TPS. This proves the cluster has ample capacity.
+Meanwhile, HTTP request latency remains excellent — all three operation types hold sub-170ms p95 at 500 TPS. This proves the cluster has ample capacity.
 
 ### Root Cause: Architectural (Single-Writer Saga Pattern)
 
 The saga timeout is caused by the **single-writer saga state machine pattern**:
 
-1. **Order creation** is fast (~50ms) — the HTTP response returns immediately after writing the initial event.
+1. **Order creation** is fast (~50-65ms) — the HTTP response returns immediately after writing the initial event.
 2. **Saga completion** requires three subsequent cross-service messages via Hazelcast ITopic:
    - inventory-service reserves stock → publishes `StockReservedEvent`
    - payment-service processes payment → publishes `PaymentProcessedEvent`
    - order-service confirms order → updates saga state to CONFIRMED
-3. **Saga state is owned by order-service's primary pod.** When HPA scales order-service to 3 replicas, only the original pod runs the Jet pipeline and processes saga state updates. The additional replicas handle HTTP requests but don't participate in saga completion.
+3. **Saga state is owned by order-service's primary pod.** When running multiple replicas, only the original pod runs the Jet pipeline and processes saga state updates. The additional replicas handle HTTP requests but don't participate in saga completion.
 4. At high TPS, the primary pod's saga processing queue grows faster than it can drain, causing increasing completion latency.
+
+### Multi-Replica Effect (AWS Large)
+
+The Large tier reveals an additional factor: **with 2+ replicas, saga poll requests are load-balanced across pods**. Since only the primary pod holds saga state, ~50% of poll requests hit the secondary pod and return "not found," causing the client to time out waiting.
+
+This explains why Large shows saga timeouts even at 10 TPS (p95 = 10,161ms) while Medium at 10 TPS completes cleanly (p95 = 372ms). At 10 TPS the processing queue is not bottlenecked — the issue is purely that polls miss the right pod.
 
 ### Implications
 
-- **HTTP throughput is NOT limited by this.** The system successfully processed 200 TPS (455 HTTP req/s) with 0.00% error rate.
+- **HTTP throughput is NOT limited by this.** AWS Large processed 500 TPS target (576 HTTP req/s) with 0.00% error rate. The actual throughput ceiling was not reached — the k6 200 VU limit capped achieved throughput at 274 iter/s.
 - **Saga completion latency** is a known consequence of the single-writer embedded Hazelcast architecture (ADR 008 / ADR 010).
-- **Fix path:** ADR 010 identifies PostgreSQL-backed event store + partitioned saga state as the solution. This allows saga state to be distributed across replicas rather than pinned to a single writer.
-- **For demo purposes:** Saga timeouts at 50+ TPS are cosmetic — they affect only the polling measurement, not actual order processing. Orders are still created, processed, and confirmed; the test client simply gives up waiting before the saga completes.
+- **More replicas make saga polling worse**, not better — the probability of missing the primary pod increases with replica count.
+- **Fix path:** ADR 010 identifies PostgreSQL-backed event store + partitioned saga state as the solution. This allows saga state to be distributed across replicas rather than pinned to a single writer. A nearer-term fix would be sticky sessions or a saga-aware routing layer.
+- **For demo purposes:** Saga timeouts are cosmetic — they affect only the polling measurement, not actual order processing. Orders are still created, processed, and confirmed; the test client simply gives up waiting before the saga completes.
 
 ---
 
@@ -211,6 +273,33 @@ The saga timeout is caused by the **single-writer saga state machine pattern**:
 - **Hazelcast memory** grows to 1.9-2.8 GB at 200 TPS, driven by saga event accumulation during the 3-minute test window. The 2Gi limit was briefly exceeded on hz-1, which is acceptable for short bursts with Kubernetes memory limit enforcement.
 - **Payment-service** distributes load more evenly across its 3 replicas (513m / 287m / 240m) because each replica independently processes payment events from ITopic.
 
+### AWS Large — Peak Load (500 TPS)
+
+| Pod | CPU | Memory |
+|-----|-----|--------|
+| account-service (2 pods) | 460m / 72m | 1,464Mi / 889Mi |
+| inventory-service (2 pods) | 1,051m / 103m | 1,578Mi / 1,311Mi |
+| order-service (2 pods) | 1,302m / 121m | 1,728Mi / 1,302Mi |
+| payment-service (2 pods) | 477m / 537m | 1,425Mi / 1,441Mi |
+| hazelcast-cluster (3 pods) | 153m / 235m / 184m | 3,381Mi / 4,525Mi / 2,284Mi |
+
+**Node utilization at 500 TPS:**
+
+| Node | CPU | CPU% | Memory | Memory% |
+|------|-----|------|--------|---------|
+| ip-192-168-11-244 (hz-dedicated) | 150m | 0% | 4,430Mi | 15% |
+| ip-192-168-24-171 (services) | 1,555m | 9% | 6,820Mi | 23% |
+| ip-192-168-26-66 (hz-dedicated) | 136m | 0% | 3,507Mi | 12% |
+| ip-192-168-39-191 (hz-dedicated) | 232m | 1% | 5,295Mi | 18% |
+| ip-192-168-53-127 (services) | 1,688m | 10% | 6,349Mi | 22% |
+
+**Key observations:**
+- **The cluster is far from saturated.** Even at 500 TPS, peak node CPU is 10% and peak memory is 23%. The throughput limit was the k6 200 VU cap, not cluster capacity.
+- **Single-writer pattern confirmed at scale.** order-service primary pod (wtbrh) consumed 1,302m CPU while the secondary (shbr8) used only 121m — a 10:1 skew identical to the pattern seen on Medium.
+- **Hazelcast cluster memory grew significantly** — hz-1 reached 4,525Mi (38% of its 12Gi limit) after the full 6-level sweep accumulated ~120K events across all services. The dedicated node group with 12Gi limit provided ample headroom.
+- **Payment-service** distributed load relatively evenly (477m / 537m) — the only service without a single-writer bottleneck, since each replica independently processes payment ITopic events.
+- **Dedicated Hazelcast node group** worked as designed — all 3 Hazelcast pods ran on their own tainted nodes (ip-192-168-11-244, -26-66, -39-191), keeping them isolated from service workloads.
+
 ---
 
 ## Cost-Performance Analysis
@@ -220,12 +309,16 @@ The saga timeout is caused by the **single-writer saga state machine pattern**:
 | Local | $0 | 50 | 0.00% | 19.50 ms | $0 |
 | AWS Small | ~$0.76 | 100 | 0.00% | 125.47 ms | ~$0.021 |
 | AWS Medium | ~$1.18 | 200 | 0.00% | 99.05 ms | ~$0.016 |
+| AWS Large | ~$3.50 | 500 | 0.00% | 161.87 ms | ~$0.036 |
 
-**AWS Medium delivers 2x the throughput of Small at 1.55x the cost**, making it the better value for sustained workloads beyond 50 TPS. Below 50 TPS, AWS Small is sufficient and more cost-effective.
+**AWS Medium remains the best value for typical workloads.** It delivers 2x the throughput of Small at 1.55x the cost. AWS Large delivers higher absolute throughput but at a higher cost per transaction because the single-writer architecture cannot leverage the additional resources.
 
 The cost per 10K transactions at max tested TPS:
 - AWS Small at 100 TPS: 10,000 / (100 × 3600) = 0.0278 hours × $0.76 = **$0.021**
 - AWS Medium at 200 TPS: 10,000 / (200 × 3600) = 0.0139 hours × $1.18 = **$0.016**
+- AWS Large at 274 iter/s (achieved at 500 TPS): 10,000 / (274 × 3600) = 0.0101 hours × $3.50 = **$0.036**
+
+**Why Large is less cost-efficient:** The single-writer pattern means throwing more hardware at the problem doesn't improve per-transaction efficiency. The 5-node Large cluster provided only 37% more achieved throughput (274 vs 200 iter/s) at 3x the cost. The Large tier's value is in **headroom** — at peak load, nodes were at 10% CPU and 23% memory, leaving substantial burst capacity.
 
 ---
 
@@ -248,25 +341,25 @@ The three commits that landed between the Feb 19 and Feb 20 test runs had a sign
 
 ---
 
-## Pending Work
+## AWS Large Tier — Key Findings
 
-### AWS Large Tier
+The large tier (5x c7i.4xlarge, dedicated Hazelcast node group) was tested on 2026-02-21 after receiving a vCPU quota increase to 96 vCPU.
 
-The large tier (5x c7i.4xlarge, dedicated Hazelcast node group) was not tested due to **AWS vCPU service quota limits**. The account's "Running On-Demand Standard Instances" quota (16 vCPU) is insufficient for the large tier (requires 80 vCPU: 3x c7i.4xlarge for Hazelcast + 2x c7i.4xlarge for services).
+### What We Validated
 
-A quota increase to 96 vCPU has been requested. Once approved:
+1. **Dedicated Hazelcast node group isolation works correctly.** All 3 Hazelcast pods were scheduled exclusively on tainted nodes (nodegroup=hazelcast-dedicated), keeping them isolated from service workloads. Taints and tolerations functioned as designed.
 
-1. Create the large cluster: `./scripts/k8s-aws/setup-cluster.sh --tier large`
-2. Build and deploy: `./scripts/k8s-aws/build.sh && ./scripts/k8s-aws/start.sh --tier large`
-3. Run TPS sweep: `./scripts/k8s-aws/k8s-perf-test.sh --target aws-large --tps-levels "10,25,50,100,200,500"`
-4. Update this report with large tier data
-5. Teardown: `./scripts/k8s-aws/teardown-cluster.sh`
+2. **2+ base replicas provide HTTP distribution but not saga throughput.** With min 2 replicas, HTTP requests are balanced across pods. However, the Jet pipeline and saga state machine only run on the primary pod per service, so additional replicas are idle for saga processing.
 
-**Expected value of the large tier test:**
-- Validate dedicated Hazelcast node group isolation (taints/tolerations)
-- Measure impact of 2+ base replicas per service (min 2 via HPA)
-- Find the throughput ceiling (target: 500 TPS with < 5% error rate)
-- Test whether pod anti-affinity + topology spread work correctly across 5 nodes
+3. **500 TPS with 0.00% HTTP error rate achieved.** The system handled all 6 TPS levels (10 through 500) with zero systemic HTTP errors. At 500 TPS, actual throughput was capped at 274 iter/s by the 200 VU test limit, not by cluster capacity (max node CPU was 10%).
+
+4. **Pod anti-affinity and topology spread work correctly.** Hazelcast pods were distributed across 3 nodes (one per node, spanning 2 AZs). Service pods were distributed across the 2 service nodes.
+
+5. **Multi-replica saga polling is worse than single-replica.** With 2 order-service replicas, K8s load-balances saga poll requests across both pods, but only the primary holds saga state. This causes ~50% of polls to miss, creating saga timeouts even at 10 TPS — a behavior not seen on the single-replica Medium tier at low TPS.
+
+### Throughput Ceiling Not Reached
+
+The cluster was far from saturated at 500 TPS: 10% max CPU, 23% max memory across all nodes. The test was limited by the k6 200 VU cap, not by cluster capacity. Removing the VU limit (or running k6 from within the cluster) would likely reveal a higher throughput ceiling, but the single-writer saga bottleneck would remain the binding constraint for end-to-end saga completion.
 
 ---
 
@@ -276,6 +369,7 @@ Full sweep results with resource usage snapshots are archived in:
 - `scripts/perf/k8s-results/local-20260220-083827/`
 - `scripts/perf/k8s-results/aws-small-20260220-092048/`
 - `scripts/perf/k8s-results/aws-medium-20260220-124155/`
+- `scripts/perf/k8s-results/aws-large-20260221-064132/`
 
 ---
-*Generated 2026-02-20 from k8s-perf-test.sh sweep results*
+*Generated 2026-02-20, updated 2026-02-21 with AWS Large tier results*
