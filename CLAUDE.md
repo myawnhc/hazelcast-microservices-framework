@@ -142,6 +142,20 @@ public SagaListener(@Qualifier("hazelcastClient") HazelcastInstance hazelcast) {
 
 **Full details:** See `docs/architecture/adr/008-dual-instance-hazelcast-architecture.md`
 
+### Per-Service Embedded Clustering (ADR 013)
+
+**Extension to ADR 008 for Kubernetes multi-replica deployments.**
+
+When `hazelcast.embedded.clustering.enabled=true`, replicas of the **same** service form their own per-service embedded Hazelcast cluster using Kubernetes DNS discovery. Different service types remain isolated. This enables distributed Jet pipeline processing across replicas.
+
+- **Default**: `false` (standalone mode — Docker Compose and local dev unchanged)
+- **Enabled in K8s**: via Helm `embeddedClustering.enabled: true` (medium/large tier values)
+- **Discovery**: Headless Service per microservice, port 5801
+- **Outbox**: Atomic claiming (`CLAIMED` status + `ClaimEntryProcessor`) prevents duplicate delivery
+- **Pipeline**: `AT_LEAST_ONCE` guarantee with auto-scaling enabled for Jet rebalancing
+
+**Full details:** See `docs/architecture/adr/013-per-service-embedded-clustering.md`
+
 ---
 
 ## Code Standards
@@ -497,7 +511,8 @@ implement the InventoryService with:
 - Architectural decisions that have been debated or revisited are recorded as ADRs under `docs/architecture/adr/`. **Once an ADR is accepted, do not revisit the decision without explicit user direction.**
 - Key settled ADRs:
   - **ADR 008**: Dual-instance Hazelcast architecture (embedded standalone + shared cluster client)
-  - **ADR 010**: Single-replica scaling strategy (multi-replica deferred until PostgreSQL persistence)
+  - **ADR 010**: Single-replica scaling strategy (superseded by ADR 013 for Kubernetes)
+  - **ADR 013**: Per-service embedded clustering (same-service replicas form per-service Hazelcast cluster)
   - **ADR 005**: Community Edition default with Enterprise opt-in
   - **ADR 009**: Flexible edition configuration via `EditionDetector`
 

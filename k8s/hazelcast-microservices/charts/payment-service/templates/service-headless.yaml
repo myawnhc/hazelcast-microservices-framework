@@ -1,0 +1,18 @@
+{{- if .Values.embeddedClustering.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "payment-service.fullname" . }}-hz-embedded
+  labels:
+    {{- include "payment-service.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: hz-embedded
+      port: {{ .Values.embeddedClustering.port }}
+      targetPort: hz-embedded
+      protocol: TCP
+  selector:
+    {{- include "payment-service.selectorLabels" . | nindent 4 }}
+{{- end }}

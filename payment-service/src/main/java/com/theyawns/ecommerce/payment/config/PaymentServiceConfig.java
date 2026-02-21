@@ -5,15 +5,14 @@ import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.EventJournalConfig;
 import com.hazelcast.config.EvictionPolicy;
-import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MapConfig;
 import com.hazelcast.config.MapStoreConfig;
 import com.hazelcast.config.MaxSizePolicy;
-import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.ecommerce.common.domain.Payment;
 import com.theyawns.ecommerce.payment.domain.PaymentViewUpdater;
+import com.theyawns.framework.config.EmbeddedClusteringConfigurer;
 import com.theyawns.framework.config.HazelcastClientConfigCustomizer;
 import com.theyawns.framework.config.HazelcastConfigCustomizer;
 import com.theyawns.framework.controller.EventSourcingController;
@@ -76,6 +75,18 @@ public class PaymentServiceConfig {
     @Value("${hazelcast.event-journal.capacity:10000}")
     private int eventJournalCapacity;
 
+    @Value("${hazelcast.embedded.clustering.enabled:false}")
+    private boolean embeddedClusteringEnabled;
+
+    @Value("${hazelcast.embedded.clustering.discovery-mode:dns}")
+    private String embeddedClusteringDiscoveryMode;
+
+    @Value("${hazelcast.embedded.clustering.service-dns:}")
+    private String embeddedClusteringServiceDns;
+
+    @Value("${hazelcast.embedded.clustering.port:5801}")
+    private int embeddedClusteringPort;
+
     @Autowired(required = false)
     private List<HazelcastConfigCustomizer> configCustomizers;
 
@@ -135,12 +146,10 @@ public class PaymentServiceConfig {
         config.addMapConfig(new MapConfig(DOMAIN_NAME + "_VIEW"));
         config.addMapConfig(new MapConfig(DOMAIN_NAME + "_ES"));
 
-        // Standalone embedded instance - no cluster join.
-        // Cross-service communication uses the separate hazelcastClient() bean.
-        NetworkConfig networkConfig = config.getNetworkConfig();
-        JoinConfig joinConfig = networkConfig.getJoin();
-        joinConfig.getMulticastConfig().setEnabled(false);
-        joinConfig.getAutoDetectionConfig().setEnabled(false);
+        // Configure embedded clustering (standalone by default, K8s DNS discovery when enabled)
+        EmbeddedClusteringConfigurer.configure(config, embeddedClusteringEnabled,
+                embeddedClusteringDiscoveryMode, embeddedClusteringServiceDns,
+                embeddedClusteringPort);
 
         // Enable Jet for stream processing pipeline
         config.getJetConfig().setEnabled(true);

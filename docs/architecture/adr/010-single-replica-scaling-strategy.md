@@ -2,7 +2,9 @@
 
 ## Status
 
-**Accepted** - February 2026
+**Superseded** for Kubernetes deployments by [ADR 013: Per-Service Embedded Clustering](013-per-service-embedded-clustering.md) - February 2026
+
+Originally **Accepted** - February 2026
 
 ## Context
 

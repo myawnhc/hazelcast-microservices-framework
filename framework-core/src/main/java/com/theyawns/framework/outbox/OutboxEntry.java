@@ -59,6 +59,18 @@ public class OutboxEntry {
     private String failureReason;
 
     /**
+     * UUID of the cluster member that claimed this entry for delivery.
+     * Only set when status is {@link Status#CLAIMED}.
+     */
+    private String claimantId;
+
+    /**
+     * When this entry was claimed for delivery.
+     * Only set when status is {@link Status#CLAIMED}.
+     */
+    private Instant claimedAt;
+
+    /**
      * No-arg constructor used by {@link #reconstitute} for deserialization.
      */
     public OutboxEntry() {
@@ -83,6 +95,29 @@ public class OutboxEntry {
     static OutboxEntry reconstitute(final String eventId, final String eventType,
             final GenericRecord eventRecord, final int retryCount, final Status status,
             final Instant createdAt, final Instant lastAttemptAt, final String failureReason) {
+        return reconstitute(eventId, eventType, eventRecord, retryCount, status,
+                createdAt, lastAttemptAt, failureReason, null, null);
+    }
+
+    /**
+     * Reconstitutes an OutboxEntry from stored field values, including claim fields.
+     *
+     * @param eventId the event identifier
+     * @param eventType the event type
+     * @param eventRecord the serialized event record
+     * @param retryCount the number of delivery attempts
+     * @param status the current status
+     * @param createdAt the creation timestamp
+     * @param lastAttemptAt the last attempt timestamp (nullable)
+     * @param failureReason the failure reason (nullable)
+     * @param claimantId the claiming member UUID (nullable)
+     * @param claimedAt the claim timestamp (nullable)
+     * @return a reconstituted outbox entry
+     */
+    static OutboxEntry reconstitute(final String eventId, final String eventType,
+            final GenericRecord eventRecord, final int retryCount, final Status status,
+            final Instant createdAt, final Instant lastAttemptAt, final String failureReason,
+            final String claimantId, final Instant claimedAt) {
         final OutboxEntry entry = new OutboxEntry();
         entry.eventId = eventId;
         entry.eventType = eventType;
@@ -92,6 +127,8 @@ public class OutboxEntry {
         entry.createdAt = createdAt;
         entry.lastAttemptAt = lastAttemptAt;
         entry.failureReason = failureReason;
+        entry.claimantId = claimantId;
+        entry.claimedAt = claimedAt;
         return entry;
     }
 
@@ -221,6 +258,42 @@ public class OutboxEntry {
         this.failureReason = failureReason;
     }
 
+    /**
+     * Returns the UUID of the cluster member that claimed this entry.
+     *
+     * @return the claimant member UUID, or null if not claimed
+     */
+    public String getClaimantId() {
+        return claimantId;
+    }
+
+    /**
+     * Sets the claimant member UUID.
+     *
+     * @param claimantId the UUID of the claiming member
+     */
+    public void setClaimantId(final String claimantId) {
+        this.claimantId = claimantId;
+    }
+
+    /**
+     * Returns when this entry was claimed for delivery.
+     *
+     * @return the claim timestamp, or null if not claimed
+     */
+    public Instant getClaimedAt() {
+        return claimedAt;
+    }
+
+    /**
+     * Sets the claim timestamp.
+     *
+     * @param claimedAt the timestamp when the entry was claimed
+     */
+    public void setClaimedAt(final Instant claimedAt) {
+        this.claimedAt = claimedAt;
+    }
+
     @Override
     public String toString() {
         return "OutboxEntry{" +
@@ -230,6 +303,8 @@ public class OutboxEntry {
                 ", status=" + status +
                 ", createdAt=" + createdAt +
                 ", lastAttemptAt=" + lastAttemptAt +
+                ", claimantId='" + claimantId + '\'' +
+                ", claimedAt=" + claimedAt +
                 '}';
     }
 
@@ -239,6 +314,8 @@ public class OutboxEntry {
     public enum Status {
         /** Awaiting delivery to shared cluster. */
         PENDING,
+        /** Claimed by a cluster member for delivery (atomic CAS from PENDING). */
+        CLAIMED,
         /** Successfully delivered to shared cluster ITopic. */
         DELIVERED,
         /** Permanently failed after exhausting retries. */

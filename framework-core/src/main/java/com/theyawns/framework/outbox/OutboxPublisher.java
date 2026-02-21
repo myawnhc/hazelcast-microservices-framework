@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.Semaphore;
 
 /**
@@ -35,10 +36,14 @@ public class OutboxPublisher {
 
     private static final Logger logger = LoggerFactory.getLogger(OutboxPublisher.class);
 
+    /** Default timeout for stale claims: 30 seconds. */
+    private static final long STALE_CLAIM_TIMEOUT_MS = 30_000;
+
     private final OutboxStore outboxStore;
     private final HazelcastInstance sharedHazelcast;
     private final OutboxProperties properties;
     private final MeterRegistry meterRegistry;
+    private final String memberUuid;
 
     /**
      * Semaphore used for event-driven wake-up. When a new entry is written to the
@@ -65,9 +70,10 @@ public class OutboxPublisher {
         this.sharedHazelcast = sharedHazelcast; // nullable — graceful degradation
         this.properties = Objects.requireNonNull(properties, "properties cannot be null");
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry cannot be null");
-        logger.info("Initialized OutboxPublisher (sharedHazelcast={}, maxBatchSize={}, maxRetries={})",
+        this.memberUuid = UUID.randomUUID().toString();
+        logger.info("Initialized OutboxPublisher (sharedHazelcast={}, maxBatchSize={}, maxRetries={}, memberUuid={})",
                 sharedHazelcast != null ? "connected" : "not configured",
-                properties.getMaxBatchSize(), properties.getMaxRetries());
+                properties.getMaxBatchSize(), properties.getMaxRetries(), memberUuid);
     }
 
     /**
@@ -101,7 +107,11 @@ public class OutboxPublisher {
     }
 
     /**
-     * Polls pending outbox entries and delivers them to the shared cluster.
+     * Claims pending outbox entries and delivers them to the shared cluster.
+     *
+     * <p>Uses atomic claiming ({@link OutboxStore#claimPending}) to prevent
+     * duplicate delivery when multiple pods poll the outbox simultaneously.
+     * Also sweeps stale claims from members that crashed before delivering.
      *
      * <p>Called by the scheduling loop after {@link #waitForWork()} returns.
      * Also callable directly for immediate delivery.
@@ -115,10 +125,14 @@ public class OutboxPublisher {
             return;
         }
 
+        // Sweep stale claims before claiming new entries
+        sweepStaleClaims();
+
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
-            List<OutboxEntry> pending = outboxStore.pollPending(properties.getMaxBatchSize());
-            if (pending.isEmpty()) {
+            List<OutboxEntry> claimed = outboxStore.claimPending(
+                    properties.getMaxBatchSize(), memberUuid);
+            if (claimed.isEmpty()) {
                 meterRegistry.counter("outbox.poll.empty").increment();
                 return;
             }
@@ -126,7 +140,7 @@ public class OutboxPublisher {
             int delivered = 0;
             int failed = 0;
 
-            for (OutboxEntry entry : pending) {
+            for (OutboxEntry entry : claimed) {
                 try {
                     ITopic<GenericRecord> topic = sharedHazelcast.getTopic(entry.getEventType());
                     topic.publish(entry.getEventRecord());
@@ -156,10 +170,25 @@ public class OutboxPublisher {
 
             if (delivered > 0 || failed > 0) {
                 logger.info("Outbox publish cycle: delivered={}, failed={}, remaining={}",
-                        delivered, failed, pending.size() - delivered - failed);
+                        delivered, failed, claimed.size() - delivered - failed);
             }
         } finally {
             sample.stop(meterRegistry.timer("outbox.publish.duration"));
+        }
+    }
+
+    /**
+     * Releases outbox entries that have been CLAIMED for longer than the stale
+     * timeout, reverting them to PENDING so another member can retry.
+     *
+     * <p>This handles the case where a member claims entries but crashes before
+     * delivering them.
+     */
+    private void sweepStaleClaims() {
+        try {
+            outboxStore.releaseExpiredClaims(STALE_CLAIM_TIMEOUT_MS);
+        } catch (Exception e) {
+            logger.warn("Error sweeping stale outbox claims: {}", e.getMessage());
         }
     }
 }

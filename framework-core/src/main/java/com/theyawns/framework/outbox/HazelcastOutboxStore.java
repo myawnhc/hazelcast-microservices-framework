@@ -11,11 +11,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -126,6 +128,68 @@ public class HazelcastOutboxStore implements OutboxStore {
                 Predicates.equal("status", OutboxEntry.Status.PENDING.name())).size();
     }
 
+    @Override
+    public List<OutboxEntry> claimPending(final int maxBatchSize, final String claimantId) {
+        // Step 1: Find PENDING entry keys
+        Comparator<Map.Entry<String, GenericRecord>> byCreatedAt =
+                Comparator.comparingLong(e -> e.getValue().getInt64("createdAt"));
+
+        PagingPredicate<String, GenericRecord> pagingPredicate = Predicates.pagingPredicate(
+                Predicates.equal("status", OutboxEntry.Status.PENDING.name()),
+                byCreatedAt,
+                maxBatchSize);
+
+        Set<String> candidateKeys = outboxMap.keySet(pagingPredicate);
+
+        // Step 2: Attempt atomic CAS claim on each candidate
+        ClaimEntryProcessor claimProcessor = new ClaimEntryProcessor(claimantId);
+        List<OutboxEntry> claimed = new ArrayList<>();
+
+        for (String key : candidateKeys) {
+            Boolean won = outboxMap.executeOnKey(key, claimProcessor);
+            if (Boolean.TRUE.equals(won)) {
+                GenericRecord record = outboxMap.get(key);
+                if (record != null) {
+                    claimed.add(fromRecord(record));
+                }
+            }
+        }
+
+        if (!claimed.isEmpty()) {
+            meterRegistry.counter("outbox.entries.claimed").increment(claimed.size());
+            logger.debug("Claimed {} outbox entries for member {}", claimed.size(), claimantId);
+        }
+
+        return claimed;
+    }
+
+    @Override
+    public int releaseExpiredClaims(final long staleTimeoutMs) {
+        Set<String> claimedKeys = outboxMap.keySet(
+                Predicates.equal("status", OutboxEntry.Status.CLAIMED.name()));
+
+        if (claimedKeys.isEmpty()) {
+            return 0;
+        }
+
+        ReleaseClaimEntryProcessor releaseProcessor = new ReleaseClaimEntryProcessor(staleTimeoutMs);
+        int released = 0;
+
+        for (String key : claimedKeys) {
+            Boolean wasReleased = outboxMap.executeOnKey(key, releaseProcessor);
+            if (Boolean.TRUE.equals(wasReleased)) {
+                released++;
+            }
+        }
+
+        if (released > 0) {
+            meterRegistry.counter("outbox.claims.released").increment(released);
+            logger.info("Released {} stale outbox claims (timeout={}ms)", released, staleTimeoutMs);
+        }
+
+        return released;
+    }
+
     /**
      * Converts an OutboxEntry POJO to a Compact GenericRecord for IMap storage.
      *
@@ -143,6 +207,9 @@ public class HazelcastOutboxStore implements OutboxStore {
                 .setNullableInt64("lastAttemptAt",
                         entry.getLastAttemptAt() != null ? entry.getLastAttemptAt().toEpochMilli() : null)
                 .setString("failureReason", entry.getFailureReason())
+                .setString("claimantId", entry.getClaimantId())
+                .setNullableInt64("claimedAt",
+                        entry.getClaimedAt() != null ? entry.getClaimedAt().toEpochMilli() : null)
                 .build();
     }
 
@@ -154,6 +221,7 @@ public class HazelcastOutboxStore implements OutboxStore {
      */
     static OutboxEntry fromRecord(final GenericRecord record) {
         final Long lastAttemptMillis = record.getNullableInt64("lastAttemptAt");
+        final Long claimedAtMillis = record.getNullableInt64("claimedAt");
         return OutboxEntry.reconstitute(
                 record.getString("eventId"),
                 record.getString("eventType"),
@@ -162,7 +230,9 @@ public class HazelcastOutboxStore implements OutboxStore {
                 OutboxEntry.Status.valueOf(record.getString("status")),
                 Instant.ofEpochMilli(record.getInt64("createdAt")),
                 lastAttemptMillis != null ? Instant.ofEpochMilli(lastAttemptMillis) : null,
-                record.getString("failureReason")
+                record.getString("failureReason"),
+                record.getString("claimantId"),
+                claimedAtMillis != null ? Instant.ofEpochMilli(claimedAtMillis) : null
         );
     }
 }

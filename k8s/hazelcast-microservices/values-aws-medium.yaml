@@ -82,6 +82,8 @@ account-service:
       cpu: "2000m"
   persistence:
     enabled: false
+  embeddedClustering:
+    enabled: true
   autoscaling:
     enabled: true
     minReplicas: 1
@@ -109,6 +111,8 @@ inventory-service:
       cpu: "2000m"
   persistence:
     enabled: false
+  embeddedClustering:
+    enabled: true
   autoscaling:
     enabled: true
     minReplicas: 1
@@ -136,6 +140,8 @@ order-service:
       cpu: "2000m"
   persistence:
     enabled: false
+  embeddedClustering:
+    enabled: true
   autoscaling:
     enabled: true
     minReplicas: 1
@@ -163,6 +169,8 @@ payment-service:
       cpu: "2000m"
   persistence:
     enabled: false
+  embeddedClustering:
+    enabled: true
   autoscaling:
     enabled: true
     minReplicas: 1

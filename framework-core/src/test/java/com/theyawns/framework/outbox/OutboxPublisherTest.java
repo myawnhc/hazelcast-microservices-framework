@@ -113,14 +113,14 @@ class OutboxPublisherTest {
     class PollPublishMarkCycle {
 
         @Test
-        @DisplayName("should poll, publish to ITopic, and mark delivered")
-        void shouldPollPublishAndMarkDelivered() {
+        @DisplayName("should claim, publish to ITopic, and mark delivered")
+        void shouldClaimPublishAndMarkDelivered() {
             // Arrange
             final OutboxEntry entry = createTestEntry("evt-1", "OrderCreated");
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> topic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry));
             doReturn(topic).when(sharedHazelcast).getTopic("OrderCreated");
 
             final OutboxPublisher publisher = new OutboxPublisher(
@@ -145,7 +145,7 @@ class OutboxPublisherTest {
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> stockTopic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry1, entry2));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry1, entry2));
             doReturn(orderTopic).when(sharedHazelcast).getTopic("OrderCreated");
             doReturn(stockTopic).when(sharedHazelcast).getTopic("StockReserved");
 
@@ -163,10 +163,10 @@ class OutboxPublisherTest {
         }
 
         @Test
-        @DisplayName("should not call markDelivered when poll returns empty list")
-        void shouldNotCallMarkDeliveredWhenPollReturnsEmpty() {
+        @DisplayName("should not call markDelivered when claim returns empty list")
+        void shouldNotCallMarkDeliveredWhenClaimReturnsEmpty() {
             // Arrange
-            when(outboxStore.pollPending(50)).thenReturn(Collections.emptyList());
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(Collections.emptyList());
 
             final OutboxPublisher publisher = new OutboxPublisher(
                     outboxStore, sharedHazelcast, properties, meterRegistry);
@@ -188,7 +188,7 @@ class OutboxPublisherTest {
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> topic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry));
             doReturn(topic).when(sharedHazelcast).getTopic("OrderCreated");
 
             final OutboxPublisher publisher = new OutboxPublisher(
@@ -199,6 +199,22 @@ class OutboxPublisherTest {
 
             // Assert
             assertThat(meterRegistry.counter("outbox.entries.delivered").count()).isEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("should call releaseExpiredClaims before claiming new entries")
+        void shouldSweepStaleClaimsBeforeClaiming() {
+            // Arrange
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(Collections.emptyList());
+
+            final OutboxPublisher publisher = new OutboxPublisher(
+                    outboxStore, sharedHazelcast, properties, meterRegistry);
+
+            // Act
+            publisher.publishPendingEntries();
+
+            // Assert
+            verify(outboxStore).releaseExpiredClaims(30_000L);
         }
     }
 
@@ -215,7 +231,7 @@ class OutboxPublisherTest {
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> topic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry));
             doReturn(topic).when(sharedHazelcast).getTopic("OrderCreated");
             doThrow(new RuntimeException("Connection refused")).when(topic).publish(any());
 
@@ -240,7 +256,7 @@ class OutboxPublisherTest {
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> topic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry));
             doReturn(topic).when(sharedHazelcast).getTopic("OrderCreated");
             doThrow(new RuntimeException("Timeout")).when(topic).publish(any());
 
@@ -269,7 +285,7 @@ class OutboxPublisherTest {
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> topic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry));
             doReturn(topic).when(sharedHazelcast).getTopic("OrderCreated");
             doThrow(new RuntimeException("Cluster unreachable")).when(topic).publish(any());
 
@@ -294,7 +310,7 @@ class OutboxPublisherTest {
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> topic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry));
             doReturn(topic).when(sharedHazelcast).getTopic("OrderCreated");
             doThrow(new RuntimeException("Still down")).when(topic).publish(any());
 
@@ -318,7 +334,7 @@ class OutboxPublisherTest {
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> topic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry));
             doReturn(topic).when(sharedHazelcast).getTopic("OrderCreated");
             doThrow(new RuntimeException("Error")).when(topic).publish(any());
 
@@ -341,7 +357,7 @@ class OutboxPublisherTest {
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> topic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry));
             doReturn(topic).when(sharedHazelcast).getTopic("OrderCreated");
             doThrow(new RuntimeException("First and final failure")).when(topic).publish(any());
 
@@ -371,8 +387,8 @@ class OutboxPublisherTest {
             // Act
             publisher.publishPendingEntries();
 
-            // Assert: should not poll, not mark delivered, not mark failed
-            verify(outboxStore, never()).pollPending(anyInt());
+            // Assert: should not claim, not mark delivered, not mark failed
+            verify(outboxStore, never()).claimPending(anyInt(), anyString());
             verify(outboxStore, never()).markDelivered(anyString());
             verify(outboxStore, never()).markFailed(anyString(), anyString());
         }
@@ -401,7 +417,7 @@ class OutboxPublisherTest {
             publisher.publishPendingEntries();
 
             // Assert: outboxStore was never polled (all calls short-circuited)
-            verify(outboxStore, never()).pollPending(anyInt());
+            verify(outboxStore, never()).claimPending(anyInt(), anyString());
         }
     }
 
@@ -488,7 +504,7 @@ class OutboxPublisherTest {
             @SuppressWarnings("unchecked")
             final ITopic<GenericRecord> stockTopic = mock(ITopic.class);
 
-            when(outboxStore.pollPending(50)).thenReturn(List.of(entry1, entry2));
+            when(outboxStore.claimPending(eq(50), anyString())).thenReturn(List.of(entry1, entry2));
             doReturn(orderTopic).when(sharedHazelcast).getTopic("OrderCreated");
             doReturn(stockTopic).when(sharedHazelcast).getTopic("StockReserved");
             doThrow(new RuntimeException("Network error")).when(stockTopic).publish(any());

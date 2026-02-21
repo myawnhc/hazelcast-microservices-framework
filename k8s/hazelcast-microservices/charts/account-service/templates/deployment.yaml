@@ -61,6 +61,11 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          {{- if .Values.embeddedClustering.enabled }}
+            - name: hz-embedded
+              containerPort: {{ .Values.embeddedClustering.port }}
+              protocol: TCP
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "account-service.fullname" . }}-config

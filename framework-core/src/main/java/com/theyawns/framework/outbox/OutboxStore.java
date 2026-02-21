@@ -63,4 +63,31 @@ public interface OutboxStore {
      * @return the pending entry count
      */
     long pendingCount();
+
+    /**
+     * Atomically claims up to {@code maxBatchSize} PENDING entries for the given
+     * cluster member. Uses compare-and-swap semantics: only entries in PENDING
+     * status are transitioned to CLAIMED.
+     *
+     * <p>In a single-member deployment, CAS always succeeds. In a multi-member
+     * deployment, only one member wins each entry's CAS — preventing duplicate
+     * delivery.
+     *
+     * @param maxBatchSize the maximum number of entries to claim
+     * @param claimantId the UUID of the claiming cluster member
+     * @return list of successfully claimed entries, may be empty
+     */
+    List<OutboxEntry> claimPending(int maxBatchSize, String claimantId);
+
+    /**
+     * Releases entries that have been CLAIMED for longer than the given timeout,
+     * reverting them to PENDING so another member can retry.
+     *
+     * <p>This handles the case where a member claims entries but crashes before
+     * delivering them.
+     *
+     * @param staleTimeoutMs entries claimed longer ago than this (in millis) are released
+     * @return the number of entries released
+     */
+    int releaseExpiredClaims(long staleTimeoutMs);
 }

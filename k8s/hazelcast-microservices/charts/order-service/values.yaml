@@ -105,3 +105,10 @@ securityContext: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Per-service embedded Hazelcast clustering (ADR 013)
+# When enabled, replicas of this service form their own embedded Hazelcast cluster
+# for distributed Jet pipeline processing. Disabled by default (standalone mode).
+embeddedClustering:
+  enabled: false
+  port: 5801

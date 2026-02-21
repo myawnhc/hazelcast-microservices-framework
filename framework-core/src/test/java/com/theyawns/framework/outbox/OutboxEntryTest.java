@@ -104,6 +104,22 @@ class OutboxEntryTest {
 
             assertThat(entry.getFailureReason()).isNull();
         }
+
+        @Test
+        @DisplayName("should default claimantId to null")
+        void shouldDefaultClaimantIdToNull() {
+            final OutboxEntry entry = new OutboxEntry("evt-123", "OrderCreated", testRecord);
+
+            assertThat(entry.getClaimantId()).isNull();
+        }
+
+        @Test
+        @DisplayName("should default claimedAt to null")
+        void shouldDefaultClaimedAtToNull() {
+            final OutboxEntry entry = new OutboxEntry("evt-123", "OrderCreated", testRecord);
+
+            assertThat(entry.getClaimedAt()).isNull();
+        }
     }
 
     @Nested
@@ -189,6 +205,27 @@ class OutboxEntryTest {
 
             assertThat(entry.getFailureReason()).isEqualTo("Connection timed out");
         }
+
+        @Test
+        @DisplayName("should update claimantId via setter")
+        void shouldUpdateClaimantIdViaSetter() {
+            final OutboxEntry entry = new OutboxEntry("evt-123", "OrderCreated", testRecord);
+
+            entry.setClaimantId("member-uuid-1");
+
+            assertThat(entry.getClaimantId()).isEqualTo("member-uuid-1");
+        }
+
+        @Test
+        @DisplayName("should update claimedAt via setter")
+        void shouldUpdateClaimedAtViaSetter() {
+            final OutboxEntry entry = new OutboxEntry("evt-123", "OrderCreated", testRecord);
+            final Instant now = Instant.now();
+
+            entry.setClaimedAt(now);
+
+            assertThat(entry.getClaimedAt()).isEqualTo(now);
+        }
     }
 
     @Nested
@@ -204,6 +241,17 @@ class OutboxEntryTest {
             entry.setStatus(OutboxEntry.Status.DELIVERED);
 
             assertThat(entry.getStatus()).isEqualTo(OutboxEntry.Status.DELIVERED);
+        }
+
+        @Test
+        @DisplayName("should transition from PENDING to CLAIMED")
+        void shouldTransitionFromPendingToClaimed() {
+            final OutboxEntry entry = new OutboxEntry("evt-123", "OrderCreated", testRecord);
+            assertThat(entry.getStatus()).isEqualTo(OutboxEntry.Status.PENDING);
+
+            entry.setStatus(OutboxEntry.Status.CLAIMED);
+
+            assertThat(entry.getStatus()).isEqualTo(OutboxEntry.Status.CLAIMED);
         }
 
         @Test
@@ -238,15 +286,16 @@ class OutboxEntryTest {
     class StatusEnum {
 
         @Test
-        @DisplayName("should have three status values")
-        void shouldHaveThreeStatusValues() {
-            assertThat(OutboxEntry.Status.values()).hasSize(3);
+        @DisplayName("should have four status values")
+        void shouldHaveFourStatusValues() {
+            assertThat(OutboxEntry.Status.values()).hasSize(4);
         }
 
         @Test
-        @DisplayName("should contain PENDING, DELIVERED, and FAILED")
+        @DisplayName("should contain PENDING, CLAIMED, DELIVERED, and FAILED")
         void shouldContainExpectedValues() {
             assertThat(OutboxEntry.Status.valueOf("PENDING")).isEqualTo(OutboxEntry.Status.PENDING);
+            assertThat(OutboxEntry.Status.valueOf("CLAIMED")).isEqualTo(OutboxEntry.Status.CLAIMED);
             assertThat(OutboxEntry.Status.valueOf("DELIVERED")).isEqualTo(OutboxEntry.Status.DELIVERED);
             assertThat(OutboxEntry.Status.valueOf("FAILED")).isEqualTo(OutboxEntry.Status.FAILED);
         }

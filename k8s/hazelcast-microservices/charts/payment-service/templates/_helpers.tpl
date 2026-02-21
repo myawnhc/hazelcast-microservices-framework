@@ -42,3 +42,10 @@ Create the name of the service account to use.
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Fully qualified DNS name for the embedded Hazelcast headless service.
+*/}}
+{{- define "payment-service.embeddedHzHeadlessFQDN" -}}
+{{ include "payment-service.fullname" . }}-hz-embedded.{{ .Release.Namespace }}.svc.cluster.local
+{{- end }}

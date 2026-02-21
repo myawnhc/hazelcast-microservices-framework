@@ -308,6 +308,151 @@ class HazelcastOutboxStoreTest {
     }
 
     @Nested
+    @DisplayName("Claim pending")
+    class ClaimPending {
+
+        @Test
+        @DisplayName("should return empty list when no entries exist")
+        void shouldReturnEmptyListWhenNoEntriesExist() {
+            final List<OutboxEntry> claimed = outboxStore.claimPending(10, "member-1");
+
+            assertThat(claimed).isEmpty();
+        }
+
+        @Test
+        @DisplayName("should claim PENDING entries and transition to CLAIMED status")
+        void shouldClaimPendingEntries() {
+            outboxStore.write(createTestEntry("evt-1", "OrderCreated"));
+            outboxStore.write(createTestEntry("evt-2", "StockReserved"));
+
+            final List<OutboxEntry> claimed = outboxStore.claimPending(10, "member-1");
+
+            assertThat(claimed).hasSize(2);
+            // After claiming, entries should no longer be PENDING
+            assertThat(outboxStore.pendingCount()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should set claimantId on claimed entries")
+        void shouldSetClaimantIdOnClaimedEntries() {
+            outboxStore.write(createTestEntry("evt-1", "OrderCreated"));
+
+            final List<OutboxEntry> claimed = outboxStore.claimPending(10, "member-uuid-123");
+
+            assertThat(claimed).hasSize(1);
+            assertThat(claimed.get(0).getClaimantId()).isEqualTo("member-uuid-123");
+        }
+
+        @Test
+        @DisplayName("should not claim already-claimed entries")
+        void shouldNotClaimAlreadyClaimedEntries() {
+            outboxStore.write(createTestEntry("evt-1", "OrderCreated"));
+
+            // First member claims
+            final List<OutboxEntry> first = outboxStore.claimPending(10, "member-1");
+            assertThat(first).hasSize(1);
+
+            // Second member tries to claim — should get nothing
+            final List<OutboxEntry> second = outboxStore.claimPending(10, "member-2");
+            assertThat(second).isEmpty();
+        }
+
+        @Test
+        @DisplayName("should respect maxBatchSize limit")
+        void shouldRespectMaxBatchSizeLimit() {
+            outboxStore.write(createTestEntry("evt-1", "OrderCreated"));
+            outboxStore.write(createTestEntry("evt-2", "StockReserved"));
+            outboxStore.write(createTestEntry("evt-3", "PaymentProcessed"));
+
+            final List<OutboxEntry> claimed = outboxStore.claimPending(2, "member-1");
+
+            assertThat(claimed).hasSize(2);
+            // One entry should still be PENDING
+            assertThat(outboxStore.pendingCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should not claim DELIVERED entries")
+        void shouldNotClaimDeliveredEntries() {
+            outboxStore.write(createTestEntry("evt-1", "OrderCreated"));
+            outboxStore.markDelivered("evt-1");
+
+            final List<OutboxEntry> claimed = outboxStore.claimPending(10, "member-1");
+
+            assertThat(claimed).isEmpty();
+        }
+
+        @Test
+        @DisplayName("should not claim FAILED entries")
+        void shouldNotClaimFailedEntries() {
+            outboxStore.write(createTestEntry("evt-1", "OrderCreated"));
+            outboxStore.markFailed("evt-1", "Max retries exceeded");
+
+            final List<OutboxEntry> claimed = outboxStore.claimPending(10, "member-1");
+
+            assertThat(claimed).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Release expired claims")
+    class ReleaseExpiredClaims {
+
+        @Test
+        @DisplayName("should return 0 when no claimed entries exist")
+        void shouldReturnZeroWhenNoClaimedEntriesExist() {
+            final int released = outboxStore.releaseExpiredClaims(30_000);
+
+            assertThat(released).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should not release fresh claims")
+        void shouldNotReleaseFreshClaims() {
+            outboxStore.write(createTestEntry("evt-1", "OrderCreated"));
+            outboxStore.claimPending(10, "member-1");
+
+            // Use a very long timeout — claim is too fresh to be stale
+            final int released = outboxStore.releaseExpiredClaims(30_000);
+
+            assertThat(released).isEqualTo(0);
+            // Entry should still be claimed (not pending)
+            assertThat(outboxStore.pendingCount()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should release stale claims back to PENDING")
+        void shouldReleaseStaleClaims() throws InterruptedException {
+            outboxStore.write(createTestEntry("evt-1", "OrderCreated"));
+            outboxStore.claimPending(10, "member-1");
+
+            // Wait 5ms to ensure claimedAt is in the past, then use 0ms timeout
+            Thread.sleep(5);
+            final int released = outboxStore.releaseExpiredClaims(0);
+
+            assertThat(released).isEqualTo(1);
+            // Entry should be PENDING again
+            assertThat(outboxStore.pendingCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should allow reclaiming after release")
+        void shouldAllowReclaimingAfterRelease() throws InterruptedException {
+            outboxStore.write(createTestEntry("evt-1", "OrderCreated"));
+            outboxStore.claimPending(10, "member-1");
+
+            // Wait 5ms to ensure claimedAt is in the past, then release with 0ms timeout
+            Thread.sleep(5);
+            outboxStore.releaseExpiredClaims(0);
+
+            // A different member should now be able to claim
+            final List<OutboxEntry> reclaimed = outboxStore.claimPending(10, "member-2");
+            assertThat(reclaimed).hasSize(1);
+            assertThat(reclaimed.get(0).getClaimantId()).isEqualTo("member-2");
+        }
+    }
+
+    @Nested
     @DisplayName("Full lifecycle")
     class FullLifecycle {
 

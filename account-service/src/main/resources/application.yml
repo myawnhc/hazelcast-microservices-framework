@@ -9,6 +9,11 @@ server:
 hazelcast:
   embedded:
     cluster-name: ${HAZELCAST_EMBEDDED_CLUSTER_NAME:account-local}
+    clustering:
+      enabled: ${HAZELCAST_EMBEDDED_CLUSTERING_ENABLED:false}
+      discovery-mode: ${HAZELCAST_EMBEDDED_DISCOVERY_MODE:dns}
+      service-dns: ${HAZELCAST_EMBEDDED_SERVICE_DNS:}
+      port: ${HAZELCAST_EMBEDDED_PORT:5801}
   cluster:
     name: ${HAZELCAST_CLUSTER_NAME:ecommerce-cluster}
     members: ${HAZELCAST_CLUSTER_MEMBERS:}

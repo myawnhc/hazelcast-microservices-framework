@@ -3,6 +3,7 @@ package com.theyawns.framework.pipeline;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.jet.Job;
 import com.hazelcast.jet.config.JobConfig;
+import com.hazelcast.jet.config.ProcessingGuarantee;
 import com.hazelcast.jet.pipeline.JournalInitialPosition;
 import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.ServiceFactories;
@@ -135,7 +136,11 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
         Pipeline pipeline = buildPipeline();
 
         JobConfig jobConfig = new JobConfig()
-                .setName(domainName + "-EventSourcingPipeline");
+                .setName(domainName + "-EventSourcingPipeline")
+                .setAutoScaling(true)
+                .setSuspendOnFailure(true)
+                .setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE)
+                .setSnapshotIntervalMillis(10_000);
 
         pipelineJob = hazelcast.getJet().newJob(pipeline, jobConfig);
         logger.info("Started EventSourcingPipeline job for domain: {}, jobId: {}",

@@ -228,5 +228,15 @@ class OutboxAutoConfigurationTest {
         public long pendingCount() {
             return 0;
         }
+
+        @Override
+        public java.util.List<OutboxEntry> claimPending(final int maxBatchSize, final String claimantId) {
+            return java.util.Collections.emptyList();
+        }
+
+        @Override
+        public int releaseExpiredClaims(final long staleTimeoutMs) {
+            return 0;
+        }
     }
 }
