@@ -73,7 +73,8 @@ public final class EmbeddedClusteringConfigurer {
             if ("dns".equals(discoveryMode)) {
                 join.getKubernetesConfig()
                         .setEnabled(true)
-                        .setProperty("service-dns", serviceDns);
+                        .setProperty("service-dns", serviceDns)
+                        .setProperty("service-port", String.valueOf(port));
                 logger.info("Embedded clustering ENABLED: mode=dns, serviceDns={}, port={}",
                         serviceDns, port);
             } else if ("tcp-ip".equals(discoveryMode)) {

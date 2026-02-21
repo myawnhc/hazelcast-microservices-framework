@@ -10,6 +10,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -68,8 +69,7 @@ public class HazelcastOutboxStore implements OutboxStore {
 
     @Override
     public List<OutboxEntry> pollPending(final int maxBatchSize) {
-        Comparator<Map.Entry<String, GenericRecord>> byCreatedAt =
-                Comparator.comparingLong(e -> e.getValue().getInt64("createdAt"));
+        Comparator<Map.Entry<String, GenericRecord>> byCreatedAt = new CreatedAtComparator();
 
         PagingPredicate<String, GenericRecord> pagingPredicate = Predicates.pagingPredicate(
                 Predicates.equal("status", OutboxEntry.Status.PENDING.name()),
@@ -131,8 +131,7 @@ public class HazelcastOutboxStore implements OutboxStore {
     @Override
     public List<OutboxEntry> claimPending(final int maxBatchSize, final String claimantId) {
         // Step 1: Find PENDING entry keys
-        Comparator<Map.Entry<String, GenericRecord>> byCreatedAt =
-                Comparator.comparingLong(e -> e.getValue().getInt64("createdAt"));
+        Comparator<Map.Entry<String, GenericRecord>> byCreatedAt = new CreatedAtComparator();
 
         PagingPredicate<String, GenericRecord> pagingPredicate = Predicates.pagingPredicate(
                 Predicates.equal("status", OutboxEntry.Status.PENDING.name()),
@@ -234,5 +233,24 @@ public class HazelcastOutboxStore implements OutboxStore {
                 record.getString("claimantId"),
                 claimedAtMillis != null ? Instant.ofEpochMilli(claimedAtMillis) : null
         );
+    }
+
+    /**
+     * Named comparator for PagingPredicate — orders outbox entries by createdAt ascending.
+     *
+     * <p>Must be a named class (not a lambda) because Hazelcast serializes predicates
+     * including comparators to send to remote partition owners in a clustered IMap.
+     * Lambda serialization via {@code SerializedLambda} fails across cluster members
+     * due to class identity mismatches.
+     */
+    static class CreatedAtComparator implements Comparator<Map.Entry<String, GenericRecord>>, Serializable {
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public int compare(final Map.Entry<String, GenericRecord> e1,
+                           final Map.Entry<String, GenericRecord> e2) {
+            return Long.compare(e1.getValue().getInt64("createdAt"),
+                    e2.getValue().getInt64("createdAt"));
+        }
     }
 }

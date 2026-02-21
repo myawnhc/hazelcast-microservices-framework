@@ -145,10 +145,31 @@ public class InventoryServiceConfig {
         config.addMapConfig(new MapConfig(DOMAIN_NAME + "_VIEW"));
         config.addMapConfig(new MapConfig(DOMAIN_NAME + "_ES"));
 
+        // Resolve clustering properties: @Value → env var → default
+        // (hazelcast-spring BeanFactoryPostProcessor forces early bean creation before @Value injection)
+        boolean effectiveClusteringEnabled = embeddedClusteringEnabled;
+        if (!effectiveClusteringEnabled) {
+            String envVal = System.getenv("HAZELCAST_EMBEDDED_CLUSTERING_ENABLED");
+            effectiveClusteringEnabled = "true".equalsIgnoreCase(envVal);
+        }
+        String effectiveDiscoveryMode = embeddedClusteringDiscoveryMode;
+        if (effectiveDiscoveryMode == null || effectiveDiscoveryMode.isEmpty()) {
+            effectiveDiscoveryMode = System.getenv("HAZELCAST_EMBEDDED_DISCOVERY_MODE");
+            if (effectiveDiscoveryMode == null) effectiveDiscoveryMode = "dns";
+        }
+        String effectiveServiceDns = embeddedClusteringServiceDns;
+        if (effectiveServiceDns == null || effectiveServiceDns.isEmpty()) {
+            effectiveServiceDns = System.getenv("HAZELCAST_EMBEDDED_SERVICE_DNS");
+        }
+        int effectivePort = embeddedClusteringPort;
+        if (effectivePort == 0) {
+            String portEnv = System.getenv("HAZELCAST_EMBEDDED_PORT");
+            effectivePort = (portEnv != null) ? Integer.parseInt(portEnv) : EmbeddedClusteringConfigurer.DEFAULT_PORT;
+        }
+
         // Configure embedded clustering (standalone by default, K8s DNS discovery when enabled)
-        EmbeddedClusteringConfigurer.configure(config, embeddedClusteringEnabled,
-                embeddedClusteringDiscoveryMode, embeddedClusteringServiceDns,
-                embeddedClusteringPort);
+        EmbeddedClusteringConfigurer.configure(config, effectiveClusteringEnabled,
+                effectiveDiscoveryMode, effectiveServiceDns, effectivePort);
 
         // Enable Jet for stream processing pipeline
         config.getJetConfig().setEnabled(true);

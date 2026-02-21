@@ -128,9 +128,15 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
      * @return the running Jet job
      */
     public Job start() {
-        if (pipelineJob != null && !pipelineJob.isUserCancelled()) {
-            logger.warn("Pipeline job already running for domain: {}", domainName);
-            return pipelineJob;
+        if (pipelineJob != null) {
+            try {
+                if (!pipelineJob.isUserCancelled()) {
+                    logger.warn("Pipeline job already running for domain: {}", domainName);
+                    return pipelineJob;
+                }
+            } catch (Exception e) {
+                logger.debug("Could not check existing job status for domain: {} — will submit new job", domainName);
+            }
         }
 
         Pipeline pipeline = buildPipeline();
@@ -142,9 +148,11 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
                 .setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE)
                 .setSnapshotIntervalMillis(10_000);
 
-        pipelineJob = hazelcast.getJet().newJob(pipeline, jobConfig);
-        logger.info("Started EventSourcingPipeline job for domain: {}, jobId: {}",
-                domainName, pipelineJob.getId());
+        // newJobIfAbsent: submits the job only if one with this name doesn't already exist,
+        // returns the existing job otherwise. Safe for multi-member concurrent startup.
+        pipelineJob = hazelcast.getJet().newJobIfAbsent(pipeline, jobConfig);
+        logger.info("EventSourcingPipeline for domain: {}, jobId: {}, status: {}",
+                domainName, pipelineJob.getId(), pipelineJob.getStatus());
 
         return pipelineJob;
     }
@@ -169,7 +177,17 @@ public class EventSourcingPipeline<D extends DomainObject<K>, K extends Comparab
      * @return true if running
      */
     public boolean isRunning() {
-        return pipelineJob != null && !pipelineJob.isUserCancelled();
+        if (pipelineJob == null) {
+            return false;
+        }
+        try {
+            return !pipelineJob.isUserCancelled();
+        } catch (Exception e) {
+            // In a multi-member cluster, isUserCancelled() is a remote call to the coordinator.
+            // Transient failures (e.g., "Job not finished" during initialization) are expected.
+            logger.debug("Could not check job status for domain: {} — assuming running", domainName);
+            return true;
+        }
     }
 
     /**
