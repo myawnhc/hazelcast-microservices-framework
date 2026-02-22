@@ -4,24 +4,338 @@ Deploy the Hazelcast Microservices Framework to Amazon EKS with tiered configura
 
 ## Prerequisites
 
-| Tool | Minimum Version | Install |
-|------|----------------|---------|
-| AWS CLI | v2.x | [docs.aws.amazon.com](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) |
-| eksctl | 0.170+ | [eksctl.io](https://eksctl.io/installation/) |
-| kubectl | 1.25+ | [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) |
-| Helm | 3.12+ | [helm.sh](https://helm.sh/docs/intro/install/) |
-| Docker | 24+ | [docker.com](https://docs.docker.com/get-docker/) |
-| k6 | 0.47+ | `brew install k6` |
+### Step 1: Install Required Tools
 
-### IAM Permissions
+**macOS (Homebrew)**:
 
-The AWS user/role needs permissions for:
-- **EKS**: `eks:*` (cluster management)
-- **EC2**: `ec2:*` (node groups, networking)
-- **ECR**: `ecr:*` (container registry)
-- **IAM**: `iam:CreateRole`, `iam:AttachRolePolicy` (service accounts)
-- **CloudFormation**: `cloudformation:*` (eksctl uses CF stacks)
-- **ELB**: `elasticloadbalancing:*` (ALB Ingress)
+```bash
+# AWS CLI v2
+brew install awscli
+aws --version   # Should show aws-cli/2.x.x
+
+# eksctl (creates and manages EKS clusters)
+brew tap weaveworks/tap
+brew install weaveworks/tap/eksctl
+eksctl version  # Should show 0.170+
+
+# kubectl (Kubernetes CLI)
+brew install kubectl
+kubectl version --client
+
+# Helm (Kubernetes package manager)
+brew install helm
+helm version
+
+# Docker Desktop — download from https://www.docker.com/products/docker-desktop/
+# After install, verify:
+docker --version  # Should show 24+
+
+# k6 (load testing)
+brew install k6
+```
+
+**Linux (Ubuntu/Debian)**:
+
+```bash
+# AWS CLI v2
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip && sudo ./aws/install
+
+# eksctl
+ARCH=amd64
+PLATFORM=$(uname -s)_$ARCH
+curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
+tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && sudo mv /tmp/eksctl /usr/local/bin
+
+# kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+# Helm
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# k6
+sudo gpg -k
+sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+  --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D68
+echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | \
+  sudo tee /etc/apt/sources.list.d/k6.list
+sudo apt-get update && sudo apt-get install k6
+```
+
+**Verify all tools**:
+
+```bash
+aws --version && eksctl version && kubectl version --client && helm version --short && docker --version && k6 version
+```
+
+### Step 2: AWS Account and IAM User Setup
+
+If you're creating a dedicated IAM user for this demo (recommended), follow these steps in the AWS Console.
+
+#### 2a. Create a Dedicated IAM User
+
+1. Go to **IAM > Users > Create user**
+2. User name: `hazelcast-demo-admin` (or your preference)
+3. Select **Provide user access to the AWS Management Console** if you want Console access
+4. Click **Next**
+
+#### 2b. Create a Custom IAM Policy
+
+Instead of granting broad `AdministratorAccess`, create a scoped policy. Go to **IAM > Policies > Create policy**, switch to JSON, and paste:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "EKSFullAccess",
+            "Effect": "Allow",
+            "Action": "eks:*",
+            "Resource": "*"
+        },
+        {
+            "Sid": "EC2ForNodeGroups",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:Describe*",
+                "ec2:CreateSecurityGroup",
+                "ec2:DeleteSecurityGroup",
+                "ec2:AuthorizeSecurityGroupIngress",
+                "ec2:AuthorizeSecurityGroupEgress",
+                "ec2:RevokeSecurityGroupIngress",
+                "ec2:RevokeSecurityGroupEgress",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "ec2:RunInstances",
+                "ec2:TerminateInstances",
+                "ec2:CreateLaunchTemplate",
+                "ec2:DeleteLaunchTemplate",
+                "ec2:CreateLaunchTemplateVersion",
+                "ec2:CreateVolume",
+                "ec2:DeleteVolume",
+                "ec2:AttachVolume",
+                "ec2:DetachVolume",
+                "ec2:AllocateAddress",
+                "ec2:ReleaseAddress",
+                "ec2:AssociateAddress",
+                "ec2:DisassociateAddress",
+                "ec2:CreateInternetGateway",
+                "ec2:DeleteInternetGateway",
+                "ec2:AttachInternetGateway",
+                "ec2:DetachInternetGateway",
+                "ec2:CreateSubnet",
+                "ec2:DeleteSubnet",
+                "ec2:CreateVpc",
+                "ec2:DeleteVpc",
+                "ec2:ModifyVpcAttribute",
+                "ec2:CreateRouteTable",
+                "ec2:DeleteRouteTable",
+                "ec2:CreateRoute",
+                "ec2:DeleteRoute",
+                "ec2:AssociateRouteTable",
+                "ec2:DisassociateRouteTable",
+                "ec2:CreateNatGateway",
+                "ec2:DeleteNatGateway"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ECRContainerRegistry",
+            "Effect": "Allow",
+            "Action": [
+                "ecr:GetAuthorizationToken",
+                "ecr:CreateRepository",
+                "ecr:DeleteRepository",
+                "ecr:DescribeRepositories",
+                "ecr:ListImages",
+                "ecr:BatchDeleteImage",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage",
+                "ecr:PutImage",
+                "ecr:InitiateLayerUpload",
+                "ecr:UploadLayerPart",
+                "ecr:CompleteLayerUpload",
+                "ecr:PutImageScanningConfiguration"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "IAMForServiceAccounts",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "iam:PassRole",
+                "iam:CreateOpenIDConnectProvider",
+                "iam:DeleteOpenIDConnectProvider",
+                "iam:GetOpenIDConnectProvider",
+                "iam:ListOpenIDConnectProviders",
+                "iam:TagOpenIDConnectProvider",
+                "iam:CreateServiceLinkedRole",
+                "iam:CreateInstanceProfile",
+                "iam:DeleteInstanceProfile",
+                "iam:AddRoleToInstanceProfile",
+                "iam:RemoveRoleFromInstanceProfile",
+                "iam:GetInstanceProfile",
+                "iam:TagRole"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "CloudFormationForEksctl",
+            "Effect": "Allow",
+            "Action": "cloudformation:*",
+            "Resource": "*"
+        },
+        {
+            "Sid": "ELBForIngress",
+            "Effect": "Allow",
+            "Action": "elasticloadbalancing:*",
+            "Resource": "*"
+        },
+        {
+            "Sid": "AutoScalingForNodeGroups",
+            "Effect": "Allow",
+            "Action": "autoscaling:*",
+            "Resource": "*"
+        },
+        {
+            "Sid": "STSForIdentity",
+            "Effect": "Allow",
+            "Action": [
+                "sts:GetCallerIdentity",
+                "sts:AssumeRole"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "SSMForAMILookup",
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParameter"
+            ],
+            "Resource": "arn:aws:ssm:*:*:parameter/aws/service/eks/*"
+        },
+        {
+            "Sid": "KMSForSecrets",
+            "Effect": "Allow",
+            "Action": [
+                "kms:CreateKey",
+                "kms:CreateAlias",
+                "kms:Describe*",
+                "kms:List*",
+                "kms:CreateGrant"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "LogsForCluster",
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:DeleteLogGroup",
+                "logs:DescribeLogGroups",
+                "logs:PutRetentionPolicy",
+                "logs:TagResource"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+Name the policy `HazelcastDemoEKSPolicy` and click **Create policy**.
+
+> **Shortcut**: If you prefer not to manage fine-grained permissions for a temporary demo user, attach the AWS-managed `AdministratorAccess` policy instead and delete the user when done.
+
+#### 2c. Attach the Policy to Your User
+
+1. Go to **IAM > Users > hazelcast-demo-admin > Permissions**
+2. Click **Add permissions > Attach policies directly**
+3. Search for `HazelcastDemoEKSPolicy` and attach it
+
+#### 2d. Create Access Keys
+
+1. Go to **IAM > Users > hazelcast-demo-admin > Security credentials**
+2. Click **Create access key**
+3. Select **Command Line Interface (CLI)**
+4. Copy the **Access key ID** and **Secret access key** (you won't see the secret again)
+
+### Step 3: Configure AWS CLI
+
+```bash
+aws configure
+# AWS Access Key ID:     <paste your access key>
+# AWS Secret Access Key: <paste your secret key>
+# Default region name:   us-east-1
+# Default output format: json
+
+# Verify it works
+aws sts get-caller-identity
+# Should show your account ID and user ARN
+```
+
+### Step 4: Service Quotas (Required for Large Tier)
+
+The Large tier runs 5x c7i.4xlarge instances (16 vCPU each = 80 vCPU total). New AWS accounts have a default vCPU quota that may be too low.
+
+**Check your current limits**:
+
+```bash
+aws service-quotas get-service-quota \
+  --service-code ec2 \
+  --quota-code L-1216C47A \
+  --query 'Quota.Value' \
+  --output text
+```
+
+This shows your "Running On-Demand Standard instances" vCPU limit.
+
+**Required quotas by tier**:
+
+| Tier | Instance Type | Nodes | vCPU per Node | Total vCPU Required | Default Quota |
+|------|--------------|-------|---------------|---------------------|---------------|
+| Small | t3.xlarge | 2 | 4 | 8 | 32 (sufficient) |
+| Medium | c7i.2xlarge | 3 | 8 | 24 | 32 (sufficient) |
+| Large | c7i.4xlarge | 5 | 16 | **80** | 32 (**increase needed**) |
+
+**To request a quota increase** (for Large tier):
+
+1. Go to **Service Quotas > EC2 > Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances**
+2. Click **Request quota increase**
+3. Set new value to **128** (gives headroom for node group scaling)
+4. AWS typically approves within minutes to a few hours for moderate increases
+
+Alternatively via CLI:
+
+```bash
+aws service-quotas request-service-quota-increase \
+  --service-code ec2 \
+  --quota-code L-1216C47A \
+  --desired-value 128
+```
+
+> **Tip**: Request the quota increase before you need it. Small and Medium tiers work within default limits.
+
+**Additional quotas to verify** (rarely an issue, but worth checking for new accounts):
+
+| Quota | Service | Default | Required |
+|-------|---------|---------|----------|
+| VPCs per region | VPC | 5 | 1 |
+| Elastic IPs per region | EC2 | 5 | 3 (NAT gateways) |
+| Internet gateways per region | VPC | 5 | 1 |
+| NAT gateways per AZ | VPC | 5 | 1 per AZ used |
+| ECR repositories per region | ECR | 10,000 | 6 |
 
 ---
 
@@ -35,10 +349,7 @@ The AWS user/role needs permissions for:
 | `ECR_REPOSITORY_PREFIX` | No | `hazelcast-microservices` | ECR repo prefix |
 
 ```bash
-# Configure AWS CLI (if not already done)
-aws configure --profile default
-
-# Verify credentials
+# Verify credentials are working
 aws sts get-caller-identity
 ```
 
@@ -104,18 +415,19 @@ Best for: Multi-AZ resilience demos, A-B performance testing, scaling demonstrat
 
 ### Large — Production Extrapolation
 
-> **WARNING**: This tier is documented but untested. It extrapolates from medium-tier benchmarks.
+> **Quota check**: This tier requires 80 vCPU (5x c7i.4xlarge). New AWS accounts default to 32 vCPU. See [Step 4: Service Quotas](#step-4-service-quotas-required-for-large-tier) above to request an increase before deploying.
 
 | Setting | Value |
 |---------|-------|
 | **Nodes** | 5x c7i.4xlarge (16 vCPU, 32GB each) |
-| **Hazelcast** | 5 replicas, 8GB heap, 12Gi limit, dedicated node pool |
+| **Hazelcast** | 3 replicas, 8GB heap, 12Gi limit, dedicated node group |
 | **Services** | 2-5 replicas (HPA enabled), 2GB heap, 3Gi limit |
 | **Networking** | Multi-AZ, strict topology spread |
 | **Scaling** | HPA on all services, PDBs, hard anti-affinity |
+| **Embedded clustering** | Enabled (ADR 013) — same-service replicas form per-service cluster |
 | **Cost** | ~$3.50/hr |
 
-Best for: Capacity planning documentation, production architecture extrapolation.
+Best for: Performance testing, scaling demos, production architecture validation. Sustains **200 TPS with sub-1s saga completion** (tested on AWS EKS, Session 11).
 
 ---
 
@@ -306,6 +618,52 @@ OOMKilled
 ```
 
 Check the values file resource limits. Services running embedded Hazelcast + Jet need at least 1Gi memory limit. See the memory notes in `MEMORY.md`.
+
+### Quota Exceeded on Cluster Creation
+
+```
+Cannot create cluster 'hazelcast-demo' because ... the maximum number of vCPUs ...
+```
+
+Your account's On-Demand vCPU quota is too low for the requested tier. See [Step 4: Service Quotas](#step-4-service-quotas-required-for-large-tier) to request an increase. The Large tier requires 80 vCPU (default quota is 32).
+
+### IAM Permission Denied During Setup
+
+```
+An error occurred (AccessDeniedException) when calling the CreateCluster operation
+```
+
+The IAM user is missing required permissions. If using the custom `HazelcastDemoEKSPolicy`, verify it's attached to your user. `eksctl` needs broad permissions because it creates CloudFormation stacks that provision VPCs, subnets, NAT gateways, security groups, and IAM roles. As a quick workaround for demos, temporarily attach `AdministratorAccess` and narrow permissions later.
+
+---
+
+## Cleanup
+
+### Delete AWS Resources
+
+```bash
+# Tear down the EKS cluster, ECR repos, and all associated resources
+./scripts/k8s-aws/teardown-cluster.sh
+```
+
+The teardown script deletes: the EKS cluster and node groups, all ECR repositories and images, and the underlying CloudFormation stacks. After it completes, verify in the AWS Console that no orphaned resources remain (EC2 instances, load balancers, NAT gateways, Elastic IPs).
+
+### Delete the Demo IAM User (Optional)
+
+If you created a dedicated IAM user for this demo:
+
+1. Go to **IAM > Users > hazelcast-demo-admin**
+2. Delete the access keys under **Security credentials**
+3. Click **Delete user**
+
+Or via CLI:
+
+```bash
+aws iam delete-access-key --user-name hazelcast-demo-admin --access-key-id <YOUR_KEY_ID>
+aws iam detach-user-policy --user-name hazelcast-demo-admin --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/HazelcastDemoEKSPolicy
+aws iam delete-user --user-name hazelcast-demo-admin
+aws iam delete-policy --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/HazelcastDemoEKSPolicy
+```
 
 ---
 
