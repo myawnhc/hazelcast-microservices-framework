@@ -64,6 +64,7 @@ A single entry point that handles the cross-cutting concerns services shouldn't 
 An AI assistant can query, inspect, and operate the entire system through the Model Context Protocol.
 
 - **MCP Server**: 7 tools for querying materialized views, submitting events, inspecting saga state, checking metrics, and running demo scenarios
+- **Zero-config with Claude Code**: `.mcp.json` in the repo root auto-registers the MCP server — just `docker compose up` and Claude Code discovers it on first launch
 - Supports stdio transport (local AI assistants) and HTTP/SSE (networked deployments)
 - [MCP Server Guide](mcp-server/README.md) | [Example Conversations](docs/guides/mcp-examples.md)
 

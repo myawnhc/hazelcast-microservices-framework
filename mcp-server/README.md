@@ -25,9 +25,40 @@ mvn clean package -DskipTests
 cd docker && docker-compose up -d
 ```
 
-### Local (stdio transport)
+### Docker (HTTP/SSE transport) — Recommended
 
-The default configuration uses stdio transport for direct integration with AI assistants.
+When running in Docker, the MCP server uses HTTP/SSE transport on port 8085, configured automatically via the `docker` Spring profile.
+
+The project includes a `.mcp.json` at the repository root that registers the MCP server with Claude Code:
+
+```json
+{
+  "mcpServers": {
+    "hazelcast-ecommerce": {
+      "type": "sse",
+      "url": "http://localhost:8085/sse"
+    }
+  }
+}
+```
+
+**To use it:**
+
+1. Start Docker Compose (the MCP server starts automatically):
+   ```bash
+   cd docker && docker-compose up -d
+   ```
+2. Open Claude Code in the project directory. Claude Code reads `.mcp.json` automatically and will prompt once for approval to use the project-scoped MCP server.
+3. Once approved, all 7 tools (`query_view`, `submit_event`, etc.) are available to Claude.
+
+**Verify the MCP server is running:**
+```bash
+curl -s http://localhost:8085/actuator/health
+```
+
+### Local (stdio transport) — For Production or Non-Docker Setups
+
+The stdio transport runs the MCP server as a subprocess managed by the AI assistant. No network port is needed — the assistant communicates via stdin/stdout.
 
 **Build:**
 
@@ -35,41 +66,60 @@ The default configuration uses stdio transport for direct integration with AI as
 mvn clean package -DskipTests -pl mcp-server
 ```
 
-**Claude Code configuration** (`~/.claude/claude_code_config.json`):
+**Claude Code**: Add to your project's `.mcp.json` (or run `claude mcp add`):
+
+```json
+{
+  "mcpServers": {
+    "hazelcast-ecommerce": {
+      "type": "stdio",
+      "command": "java",
+      "args": ["-jar", "mcp-server/target/mcp-server-1.0.0-SNAPSHOT.jar"]
+    }
+  }
+}
+```
+
+Or via CLI:
+```bash
+claude mcp add --transport stdio --scope project hazelcast-ecommerce -- \
+  java -jar mcp-server/target/mcp-server-1.0.0-SNAPSHOT.jar
+```
+
+**Claude Desktop**: Add to `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "hazelcast-ecommerce": {
       "command": "java",
-      "args": ["-jar", "/path/to/mcp-server/target/mcp-server-1.0.0-SNAPSHOT.jar"]
+      "args": ["-jar", "/absolute/path/to/mcp-server/target/mcp-server-1.0.0-SNAPSHOT.jar"]
     }
   }
 }
 ```
 
-**Claude Desktop configuration** (`claude_desktop_config.json`):
+**When to use stdio vs SSE:**
 
-```json
-{
-  "mcpServers": {
-    "hazelcast-ecommerce": {
-      "command": "java",
-      "args": ["-jar", "/path/to/mcp-server/target/mcp-server-1.0.0-SNAPSHOT.jar"]
-    }
-  }
-}
-```
+| | SSE (Docker) | stdio (Local) |
+|---|---|---|
+| **Setup** | `docker compose up` — zero config | Build jar, configure path |
+| **Lifecycle** | Runs independently in Docker | AI assistant starts/stops the process |
+| **Networking** | Port 8085 must be available | No ports needed |
+| **Services** | Talks to services via Docker network | Services must be on localhost ports |
+| **Best for** | Demos, development, shared environments | Production, CI/CD, air-gapped setups |
 
-### Docker (HTTP/SSE transport)
+### Security (Optional)
 
-When running in Docker, the MCP server uses HTTP/SSE transport on port 8085. This is configured automatically via the `docker` Spring profile.
+Enable API key authentication for the MCP server:
 
 ```bash
-cd docker && docker-compose up -d mcp-server
+# In Docker Compose environment:
+MCP_SECURITY_ENABLED=true
+MCP_SECURITY_API_KEYS_your-key-here=OPERATOR
 ```
 
-The SSE endpoint is available at `http://localhost:8085/mcp`.
+See [Security Guide](../docs/guides/security-guide.md) for full details on roles (VIEWER, OPERATOR, ADMIN) and per-tool access control.
 
 ## Configuration
 
