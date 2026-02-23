@@ -180,6 +180,22 @@ registry.register("StockReserved", "StockReleased", "inventory-service");
 registry.register("PaymentProcessed", "PaymentRefunded", "payment-service");
 ```
 
+### Failure Events vs Compensation Events
+
+Not all saga-related events implement `SagaEvent`. There are three distinct categories:
+
+| Category | Implements `SagaEvent`? | Examples | Purpose |
+|----------|------------------------|----------|---------|
+| **Forward events** | Yes | `OrderCreated`, `StockReserved`, `PaymentProcessed` | Advance the saga to the next step; registered in `CompensationRegistry` with a compensation counterpart |
+| **Compensation events** | Yes (`isCompensatingEvent() = true`) | `OrderCancelled`, `StockReleased`, `PaymentRefunded` | Undo a forward event during rollback |
+| **Failure trigger events** | No — plain `DomainEvent` | `PaymentFailed`, `StockReservationFailed` | Signal that a step failed; trigger compensation of prior steps |
+
+Failure trigger events do **not** implement `SagaEvent` because they don't fit the interface contract:
+- They are not forward events (they don't need compensation themselves)
+- They are not compensation events (they don't undo a forward event)
+
+Instead, saga listeners subscribe to failure events directly via Hazelcast ITopic. For example, `OrderSagaListener` and `InventorySagaListener` subscribe to the `"PaymentFailed"` topic and handle rollback independently. The `CompensationRegistry` only maps forward → compensation pairs; failure triggers bypass the registry entirely.
+
 ## Orchestrated Order Fulfillment Saga
 
 The orchestrated saga uses `HazelcastSagaOrchestrator` to drive the same four-step flow via synchronous HTTP calls:

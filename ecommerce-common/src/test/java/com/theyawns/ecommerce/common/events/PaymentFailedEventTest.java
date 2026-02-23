@@ -2,8 +2,6 @@ package com.theyawns.ecommerce.common.events;
 
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.ecommerce.common.domain.Payment;
-import com.theyawns.framework.saga.SagaCompensationConfig;
-import com.theyawns.framework.saga.SagaEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -232,40 +230,4 @@ class PaymentFailedEventTest {
         }
     }
 
-    @Nested
-    @DisplayName("SagaEvent interface")
-    class SagaEventInterface {
-
-        @Test
-        @DisplayName("should implement SagaEvent")
-        void shouldImplementSagaEvent() {
-            assertTrue(event instanceof SagaEvent);
-        }
-
-        @Test
-        @DisplayName("should return step 2 for saga step number")
-        void shouldReturnStep2ForSagaStepNumber() {
-            assertEquals(SagaCompensationConfig.STEP_PAYMENT_PROCESSED, event.getSagaStepNumber());
-            assertEquals(2, event.getSagaStepNumber());
-        }
-
-        @Test
-        @DisplayName("should return null as compensating event type (failure event, not forward event)")
-        void shouldReturnNullAsCompensatingEventType() {
-            assertNull(event.getCompensatingEventType());
-        }
-
-        @Test
-        @DisplayName("should not be a compensating event")
-        void shouldNotBeACompensatingEvent() {
-            assertFalse(event.isCompensatingEvent());
-        }
-
-        @Test
-        @DisplayName("should return OrderFulfillment saga type")
-        void shouldReturnOrderFulfillmentSagaType() {
-            assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, event.getSagaTypeName());
-            assertEquals("OrderFulfillment", event.getSagaTypeName());
-        }
-    }
 }
