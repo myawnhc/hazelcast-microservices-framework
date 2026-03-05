@@ -22,12 +22,20 @@ PROFILE="${AWS_PROFILE:-default}"
 ECR_PREFIX="${ECR_REPOSITORY_PREFIX:-hazelcast-microservices}"
 SERVICES="account-service inventory-service order-service payment-service api-gateway mcp-server"
 
+EDITION=""
+
 while [ $# -gt 0 ]; do
     case "$1" in
-        --region)   shift; REGION="$1" ;;
-        --profile)  shift; PROFILE="$1" ;;
+        --region)      shift; REGION="$1" ;;
+        --profile)     shift; PROFILE="$1" ;;
+        --enterprise)  EDITION="enterprise" ;;
+        --community)   EDITION="community" ;;
         --help)
-            echo "Usage: $0 [--region REGION] [--profile PROFILE]"
+            echo "Usage: $0 [--region REGION] [--profile PROFILE] [--enterprise | --community]"
+            echo ""
+            echo "  --enterprise  Force enterprise build (requires HZ_LICENSEKEY)"
+            echo "  --community   Force community build (ignore license key)"
+            echo "  (default)     Auto-detect from HZ_LICENSEKEY environment variable"
             exit 0
             ;;
     esac
@@ -52,7 +60,19 @@ echo ""
 # -----------------------------------------------
 echo "Step 1: Building Maven project..."
 cd "$PROJECT_ROOT"
-./mvnw clean package -DskipTests -q
+
+MAVEN_PROFILES=""
+if [ "$EDITION" = "enterprise" ]; then
+    MAVEN_PROFILES="-Penterprise"
+    echo "  Enterprise build requested via --enterprise flag"
+elif [ "$EDITION" = "community" ]; then
+    echo "  Community build requested via --community flag"
+elif [ -n "$HZ_LICENSEKEY" ]; then
+    MAVEN_PROFILES="-Penterprise"
+    echo "  Enterprise license detected — building with enterprise profile"
+fi
+
+./mvnw clean package -DskipTests -q $MAVEN_PROFILES
 
 if [ $? -ne 0 ]; then
     echo "ERROR: Maven build failed!"

@@ -203,7 +203,8 @@ else
         "account-service:8081" \
         "inventory-service:8082" \
         "order-service:8083" \
-        "payment-service:8084"; do
+        "payment-service:8084" \
+        "management-center:8888"; do
 
         svc="${entry%%:*}"
         port="${entry##*:}"
@@ -243,6 +244,7 @@ else
     echo "  Inventory Service: http://localhost:8082"
     echo "  Order Service:     http://localhost:8083"
     echo "  Payment Service:   http://localhost:8084"
+    echo "  Management Center: http://localhost:8888"
 fi
 
 echo ""

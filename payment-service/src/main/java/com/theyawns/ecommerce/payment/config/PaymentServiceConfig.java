@@ -113,6 +113,12 @@ public class PaymentServiceConfig {
     public HazelcastInstance hazelcastInstance() {
         Config config = new Config();
 
+        // Set enterprise license key if available (env var only, never hardcoded)
+        String licenseKey = System.getenv("HZ_LICENSEKEY");
+        if (licenseKey != null && !licenseKey.isEmpty()) {
+            config.setLicenseKey(licenseKey);
+        }
+
         // Resolve embedded cluster name: @Value → env var → default
         String effectiveEmbeddedName = embeddedClusterName;
         if (effectiveEmbeddedName == null || effectiveEmbeddedName.isEmpty()) {
@@ -183,7 +189,19 @@ public class PaymentServiceConfig {
 
         logger.info("Creating standalone Hazelcast instance for local Jet processing (cluster: {})",
                 embeddedClusterName);
-        return Hazelcast.newHazelcastInstance(config);
+        try {
+            return Hazelcast.newHazelcastInstance(config);
+        } catch (Exception e) {
+            if (config.getLicenseKey() != null && e.getMessage() != null
+                    && (e.getMessage().contains("license") || e.getMessage().contains("License")
+                        || e.getMessage().contains("byte array"))) {
+                logger.warn("Enterprise license key is invalid or incompatible with this Hazelcast version. "
+                        + "Falling back to Community Edition. Error: {}", e.getMessage());
+                config.setLicenseKey(null);
+                return Hazelcast.newHazelcastInstance(config);
+            }
+            throw e;
+        }
     }
 
     /**

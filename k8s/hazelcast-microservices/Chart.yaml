@@ -45,6 +45,11 @@ dependencies:
     repository: "file://charts/mcp-server"
     condition: mcp-server.enabled
 
+  - name: management-center
+    version: 0.1.0
+    repository: "file://charts/management-center"
+    condition: management-center.enabled
+
   - name: monitoring
     version: 0.1.0
     repository: "file://charts/monitoring"

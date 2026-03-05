@@ -20,8 +20,11 @@ dependencies:
 - name: mcp-server
   repository: file://charts/mcp-server
   version: 0.1.0
+- name: management-center
+  repository: file://charts/management-center
+  version: 0.1.0
 - name: monitoring
   repository: file://charts/monitoring
   version: 0.1.0
-digest: sha256:7340af359b68b97130aee037d84ed3655e3aa0549cb9028c75863b5688acafc2
-generated: "2026-02-15T05:50:56.546349-05:00"
+digest: sha256:73936f7d443b749ee4f2c53e389a7f6c54ea0569b19678a2be7b1f625ea11324
+generated: "2026-03-05T14:43:34.186648-05:00"

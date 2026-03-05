@@ -1,20 +1,21 @@
 package com.theyawns.framework.vectorstore;
 
 import com.hazelcast.config.Config;
+import com.hazelcast.config.vector.Metric;
+import com.hazelcast.config.vector.VectorCollectionConfig;
+import com.hazelcast.config.vector.VectorIndexConfig;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.vector.Metric;
 import com.hazelcast.vector.SearchOptions;
 import com.hazelcast.vector.SearchResult;
 import com.hazelcast.vector.SearchResults;
 import com.hazelcast.vector.VectorCollection;
-import com.hazelcast.vector.VectorCollectionConfig;
 import com.hazelcast.vector.VectorDocument;
-import com.hazelcast.vector.VectorIndexConfig;
 import com.hazelcast.vector.VectorValues;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -114,7 +115,9 @@ public class HazelcastVectorStoreService implements VectorStoreService {
         ).toCompletableFuture().join();
 
         final List<SimilarityResult> results = new ArrayList<>();
-        for (final SearchResult<String, String> hit : searchResults) {
+        final Iterator<SearchResult<String, String>> iterator = searchResults.results();
+        while (iterator.hasNext()) {
+            final SearchResult<String, String> hit = iterator.next();
             final Map<String, Object> metadata = jsonToMetadata(hit.getValue());
             results.add(new SimilarityResult(hit.getKey(), hit.getScore(), metadata));
         }
@@ -149,7 +152,9 @@ public class HazelcastVectorStoreService implements VectorStoreService {
         ).toCompletableFuture().join();
 
         final List<SimilarityResult> results = new ArrayList<>();
-        for (final SearchResult<String, String> hit : searchResults) {
+        final Iterator<SearchResult<String, String>> iterator = searchResults.results();
+        while (iterator.hasNext()) {
+            final SearchResult<String, String> hit = iterator.next();
             if (!hit.getKey().equals(id)) {
                 final Map<String, Object> metadata = jsonToMetadata(hit.getValue());
                 results.add(new SimilarityResult(hit.getKey(), hit.getScore(), metadata));
@@ -193,6 +198,12 @@ public class HazelcastVectorStoreService implements VectorStoreService {
         final VectorValues vectors = document.getVectors();
         if (vectors instanceof VectorValues.SingleVectorValues single) {
             return single.vector();
+        }
+        if (vectors instanceof VectorValues.MultiIndexVectorValues multi) {
+            final float[] vector = multi.indexNameToVector().get(indexName);
+            if (vector != null) {
+                return vector;
+            }
         }
 
         throw new IllegalStateException("Unable to retrieve vector for id=" + id);

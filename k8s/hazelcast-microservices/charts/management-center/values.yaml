@@ -1,0 +1,28 @@
+enabled: true
+
+image:
+  repository: hazelcast/management-center
+  tag: "5.6.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8888
+
+# MC runs its web UI on port 8080 by default
+containerPort: 8080
+
+# Cluster connection defaults (override via umbrella values)
+cluster:
+  name: "ecommerce-cluster"
+  # Service name of the Hazelcast cluster in the same namespace
+  # Will be prefixed with release name in the template
+  members: "hazelcast-cluster:5701"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "250m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"

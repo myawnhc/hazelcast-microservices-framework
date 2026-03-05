@@ -225,11 +225,12 @@ public class InventoryController {
 
         List<SimilarityResult> results = vectorStoreService.findSimilarById(productId, limit);
 
-        // Convert similarity results to ProductDTOs
-        List<ProductDTO> similarProducts = new ArrayList<>();
+        // Convert similarity results to ScoredProducts (preserving similarity scores)
+        List<SimilarProductsResponse.ScoredProduct> similarProducts = new ArrayList<>();
         for (SimilarityResult result : results) {
             productService.getProduct(result.id())
-                    .ifPresent(product -> similarProducts.add(product.toDTO()));
+                    .ifPresent(product -> similarProducts.add(
+                            new SimilarProductsResponse.ScoredProduct(result.score(), product.toDTO())));
         }
 
         SimilarProductsResponse response = new SimilarProductsResponse(

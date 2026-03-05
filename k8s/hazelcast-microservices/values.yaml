@@ -222,6 +222,25 @@ mcp-server:
       cpu: "500m"
 
 # ----------------------------------------------
+# Management Center
+# ----------------------------------------------
+management-center:
+  enabled: true
+  image:
+    repository: hazelcast/management-center
+    tag: "5.6.0"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8888
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# ----------------------------------------------
 # Monitoring (Prometheus + Grafana + Jaeger)
 # ----------------------------------------------
 monitoring:

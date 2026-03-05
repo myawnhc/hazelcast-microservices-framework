@@ -44,12 +44,13 @@ done
 echo "  Hazelcast cluster is ready!"
 
 # Wait for services
-for service in account-service inventory-service order-service; do
+for service in account-service inventory-service order-service payment-service; do
     port=""
     case $service in
         account-service) port=8081 ;;
         inventory-service) port=8082 ;;
         order-service) port=8083 ;;
+        payment-service) port=8084 ;;
     esac
 
     echo "Waiting for ${service}..."
@@ -75,10 +76,12 @@ echo "Service Endpoints:"
 echo "  Account Service:   http://localhost:8081/api/customers"
 echo "  Inventory Service: http://localhost:8082/api/products"
 echo "  Order Service:     http://localhost:8083/api/orders"
+echo "  Payment Service:   http://localhost:8084/api/payments"
 echo ""
 echo "Monitoring:"
+echo "  Management Center: http://localhost:8888"
 echo "  Prometheus:        http://localhost:9090"
-echo "  Health Checks:     http://localhost:808X/actuator/health"
+echo "  Health Checks:     http://localhost:{8081..8084}/actuator/health"
 echo ""
 echo "Hazelcast Cluster:"
 echo "  Node 1:            http://localhost:5701/hazelcast/health"

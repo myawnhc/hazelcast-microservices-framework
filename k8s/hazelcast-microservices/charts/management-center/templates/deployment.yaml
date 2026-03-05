@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "management-center.fullname" . }}
+  labels:
+    {{- include "management-center.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "management-center.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "management-center.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: management-center
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          env:
+            - name: MC_DEFAULT_CLUSTER
+              value: {{ .Values.cluster.name | quote }}
+            - name: MC_DEFAULT_CLUSTER_MEMBERS
+              value: "{{ .Release.Name }}-{{ .Values.cluster.members }}"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

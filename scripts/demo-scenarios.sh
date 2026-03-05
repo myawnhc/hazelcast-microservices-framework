@@ -635,15 +635,17 @@ scenario_4_similar_products() {
 
     echo "This scenario demonstrates the vector store integration:"
     echo "  1. Look up a product from sample data"
-    echo "  2. Call the similar products endpoint"
-    echo "  3. Display results (Enterprise) or fallback message (Community)"
+    echo "  2. Find the top 5 most similar products (with similarity scores)"
+    echo "  3. Compare against the bottom 5 (least similar) to show the score gradient"
+    echo "  4. Display results (Enterprise) or fallback message (Community)"
     echo ""
     echo "The vector store uses cosine similarity on product embeddings."
+    echo "Higher scores = more similar (1.0 = identical, 0.0 = unrelated)."
     echo "Community Edition returns an informational message; Enterprise returns results."
     wait_for_keypress
 
     # Step 1: Determine product ID
-    local product_id="${LAPTOP_ID:-}"
+    local product_id="${LAPTOP_ID:-${PRODUCT_1:-}}"
 
     if [ -z "$product_id" ]; then
         print_step "1" "Creating a product for this scenario"
@@ -664,7 +666,7 @@ scenario_4_similar_products() {
             return 1
         fi
     else
-        print_step "1" "Using sample data product (Laptop)"
+        print_step "1" "Using sample data product"
         print_success "Product ID: $product_id"
     fi
     wait_for_keypress
@@ -676,7 +678,8 @@ scenario_4_similar_products() {
     local product_details=$(api_get "$INVENTORY_SERVICE/api/products/$product_id")
 
     if [ -n "$product_details" ]; then
-        print_success "Product details retrieved"
+        local query_name=$(echo "$product_details" | python3 -c "import json,sys; print(json.load(sys.stdin).get('name','(unknown)'))" 2>/dev/null)
+        print_success "Query product: $query_name"
         print_json "$product_details"
     else
         print_error "Failed to fetch product details"
@@ -684,8 +687,8 @@ scenario_4_similar_products() {
     fi
     wait_for_keypress
 
-    # Step 3: Call similar products endpoint
-    print_step "3" "Finding similar products"
+    # Step 3: Call similar products endpoint (top 5)
+    print_step "3" "Finding the 5 most similar products"
     print_substep "GET /api/products/$product_id/similar?limit=5"
 
     local similar_response=$(api_get "$INVENTORY_SERVICE/api/products/$product_id/similar?limit=5")
@@ -698,20 +701,10 @@ scenario_4_similar_products() {
     # Parse response fields
     local vector_available=$(echo "$similar_response" | grep -oE '"vectorStoreAvailable" *: *(true|false)' | grep -oE '(true|false)$')
     local implementation=$(echo "$similar_response" | grep -oE '"implementation" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
-    local message=$(echo "$similar_response" | grep -oE '"message" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
-    wait_for_keypress
 
-    # Step 4: Display results based on edition
-    print_step "4" "Results"
-
-    if [ "$vector_available" = "true" ]; then
-        print_success "Vector store is available! (Enterprise Edition)"
-        echo ""
-        echo "  Implementation: $implementation"
-        echo ""
-        echo "  Similar products:"
-        print_json "$similar_response"
-    else
+    if [ "$vector_available" != "true" ]; then
+        # Community Edition — show fallback message
+        local message=$(echo "$similar_response" | grep -oE '"message" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
         echo -e "  ${YELLOW}Vector store is not available (Community Edition)${NC}"
         echo ""
         echo "  Implementation: ${implementation:-No-Op (Community Edition)}"
@@ -725,8 +718,109 @@ scenario_4_similar_products() {
         echo -e "  ${CYAN}To enable vector similarity search:${NC}"
         echo "    1. Obtain a Hazelcast Enterprise license"
         echo "    2. Set the HZ_LICENSEKEY environment variable"
-        echo "    3. Restart the services"
-        echo "    4. The framework auto-detects Enterprise and enables vector store"
+        echo "    3. Build with --enterprise flag (or auto-detected)"
+        echo "    4. Restart the services"
+        echo "    5. The framework auto-detects Enterprise and enables vector store"
+
+        echo ""
+        echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+        echo -e "${GREEN}  SCENARIO 4 COMPLETE: Similar Products (Vector Store)${NC}"
+        echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+        echo ""
+        echo "Key observations:"
+        echo "  1. The similar products endpoint works in both editions"
+        echo "  2. Community Edition gracefully returns an informational response"
+        echo "  3. Enterprise Edition returns actual similarity results with scores"
+        echo "  4. Edition detection is fully automatic (no code changes needed)"
+        return 0
+    fi
+
+    # Enterprise Edition — show scored results
+    print_success "Vector store is available! ($implementation)"
+    echo ""
+
+    # Display top 5 as a formatted table
+    echo -e "  ${GREEN}Top 5 most similar products to: ${query_name}${NC}"
+    echo -e "  ──────────────────────────────────────────────────────────"
+    echo "$similar_response" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for i, sp in enumerate(data.get('similarProducts', []), 1):
+    score = sp.get('score', 0)
+    name = sp.get('product', {}).get('name', '(unknown)')
+    sku = sp.get('product', {}).get('sku', '')
+    bar_len = int(score * 30)
+    bar = '\u2588' * bar_len + '\u2591' * (30 - bar_len)
+    print(f'  {i}. [{bar}] {score:.4f}  {name} ({sku})')
+" 2>/dev/null
+    wait_for_keypress
+
+    # Step 4: Fetch a larger result set to show the score gradient
+    print_step "4" "Comparing: top 5 vs bottom 5 (score gradient)"
+    print_substep "GET /api/products/$product_id/similar?limit=50"
+    echo ""
+
+    local wide_response=$(api_get "$INVENTORY_SERVICE/api/products/$product_id/similar?limit=50")
+
+    if [ -z "$wide_response" ]; then
+        print_error "Failed to fetch wider result set"
+    else
+        echo "$wide_response" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+products = data.get('similarProducts', [])
+total = len(products)
+
+if total < 6:
+    print(f'  Only {total} products in catalog — need more products to show gradient.')
+    print('  Load the full dataset: ./scripts/load-sample-data.sh')
+    sys.exit(0)
+
+top5 = products[:5]
+bottom5 = products[-5:]
+
+# Top 5
+print('  \033[0;32mMost similar (top 5):\033[0m')
+print('  ──────────────────────────────────────────────────────────')
+for i, sp in enumerate(top5, 1):
+    score = sp.get('score', 0)
+    name = sp.get('product', {}).get('name', '(unknown)')
+    sku = sp.get('product', {}).get('sku', '')
+    bar_len = int(score * 30)
+    bar = '\u2588' * bar_len + '\u2591' * (30 - bar_len)
+    print(f'  {i:2d}. [{bar}] {score:.4f}  {name} ({sku})')
+
+print()
+
+# Bottom 5
+print('  \033[1;33mLeast similar (bottom 5 of {0} results):\033[0m'.format(total))
+print('  ──────────────────────────────────────────────────────────')
+for i, sp in enumerate(bottom5):
+    rank = total - 4 + i
+    score = sp.get('score', 0)
+    name = sp.get('product', {}).get('name', '(unknown)')
+    sku = sp.get('product', {}).get('sku', '')
+    bar_len = int(score * 30)
+    bar = '\u2588' * bar_len + '\u2591' * (30 - bar_len)
+    print(f'  {rank:2d}. [{bar}] {score:.4f}  {name} ({sku})')
+
+print()
+
+# Summary statistics
+top_avg = sum(sp.get('score', 0) for sp in top5) / len(top5)
+bot_avg = sum(sp.get('score', 0) for sp in bottom5) / len(bottom5)
+all_avg = sum(sp.get('score', 0) for sp in products) / len(products)
+top_score = products[0].get('score', 0)
+bot_score = products[-1].get('score', 0)
+
+print('  \033[0;36mScore analysis:\033[0m')
+print(f'    Highest score:      {top_score:.4f}')
+print(f'    Top 5 avg:          {top_avg:.4f}')
+print(f'    Overall avg:        {all_avg:.4f} ({total} products)')
+print(f'    Bottom 5 avg:       {bot_avg:.4f}')
+print(f'    Lowest score:       {bot_score:.4f}')
+print(f'    Score spread:       {top_score - bot_score:.4f} (higher = better separation)')
+" 2>/dev/null
     fi
 
     echo ""
@@ -735,10 +829,11 @@ scenario_4_similar_products() {
     echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
     echo ""
     echo "Key observations:"
-    echo "  1. The similar products endpoint works in both editions"
-    echo "  2. Community Edition gracefully returns an informational response"
-    echo "  3. Enterprise Edition returns actual similarity results"
-    echo "  4. Edition detection is fully automatic (no code changes needed)"
+    echo "  1. Products with similar descriptions cluster with higher similarity scores"
+    echo "  2. The score gradient shows vector search ranks results meaningfully"
+    echo "  3. Top results (same category) score significantly higher than bottom results"
+    echo "  4. HNSW indexing provides O(log n) approximate nearest-neighbor search"
+    echo "  5. Community Edition gracefully degrades with an informational response"
 }
 
 # ============================================================================

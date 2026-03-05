@@ -179,7 +179,8 @@ for entry in \
     "account-service:8081" \
     "inventory-service:8082" \
     "order-service:8083" \
-    "payment-service:8084"; do
+    "payment-service:8084" \
+    "management-center:8888"; do
 
     svc="${entry%%:*}"
     port="${entry##*:}"
@@ -257,6 +258,7 @@ echo ""
 fi
 echo "Hazelcast Cluster:"
 echo "  Health:            http://localhost:5701/hazelcast/health"
+echo "  Management Center: http://localhost:8888"
 echo ""
 echo "Kubernetes:"
 echo "  Namespace:         ${NAMESPACE}"
