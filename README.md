@@ -194,7 +194,7 @@ Read path:   View Store (GenericRecord) ──[.fromGenericRecord()]──→ Do
 
 ```bash
 # Clone the repository
-git clone https://github.com/theyawns/hazelcast-microservices-framework.git
+git clone https://github.com/myawnhc/hazelcast-microservices-framework.git
 cd hazelcast-microservices-framework
 
 # Build the project
