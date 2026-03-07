@@ -1,0 +1,111 @@
+# Docker Compose DEMO mode overlay
+# Usage: docker compose -f docker-compose.yml -f docker-compose-demo.yml up -d
+#
+# Priorities: stability over data integrity, run all day without crashing
+# Total memory: ~5.5GB (fits on 16GB laptop)
+#
+# - PostgreSQL and Jaeger are disabled (not started)
+# - Persistence OFF, tracing OFF
+# - Aggressive eviction to keep memory bounded
+# - G1GC tuned for short pause times
+
+services:
+  # Disable PostgreSQL in demo mode — no persistence needed
+  postgres:
+    profiles: ["never"]
+
+  # Disable Jaeger in demo mode — no tracing needed
+  jaeger:
+    profiles: ["never"]
+
+  account-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,demo
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport
+      - FRAMEWORK_PERSISTENCE_ENABLED=false
+      - TRACING_ENABLED=false
+      - OTEL_LOG_LEVEL=ERROR
+    depends_on:
+      hazelcast-1:
+        condition: service_healthy
+      hazelcast-2:
+        condition: service_healthy
+      hazelcast-3:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  inventory-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,demo
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport
+      - FRAMEWORK_PERSISTENCE_ENABLED=false
+      - TRACING_ENABLED=false
+      - OTEL_LOG_LEVEL=ERROR
+    depends_on:
+      hazelcast-1:
+        condition: service_healthy
+      hazelcast-2:
+        condition: service_healthy
+      hazelcast-3:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  order-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,demo
+      - JAVA_OPTS=-Xms256m -Xmx768m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport
+      - FRAMEWORK_PERSISTENCE_ENABLED=false
+      - TRACING_ENABLED=false
+      - OTEL_LOG_LEVEL=ERROR
+    depends_on:
+      hazelcast-1:
+        condition: service_healthy
+      hazelcast-2:
+        condition: service_healthy
+      hazelcast-3:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  payment-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,demo
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport
+      - FRAMEWORK_PERSISTENCE_ENABLED=false
+      - TRACING_ENABLED=false
+      - OTEL_LOG_LEVEL=ERROR
+    depends_on:
+      hazelcast-1:
+        condition: service_healthy
+      hazelcast-2:
+        condition: service_healthy
+      hazelcast-3:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  api-gateway:
+    environment:
+      - JAVA_OPTS=-Xms128m -Xmx256m -XX:+UseContainerSupport
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  management-center:
+    environment:
+      - JAVA_OPTS=-Xmx512m
+    deploy:
+      resources:
+        limits:
+          memory: 768M

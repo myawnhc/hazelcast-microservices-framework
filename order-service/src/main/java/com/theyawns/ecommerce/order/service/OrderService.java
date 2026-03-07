@@ -20,6 +20,7 @@ import com.theyawns.framework.saga.SagaCompensationConfig;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
 import com.theyawns.framework.view.HazelcastViewStore;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -70,6 +71,7 @@ public class OrderService implements OrderOperations {
     private final HazelcastInstance hazelcast;
     private final SagaStateStore sagaStateStore;
     private final HazelcastViewStore<String> productAvailabilityViewStore;
+    private final MeterRegistry meterRegistry;
 
     /**
      * Creates a new OrderService.
@@ -78,17 +80,20 @@ public class OrderService implements OrderOperations {
      * @param hazelcast the Hazelcast instance
      * @param sagaStateStore the saga state store for tracking distributed transactions
      * @param productAvailabilityViewStore the product availability cache for price lookups
+     * @param meterRegistry the metrics registry for business metrics
      */
     public OrderService(
             EventSourcingController<Order, String, DomainEvent<Order, String>> controller,
             HazelcastInstance hazelcast,
             SagaStateStore sagaStateStore,
             @Qualifier("productAvailabilityViewStore")
-            HazelcastViewStore<String> productAvailabilityViewStore) {
+            HazelcastViewStore<String> productAvailabilityViewStore,
+            MeterRegistry meterRegistry) {
         this.controller = controller;
         this.hazelcast = hazelcast;
         this.sagaStateStore = sagaStateStore;
         this.productAvailabilityViewStore = productAvailabilityViewStore;
+        this.meterRegistry = meterRegistry;
     }
 
     /**
@@ -150,6 +155,9 @@ public class OrderService implements OrderOperations {
                             completionInfo.getEventId()
                     );
 
+                    // Record business metrics
+                    recordBusinessMetrics(lineItems);
+
                     // Index order by customer for getOrdersByCustomer
                     indexOrderByCustomer(dto.getCustomerId(), orderId);
 
@@ -191,6 +199,9 @@ public class OrderService implements OrderOperations {
         return controller.handleEvent(event, correlationId)
                 .thenApply(completionInfo -> {
                     logger.debug("Order created event processed (orchestrated): {}", completionInfo.getEventId());
+
+                    // Record business metrics
+                    recordBusinessMetrics(lineItems);
 
                     // Index order by customer for getOrdersByCustomer
                     indexOrderByCustomer(dto.getCustomerId(), orderId);
@@ -477,6 +488,25 @@ public class OrderService implements OrderOperations {
                 dto.getQuantity(),
                 unitPrice
         );
+    }
+
+    /**
+     * Records business metrics for a created order.
+     *
+     * @param lineItems the order line items
+     */
+    private void recordBusinessMetrics(List<OrderLineItem> lineItems) {
+        double revenue = lineItems.stream()
+                .filter(item -> item.getUnitPrice() != null)
+                .mapToDouble(item -> item.getUnitPrice().doubleValue() * item.getQuantity())
+                .sum();
+        int totalQuantity = lineItems.stream()
+                .mapToInt(OrderLineItem::getQuantity)
+                .sum();
+
+        meterRegistry.counter("order.revenue").increment(revenue);
+        meterRegistry.counter("order.items.count").increment(lineItems.size());
+        meterRegistry.counter("order.items.quantity").increment(totalQuantity);
     }
 
     /**

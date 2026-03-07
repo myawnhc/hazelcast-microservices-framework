@@ -14,11 +14,26 @@ PID_FILE="/tmp/hazelcast-k8s-pf.pids"
 
 # Parse flags
 MONITORING=true
-for arg in "$@"; do
-    case "$arg" in
+MODE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
         --no-monitoring) MONITORING=false ;;
+        --mode) shift; MODE="$1" ;;
+        --help)
+            echo "Usage: $0 [--mode demo|production|perf-test] [--no-monitoring]"
+            exit 0
+            ;;
     esac
+    shift
 done
+
+# Validate mode
+if [ -n "$MODE" ]; then
+    case "$MODE" in
+        demo|production|perf-test) ;;
+        *) echo "ERROR: Invalid mode '${MODE}'. Must be demo, production, or perf-test."; exit 1 ;;
+    esac
+fi
 
 echo "============================================"
 echo "Hazelcast Microservices - K8s Local Start"
@@ -110,9 +125,22 @@ fi
 # -----------------------------------------------
 # Helm install/upgrade with local overrides
 # -----------------------------------------------
+# Build mode values flag
+MODE_VALUES=""
+if [ -n "$MODE" ]; then
+    MODE_VALUES_FILE="${CHART_DIR}/values-mode-${MODE}.yaml"
+    if [ -f "$MODE_VALUES_FILE" ]; then
+        MODE_VALUES="-f $MODE_VALUES_FILE"
+        echo "Using mode values: ${MODE_VALUES_FILE}"
+    else
+        echo "WARNING: Mode values file not found: ${MODE_VALUES_FILE}"
+    fi
+fi
+
 echo "Running helm ${HELM_CMD}..."
 helm $HELM_CMD "$RELEASE_NAME" "$CHART_DIR" \
     -n "$NAMESPACE" \
+    $MODE_VALUES \
     --set account-service.image.pullPolicy=Never \
     --set inventory-service.image.pullPolicy=Never \
     --set order-service.image.pullPolicy=Never \
@@ -140,7 +168,7 @@ echo ""
 # -----------------------------------------------
 # Wait for service deployments
 # -----------------------------------------------
-for svc in account-service inventory-service order-service payment-service api-gateway; do
+for svc in account-service inventory-service order-service payment-service api-gateway mcp-server; do
     echo "Waiting for ${svc} rollout (timeout 180s)..."
     kubectl rollout status deployment "${RELEASE_NAME}-${svc}" \
         -n "$NAMESPACE" \
@@ -180,6 +208,7 @@ for entry in \
     "inventory-service:8082" \
     "order-service:8083" \
     "payment-service:8084" \
+    "mcp-server:8085" \
     "management-center:8888"; do
 
     svc="${entry%%:*}"
@@ -216,7 +245,7 @@ echo ""
 # -----------------------------------------------
 echo "Verifying service health via port-forwards..."
 timeout=60
-for entry in "Account Service:8081" "Inventory Service:8082" "Order Service:8083" "Payment Service:8084" "API Gateway:8080"; do
+for entry in "Account Service:8081" "Inventory Service:8082" "Order Service:8083" "Payment Service:8084" "API Gateway:8080" "MCP Server:8085"; do
     name="${entry%%:*}"
     port="${entry##*:}"
 
@@ -248,6 +277,9 @@ echo "  Inventory Service: http://localhost:8082/api/products"
 echo "  Order Service:     http://localhost:8083/api/orders"
 echo "  Payment Service:   http://localhost:8084/api/payments"
 echo "  API Gateway:       http://localhost:8080"
+echo ""
+echo "MCP Server (AI Assistant):"
+echo "  SSE Endpoint:      http://localhost:8085/sse"
 echo ""
 if [ "$MONITORING" = "true" ]; then
 echo "Monitoring:"

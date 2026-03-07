@@ -1,0 +1,91 @@
+# PRODUCTION mode values overlay
+# Usage: helm upgrade --install demo . -f values.yaml -f values-mode-production.yaml
+#
+# Priorities: zero data loss, high availability
+# - PostgreSQL persistence with write-behind
+# - Full monitoring and tracing
+# - Higher memory for sustained throughput
+
+account-service:
+  spring:
+    profiles: "kubernetes,production"
+  persistence:
+    enabled: true
+  jvm:
+    xms: "512m"
+    xmx: "1024m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport"
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: "500m"
+    limits:
+      memory: "1536Mi"
+      cpu: "2000m"
+
+inventory-service:
+  spring:
+    profiles: "kubernetes,production"
+  persistence:
+    enabled: true
+  jvm:
+    xms: "512m"
+    xmx: "1024m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport"
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: "500m"
+    limits:
+      memory: "1536Mi"
+      cpu: "2000m"
+
+order-service:
+  spring:
+    profiles: "kubernetes,production"
+  persistence:
+    enabled: true
+  jvm:
+    xms: "512m"
+    xmx: "1536m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport"
+  resources:
+    requests:
+      memory: "1024Mi"
+      cpu: "500m"
+    limits:
+      memory: "2048Mi"
+      cpu: "2000m"
+
+payment-service:
+  spring:
+    profiles: "kubernetes,production"
+  persistence:
+    enabled: true
+  jvm:
+    xms: "512m"
+    xmx: "1024m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport"
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: "500m"
+    limits:
+      memory: "1536Mi"
+      cpu: "2000m"
+
+api-gateway:
+  jvm:
+    xms: "128m"
+    xmx: "384m"
+  resources:
+    limits:
+      memory: "512Mi"
+
+management-center:
+  resources:
+    limits:
+      memory: "1024Mi"
+
+monitoring:
+  enabled: true

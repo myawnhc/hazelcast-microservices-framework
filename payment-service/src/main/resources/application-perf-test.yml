@@ -1,0 +1,23 @@
+# PERF_TEST: mirrors production data guarantees, minimal monitoring overhead
+hazelcast:
+  eviction:
+    event-store:
+      max-size: 50000
+      policy: LRU
+    view-store:
+      max-size: 50000
+      policy: LRU
+
+framework:
+  persistence:
+    archival:
+      enabled: false
+
+saga:
+  timeout:
+    purge-enabled: true
+    purge-older-than: 5m
+
+logging:
+  level:
+    io.opentelemetry.exporter: ERROR

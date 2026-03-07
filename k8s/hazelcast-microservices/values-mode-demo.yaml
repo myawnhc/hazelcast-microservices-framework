@@ -1,0 +1,93 @@
+# DEMO mode values overlay
+# Usage: helm upgrade --install demo . -f values.yaml -f values-mode-demo.yaml
+#
+# Priorities: stability over data integrity, run all day at a trade show
+# - No PostgreSQL persistence
+# - No tracing (Jaeger not started)
+# - Aggressive IMap eviction
+# - Lower memory footprint
+
+account-service:
+  spring:
+    profiles: "kubernetes,demo"
+  persistence:
+    enabled: false
+  jvm:
+    xms: "256m"
+    xmx: "512m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport"
+  resources:
+    requests:
+      memory: "384Mi"
+      cpu: "250m"
+    limits:
+      memory: "768Mi"
+      cpu: "1000m"
+
+inventory-service:
+  spring:
+    profiles: "kubernetes,demo"
+  persistence:
+    enabled: false
+  jvm:
+    xms: "256m"
+    xmx: "512m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport"
+  resources:
+    requests:
+      memory: "384Mi"
+      cpu: "250m"
+    limits:
+      memory: "768Mi"
+      cpu: "1000m"
+
+order-service:
+  spring:
+    profiles: "kubernetes,demo"
+  persistence:
+    enabled: false
+  jvm:
+    xms: "256m"
+    xmx: "768m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1024Mi"
+      cpu: "1000m"
+
+payment-service:
+  spring:
+    profiles: "kubernetes,demo"
+  persistence:
+    enabled: false
+  jvm:
+    xms: "256m"
+    xmx: "512m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseContainerSupport"
+  resources:
+    requests:
+      memory: "384Mi"
+      cpu: "250m"
+    limits:
+      memory: "768Mi"
+      cpu: "1000m"
+
+api-gateway:
+  jvm:
+    xms: "128m"
+    xmx: "256m"
+  resources:
+    limits:
+      memory: "384Mi"
+
+management-center:
+  resources:
+    limits:
+      memory: "768Mi"
+
+monitoring:
+  jaeger:
+    enabled: false

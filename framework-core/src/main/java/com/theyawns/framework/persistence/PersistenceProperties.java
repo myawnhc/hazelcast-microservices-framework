@@ -74,6 +74,11 @@ public class PersistenceProperties {
     private EvictionConfig viewStoreEviction = new EvictionConfig(3600);
 
     /**
+     * Archival configuration for moving old events from domain_events to domain_events_archive.
+     */
+    private ArchivalConfig archival = new ArchivalConfig();
+
+    /**
      * Creates a new PersistenceProperties with default values.
      */
     public PersistenceProperties() {
@@ -215,6 +220,24 @@ public class PersistenceProperties {
         this.viewStoreEviction = viewStoreEviction;
     }
 
+    /**
+     * Returns the archival configuration.
+     *
+     * @return the archival config
+     */
+    public ArchivalConfig getArchival() {
+        return archival;
+    }
+
+    /**
+     * Sets the archival configuration.
+     *
+     * @param archival the archival config
+     */
+    public void setArchival(final ArchivalConfig archival) {
+        this.archival = archival;
+    }
+
     @Override
     public String toString() {
         return "PersistenceProperties{" +
@@ -225,6 +248,7 @@ public class PersistenceProperties {
                 ", initialLoadMode=" + initialLoadMode +
                 ", eventStoreEviction=" + eventStoreEviction +
                 ", viewStoreEviction=" + viewStoreEviction +
+                ", archival=" + archival +
                 '}';
     }
 
@@ -315,6 +339,78 @@ public class PersistenceProperties {
                     ", maxSizePolicy='" + maxSizePolicy + '\'' +
                     ", evictionPolicy='" + evictionPolicy + '\'' +
                     ", maxIdleSeconds=" + maxIdleSeconds +
+                    '}';
+        }
+    }
+
+    /**
+     * Configuration for event archival — moving old events from the main table
+     * to an archive table to keep the active table bounded.
+     *
+     * <p>Example configuration:
+     * <pre>{@code
+     * framework:
+     *   persistence:
+     *     archival:
+     *       enabled: true
+     *       retention-hours: 24
+     *       run-interval-ms: 3600000
+     *       batch-size: 10000
+     * }</pre>
+     */
+    public static class ArchivalConfig {
+
+        /** Whether archival is enabled. Default: false. */
+        private boolean enabled = false;
+
+        /** Hours to retain events before archiving. Default: 24. */
+        private int retentionHours = 24;
+
+        /** Milliseconds between archival runs. Default: 3600000 (1 hour). */
+        private long runIntervalMs = 3600000;
+
+        /** Maximum events to archive per batch. Default: 10000. */
+        private int batchSize = 10000;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(final boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getRetentionHours() {
+            return retentionHours;
+        }
+
+        public void setRetentionHours(final int retentionHours) {
+            this.retentionHours = retentionHours;
+        }
+
+        public long getRunIntervalMs() {
+            return runIntervalMs;
+        }
+
+        public void setRunIntervalMs(final long runIntervalMs) {
+            this.runIntervalMs = runIntervalMs;
+        }
+
+        public int getBatchSize() {
+            return batchSize;
+        }
+
+        public void setBatchSize(final int batchSize) {
+            this.batchSize = batchSize;
+        }
+
+        @Override
+        public String toString() {
+            return "ArchivalConfig{" +
+                    "enabled=" + enabled +
+                    ", retentionHours=" + retentionHours +
+                    ", runIntervalMs=" + runIntervalMs +
+                    ", batchSize=" + batchSize +
                     '}';
         }
     }

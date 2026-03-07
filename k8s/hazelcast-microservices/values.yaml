@@ -205,7 +205,7 @@ api-gateway:
 # MCP Server
 # ----------------------------------------------
 mcp-server:
-  enabled: false
+  enabled: true
   replicaCount: 1
   image:
     repository: hazelcast-microservices/mcp-server

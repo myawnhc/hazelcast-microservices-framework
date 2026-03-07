@@ -1,0 +1,29 @@
+# DEMO: stability over data integrity, run all day without crashing
+hazelcast:
+  eviction:
+    event-store:
+      max-size: 2000
+      policy: LRU
+    view-store:
+      max-size: 2000
+      policy: LRU
+  event-journal:
+    capacity: 5000
+  completions:
+    max-size: 5000
+
+framework:
+  persistence:
+    archival:
+      enabled: false
+
+saga:
+  timeout:
+    purge-enabled: true
+    purge-older-than: 2m
+
+logging:
+  level:
+    com.theyawns: INFO
+    com.hazelcast: WARN
+    io.opentelemetry.exporter: ERROR

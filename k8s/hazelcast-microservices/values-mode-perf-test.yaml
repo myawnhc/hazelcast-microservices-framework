@@ -1,0 +1,86 @@
+# PERF_TEST mode values overlay
+# Usage: helm upgrade --install demo . -f values.yaml -f values-mode-perf-test.yaml
+#
+# Priorities: mirror production data guarantees, minimal monitoring overhead
+# - Persistence ON, rate limiting OFF
+# - Management Center disabled to reduce contention
+# - GC logging enabled for post-test analysis
+
+account-service:
+  spring:
+    profiles: "kubernetes,perf-test"
+  persistence:
+    enabled: true
+  jvm:
+    xms: "512m"
+    xmx: "1024m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags"
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: "500m"
+    limits:
+      memory: "1536Mi"
+      cpu: "2000m"
+
+inventory-service:
+  spring:
+    profiles: "kubernetes,perf-test"
+  persistence:
+    enabled: true
+  jvm:
+    xms: "512m"
+    xmx: "1024m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags"
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: "500m"
+    limits:
+      memory: "1536Mi"
+      cpu: "2000m"
+
+order-service:
+  spring:
+    profiles: "kubernetes,perf-test"
+  persistence:
+    enabled: true
+  jvm:
+    xms: "512m"
+    xmx: "1536m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags"
+  resources:
+    requests:
+      memory: "1024Mi"
+      cpu: "500m"
+    limits:
+      memory: "2048Mi"
+      cpu: "2000m"
+
+payment-service:
+  spring:
+    profiles: "kubernetes,perf-test"
+  persistence:
+    enabled: true
+  jvm:
+    xms: "512m"
+    xmx: "1024m"
+    opts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags"
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: "500m"
+    limits:
+      memory: "1536Mi"
+      cpu: "2000m"
+
+api-gateway:
+  jvm:
+    xms: "128m"
+    xmx: "384m"
+  resources:
+    limits:
+      memory: "512Mi"
+
+management-center:
+  enabled: false

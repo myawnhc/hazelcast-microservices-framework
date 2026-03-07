@@ -4,7 +4,7 @@
 # Deploys the Hazelcast Microservices stack to EKS via Helm
 # =============================================================================
 #
-# Usage: ./scripts/k8s-aws/start.sh [--tier small|medium|large] [--region REGION] [--profile PROFILE]
+# Usage: ./scripts/k8s-aws/start.sh [--tier small|medium|large] [--mode demo|production|perf-test] [--region REGION] [--profile PROFILE]
 #
 # Prerequisites:
 #   - EKS cluster created (./scripts/k8s-aws/setup-cluster.sh)
@@ -19,6 +19,7 @@ PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 # Defaults and argument parsing
 # -----------------------------------------------
 TIER="small"
+MODE=""
 REGION="${AWS_REGION:-us-east-1}"
 PROFILE="${AWS_PROFILE:-default}"
 CLUSTER_NAME="hazelcast-demo"
@@ -31,15 +32,24 @@ PID_FILE="$SCRIPT_DIR/port-forwards.pids"
 while [ $# -gt 0 ]; do
     case "$1" in
         --tier)     shift; TIER="$1" ;;
+        --mode)     shift; MODE="$1" ;;
         --region)   shift; REGION="$1" ;;
         --profile)  shift; PROFILE="$1" ;;
         --help)
-            echo "Usage: $0 [--tier small|medium|large] [--region REGION] [--profile PROFILE]"
+            echo "Usage: $0 [--tier small|medium|large] [--mode demo|production|perf-test] [--region REGION] [--profile PROFILE]"
             exit 0
             ;;
     esac
     shift
 done
+
+# Validate mode
+if [ -n "$MODE" ]; then
+    case "$MODE" in
+        demo|production|perf-test) ;;
+        *) echo "ERROR: Invalid mode '${MODE}'. Must be demo, production, or perf-test."; exit 1 ;;
+    esac
+fi
 
 # Validate tier
 case "$TIER" in
@@ -61,6 +71,9 @@ echo "Hazelcast Microservices - EKS Deploy"
 echo "============================================"
 echo ""
 echo "  Tier:       ${TIER}"
+if [ -n "$MODE" ]; then
+echo "  Mode:       ${MODE}"
+fi
 echo "  Region:     ${REGION}"
 echo "  Namespace:  ${NAMESPACE}"
 echo "  ECR URI:    ${ECR_URI}"
@@ -113,10 +126,23 @@ fi
 # -----------------------------------------------
 # Helm install/upgrade with tier-specific values
 # -----------------------------------------------
+# Build mode values flag
+MODE_VALUES=""
+if [ -n "$MODE" ]; then
+    MODE_VALUES_FILE="${CHART_DIR}/values-mode-${MODE}.yaml"
+    if [ -f "$MODE_VALUES_FILE" ]; then
+        MODE_VALUES="-f $MODE_VALUES_FILE"
+        echo "Using mode values: ${MODE_VALUES_FILE}"
+    else
+        echo "WARNING: Mode values file not found: ${MODE_VALUES_FILE}"
+    fi
+fi
+
 echo "Running helm ${HELM_CMD} with ${TIER} tier values..."
 helm $HELM_CMD "$RELEASE_NAME" "$CHART_DIR" \
     -n "$NAMESPACE" \
     -f "$VALUES_FILE" \
+    $MODE_VALUES \
     --set account-service.image.repository="${ECR_URI}/${ECR_PREFIX}/account-service" \
     --set inventory-service.image.repository="${ECR_URI}/${ECR_PREFIX}/inventory-service" \
     --set order-service.image.repository="${ECR_URI}/${ECR_PREFIX}/order-service" \
@@ -141,7 +167,7 @@ echo ""
 # -----------------------------------------------
 # Wait for service deployments
 # -----------------------------------------------
-for svc in account-service inventory-service order-service payment-service api-gateway; do
+for svc in account-service inventory-service order-service payment-service api-gateway mcp-server; do
     echo "Waiting for ${svc} rollout (timeout 300s)..."
     kubectl rollout status deployment "${RELEASE_NAME}-${svc}" \
         -n "$NAMESPACE" \
@@ -204,6 +230,7 @@ else
         "inventory-service:8082" \
         "order-service:8083" \
         "payment-service:8084" \
+        "mcp-server:8085" \
         "management-center:8888"; do
 
         svc="${entry%%:*}"
@@ -244,6 +271,7 @@ else
     echo "  Inventory Service: http://localhost:8082"
     echo "  Order Service:     http://localhost:8083"
     echo "  Payment Service:   http://localhost:8084"
+    echo "  MCP Server (SSE):  http://localhost:8085/sse"
     echo "  Management Center: http://localhost:8888"
 fi
 

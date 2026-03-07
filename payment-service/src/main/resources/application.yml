@@ -36,9 +36,9 @@ management:
     tags:
       application: ${spring.application.name}
   tracing:
-    enabled: true
+    enabled: ${TRACING_ENABLED:true}
     sampling:
-      probability: 1.0
+      probability: ${TRACING_SAMPLING:1.0}
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
@@ -91,6 +91,7 @@ logging:
     root: INFO
     com.theyawns: DEBUG
     com.hazelcast: INFO
+    io.opentelemetry.exporter: ${OTEL_LOG_LEVEL:WARN}
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 

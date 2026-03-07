@@ -82,8 +82,8 @@ class InventoryControllerSimilarProductsTest {
                     .andExpect(jsonPath("$.implementation").value("IMap-Based Cosine Similarity (Enterprise)"))
                     .andExpect(jsonPath("$.similarProducts").isArray())
                     .andExpect(jsonPath("$.similarProducts.length()").value(2))
-                    .andExpect(jsonPath("$.similarProducts[0].productId").value("prod-2"))
-                    .andExpect(jsonPath("$.similarProducts[1].productId").value("prod-3"));
+                    .andExpect(jsonPath("$.similarProducts[0].product.productId").value("prod-2"))
+                    .andExpect(jsonPath("$.similarProducts[1].product.productId").value("prod-3"));
         }
 
         @Test

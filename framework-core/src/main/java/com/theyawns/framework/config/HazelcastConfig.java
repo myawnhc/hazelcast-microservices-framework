@@ -74,6 +74,24 @@ public class HazelcastConfig {
     @Value("${hazelcast.completions.max-size:50000}")
     private int completionsMaxSize;
 
+    @Value("${hazelcast.eviction.event-store.max-size:0}")
+    private int esEvictionMaxSize;
+
+    @Value("${hazelcast.eviction.event-store.policy:NONE}")
+    private String esEvictionPolicy;
+
+    @Value("${hazelcast.eviction.view-store.max-size:0}")
+    private int viewEvictionMaxSize;
+
+    @Value("${hazelcast.eviction.view-store.policy:NONE}")
+    private String viewEvictionPolicy;
+
+    @Value("${hazelcast.dlq.ttl-seconds:3600}")
+    private int dlqTtlSeconds;
+
+    @Value("${hazelcast.dlq.max-size:1000}")
+    private int dlqMaxSize;
+
     @Autowired(required = false)
     private List<HazelcastConfigCustomizer> configCustomizers;
 
@@ -120,6 +138,9 @@ public class HazelcastConfig {
         // Configure outbox maps with indexes for efficient polling
         configureOutboxMaps(config);
 
+        // Configure DLQ maps with TTL and eviction
+        configureDlqMaps(config);
+
         // Enable Jet
         config.getJetConfig().setEnabled(true);
 
@@ -153,23 +174,33 @@ public class HazelcastConfig {
 
     /**
      * Configures maps for event storage.
-     * These are append-only and should never be evicted.
+     * Default: no eviction (events are permanent). When {@code hazelcast.eviction.event-store.max-size}
+     * is set to a value &gt; 0, LRU/LFU eviction is applied to prevent OOM in long-running demos.
      */
     private void configureEventStoreMaps(Config config) {
         MapConfig eventStoreMapConfig = new MapConfig("*_ES");
         eventStoreMapConfig.setBackupCount(backupCount);
 
-        // No eviction for event store - events are permanent
-        eventStoreMapConfig.getEvictionConfig()
-                .setEvictionPolicy(com.hazelcast.config.EvictionPolicy.NONE);
+        if (esEvictionMaxSize > 0) {
+            EvictionConfig evictionConfig = new EvictionConfig()
+                    .setMaxSizePolicy(MaxSizePolicy.PER_NODE)
+                    .setSize(esEvictionMaxSize)
+                    .setEvictionPolicy(com.hazelcast.config.EvictionPolicy.valueOf(esEvictionPolicy));
+            eventStoreMapConfig.setEvictionConfig(evictionConfig);
+            logger.info("Configured event store maps with {} eviction, max-size: {}", esEvictionPolicy, esEvictionMaxSize);
+        } else {
+            eventStoreMapConfig.getEvictionConfig()
+                    .setEvictionPolicy(com.hazelcast.config.EvictionPolicy.NONE);
+            logger.debug("Configured event store maps with no eviction (backup count: {})", backupCount);
+        }
 
         config.addMapConfig(eventStoreMapConfig);
-        logger.debug("Configured event store maps with backup count: {}", backupCount);
     }
 
     /**
      * Configures maps for materialized views.
-     * These can be rebuilt from events if needed.
+     * These can be rebuilt from events if needed. When {@code hazelcast.eviction.view-store.max-size}
+     * is set to a value &gt; 0, LRU/LFU eviction is applied.
      */
     private void configureViewMaps(Config config) {
         MapConfig viewMapConfig = new MapConfig("*_VIEW");
@@ -178,8 +209,18 @@ public class HazelcastConfig {
         // Allow backup reads for faster queries
         viewMapConfig.setReadBackupData(true);
 
+        if (viewEvictionMaxSize > 0) {
+            EvictionConfig evictionConfig = new EvictionConfig()
+                    .setMaxSizePolicy(MaxSizePolicy.PER_NODE)
+                    .setSize(viewEvictionMaxSize)
+                    .setEvictionPolicy(com.hazelcast.config.EvictionPolicy.valueOf(viewEvictionPolicy));
+            viewMapConfig.setEvictionConfig(evictionConfig);
+            logger.info("Configured view maps with {} eviction, max-size: {}", viewEvictionPolicy, viewEvictionMaxSize);
+        } else {
+            logger.debug("Configured view maps with no eviction, read-backup-data enabled");
+        }
+
         config.addMapConfig(viewMapConfig);
-        logger.debug("Configured view maps with read-backup-data enabled");
     }
 
     /**
@@ -234,6 +275,27 @@ public class HazelcastConfig {
         config.addMapConfig(outboxMapConfig);
         logger.debug("Configured outbox map with HASH(status) and SORTED(createdAt) indexes, " +
                 "1 hour TTL, LRU eviction max 10000 per node");
+    }
+
+    /**
+     * Configures the DLQ map with TTL and bounded eviction.
+     * Without this, the DLQ IMap is created dynamically with no eviction,
+     * growing unbounded during long-running sessions.
+     */
+    private void configureDlqMaps(Config config) {
+        MapConfig dlqMapConfig = new MapConfig("framework_DLQ");
+        dlqMapConfig.setBackupCount(backupCount);
+        dlqMapConfig.setTimeToLiveSeconds(dlqTtlSeconds);
+
+        EvictionConfig evictionConfig = new EvictionConfig()
+                .setMaxSizePolicy(MaxSizePolicy.PER_NODE)
+                .setSize(dlqMaxSize)
+                .setEvictionPolicy(com.hazelcast.config.EvictionPolicy.LRU);
+        dlqMapConfig.setEvictionConfig(evictionConfig);
+
+        config.addMapConfig(dlqMapConfig);
+        logger.debug("Configured DLQ map with {} second TTL, LRU eviction max {} per node",
+                dlqTtlSeconds, dlqMaxSize);
     }
 
     /**

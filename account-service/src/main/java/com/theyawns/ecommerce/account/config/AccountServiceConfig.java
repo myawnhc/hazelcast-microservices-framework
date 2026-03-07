@@ -10,6 +10,7 @@ import com.hazelcast.config.MapStoreConfig;
 import com.hazelcast.config.MaxSizePolicy;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
 import com.theyawns.ecommerce.common.view.CustomerViewUpdater;
 import com.theyawns.ecommerce.common.domain.Customer;
 import com.theyawns.framework.config.EmbeddedClusteringConfigurer;
@@ -25,6 +26,7 @@ import com.theyawns.framework.persistence.mapstore.ViewStoreMapStore;
 import com.theyawns.framework.security.identity.EventAuthenticator;
 import com.theyawns.framework.store.HazelcastEventStore;
 import com.theyawns.framework.view.HazelcastViewStore;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -89,6 +91,9 @@ public class AccountServiceConfig {
 
     @Autowired(required = false)
     private List<HazelcastClientConfigCustomizer> clientConfigCustomizers;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     private EventSourcingController<Customer, String, DomainEvent<Customer, String>> controller;
 
@@ -411,6 +416,32 @@ public class AccountServiceConfig {
         controller.start();
 
         return controller;
+    }
+
+    /**
+     * Registers business metrics for the account service.
+     *
+     * <p>Registers a gauge that tracks the total number of customers
+     * in the materialized view. Uses a deferred supplier so the IMap
+     * size is read lazily on each Prometheus scrape.
+     *
+     * @param hazelcastInstance the embedded Hazelcast instance (injected by Spring)
+     */
+    @Bean
+    public Object customerMetricsRegistrar(HazelcastInstance hazelcastInstance) {
+        Gauge.builder("account.customers.total", () -> {
+                    try {
+                        IMap<String, ?> customerView = hazelcastInstance.getMap(DOMAIN_NAME + "_VIEW");
+                        return customerView.size();
+                    } catch (Exception e) {
+                        logger.debug("Could not read customer view size: {}", e.getMessage());
+                        return 0;
+                    }
+                })
+                .description("Total customers in view store")
+                .register(meterRegistry);
+        logger.info("Registered business metric: account.customers.total");
+        return "customer-metrics-registered";
     }
 
     /**

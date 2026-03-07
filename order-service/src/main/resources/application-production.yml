@@ -1,0 +1,32 @@
+# PRODUCTION: zero data loss, high availability
+hazelcast:
+  eviction:
+    event-store:
+      max-size: 50000
+      policy: LRU
+    view-store:
+      max-size: 50000
+      policy: LRU
+  event-journal:
+    capacity: 50000
+  completions:
+    max-size: 100000
+
+framework:
+  persistence:
+    write-delay-seconds: 3
+    write-batch-size: 50
+    archival:
+      enabled: true
+      retention-hours: 720
+      run-interval-ms: 3600000
+
+saga:
+  timeout:
+    purge-enabled: true
+    purge-older-than: 60m
+
+logging:
+  level:
+    com.theyawns: INFO
+    io.opentelemetry.exporter: WARN

@@ -2,7 +2,9 @@ package com.theyawns.framework.persistence.postgres;
 
 import com.theyawns.framework.persistence.EventStorePersistence;
 import com.theyawns.framework.persistence.PersistenceAutoConfiguration;
+import com.theyawns.framework.persistence.PersistenceProperties;
 import com.theyawns.framework.persistence.ViewStorePersistence;
+import com.theyawns.framework.persistence.postgres.archival.EventArchivalService;
 import com.theyawns.framework.persistence.postgres.repository.EventStoreRepository;
 import com.theyawns.framework.persistence.postgres.repository.ViewStoreRepository;
 import org.slf4j.Logger;
@@ -16,6 +18,7 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Auto-configuration for the PostgreSQL persistence provider.
@@ -39,6 +42,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @ConditionalOnClass(name = "org.postgresql.Driver")
 @EnableJpaRepositories(basePackages = "com.theyawns.framework.persistence.postgres.repository")
 @EntityScan(basePackages = "com.theyawns.framework.persistence.postgres.entity")
+@EnableScheduling
 public class PostgresPersistenceAutoConfiguration {
 
     private static final Logger logger = LoggerFactory.getLogger(PostgresPersistenceAutoConfiguration.class);
@@ -71,5 +75,22 @@ public class PostgresPersistenceAutoConfiguration {
                                                      JdbcTemplate jdbcTemplate) {
         logger.info("Creating PostgreSQL ViewStorePersistence");
         return new PostgresViewStorePersistence(repository, jdbcTemplate);
+    }
+
+    /**
+     * Creates the event archival service when archival is enabled.
+     * Archives old events from domain_events to domain_events_archive
+     * on a scheduled interval.
+     *
+     * @param jdbcTemplate the JDBC template
+     * @param properties the persistence properties
+     * @return the archival service
+     */
+    @Bean
+    @ConditionalOnProperty(name = "framework.persistence.archival.enabled", havingValue = "true")
+    public EventArchivalService eventArchivalService(JdbcTemplate jdbcTemplate,
+                                                      PersistenceProperties properties) {
+        logger.info("Creating EventArchivalService with config: {}", properties.getArchival());
+        return new EventArchivalService(jdbcTemplate, properties.getArchival());
     }
 }

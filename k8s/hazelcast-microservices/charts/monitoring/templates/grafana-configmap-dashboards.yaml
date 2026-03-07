@@ -17,4 +17,6 @@ data:
 {{ .Files.Get "dashboards/saga-dashboard.json" | indent 4 }}
   system-overview.json: |
 {{ .Files.Get "dashboards/system-overview.json" | indent 4 }}
+  business-overview.json: |
+{{ .Files.Get "dashboards/business-overview.json" | indent 4 }}
 {{- end }}

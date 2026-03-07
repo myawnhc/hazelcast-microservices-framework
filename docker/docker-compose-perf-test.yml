@@ -1,0 +1,67 @@
+# Docker Compose PERF_TEST mode overlay
+# Usage: docker compose -f docker-compose.yml -f docker-compose-perf-test.yml up -d
+#
+# Priorities: mirror production data guarantees, minimal monitoring overhead
+# Total memory: ~8.5GB
+#
+# - Management Center disabled to reduce resource contention
+# - GC logging enabled for post-test analysis
+# - Rate limiting disabled
+# - Tracing at 1% sampling
+
+services:
+  # Disable Management Center during perf tests to reduce contention
+  management-center:
+    profiles: ["never"]
+
+  account-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,perf-test
+      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - TRACING_SAMPLING=0.01
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  inventory-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,perf-test
+      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - TRACING_SAMPLING=0.01
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  order-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,perf-test
+      - JAVA_OPTS=-Xms512m -Xmx1536m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - TRACING_SAMPLING=0.01
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+
+  payment-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,perf-test
+      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport -Xlog:gc*:file=/tmp/gc.log:time,uptime,level,tags
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - TRACING_SAMPLING=0.01
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  api-gateway:
+    environment:
+      - GATEWAY_RATE_LIMIT_ENABLED=false
+    deploy:
+      resources:
+        limits:
+          memory: 512M

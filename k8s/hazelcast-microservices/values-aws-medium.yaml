@@ -212,7 +212,7 @@ api-gateway:
 
 # --- MCP Server ---
 mcp-server:
-  enabled: false
+  enabled: true
 
 # --- Monitoring ---
 monitoring:

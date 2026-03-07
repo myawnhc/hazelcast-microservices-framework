@@ -1,0 +1,88 @@
+# Docker Compose PRODUCTION mode overlay
+# Usage: docker compose -f docker-compose.yml -f docker-compose-production.yml up -d
+#
+# Priorities: zero data loss, high availability
+# Total memory: ~10GB
+#
+# - PostgreSQL tuned for throughput
+# - Persistence ON with 3s write-behind
+# - Tracing at 10% sampling
+# - G1GC tuned for throughput with larger regions
+
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: ecommerce
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=256MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=8MB
+      -c max_wal_size=2GB
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  account-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,production
+      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - TRACING_SAMPLING=0.1
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  inventory-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,production
+      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - TRACING_SAMPLING=0.1
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  order-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,production
+      - JAVA_OPTS=-Xms512m -Xmx1536m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - TRACING_SAMPLING=0.1
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+
+  payment-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker,production
+      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:G1HeapRegionSize=4m -XX:+UseContainerSupport
+      - FRAMEWORK_PERSISTENCE_ENABLED=true
+      - TRACING_SAMPLING=0.1
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  api-gateway:
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  management-center:
+    environment:
+      - JAVA_OPTS=-Xmx768m
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
