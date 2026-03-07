@@ -92,8 +92,6 @@ public class AccountServiceConfig {
     @Autowired(required = false)
     private List<HazelcastClientConfigCustomizer> clientConfigCustomizers;
 
-    @Autowired
-    private MeterRegistry meterRegistry;
 
     private EventSourcingController<Customer, String, DomainEvent<Customer, String>> controller;
 
@@ -428,7 +426,7 @@ public class AccountServiceConfig {
      * @param hazelcastInstance the embedded Hazelcast instance (injected by Spring)
      */
     @Bean
-    public Object customerMetricsRegistrar(HazelcastInstance hazelcastInstance) {
+    public Object customerMetricsRegistrar(HazelcastInstance hazelcastInstance, MeterRegistry meterRegistry) {
         Gauge.builder("account.customers.total", () -> {
                     try {
                         IMap<String, ?> customerView = hazelcastInstance.getMap(DOMAIN_NAME + "_VIEW");

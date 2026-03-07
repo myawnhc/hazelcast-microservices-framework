@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.theyawns.ecommerce.mcp.config.McpServerProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -40,6 +41,7 @@ public class ServiceClient implements ServiceClientOperations {
      *
      * @param properties the service URL configuration
      */
+    @Autowired
     public ServiceClient(McpServerProperties properties) {
         this.properties = properties;
         this.restClient = RestClient.create();
