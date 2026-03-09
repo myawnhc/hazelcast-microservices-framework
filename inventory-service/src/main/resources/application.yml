@@ -62,7 +62,7 @@ framework:
     log-feature-status: true
     expose-in-actuator: true
   vectorstore:
-    dimension: 128
+    dimension: 384
     collection-name: product-vectors
   inventory:
     replenishment:

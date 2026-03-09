@@ -10,7 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * framework:
  *   vectorstore:
  *     collection-name: product-vectors
- *     dimension: 128
+ *     dimension: 384
  *     max-connections: 16
  *     ef-construction: 200
  *     metric: COSINE
@@ -36,7 +36,7 @@ public class VectorStoreProperties {
     /**
      * Dimensionality of the embedding vectors.
      */
-    private int dimension = 128;
+    private int dimension = 384;
 
     /**
      * Maximum connections per node in HNSW graph (Enterprise only).

@@ -55,6 +55,12 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- LangChain4j Embeddings (all-MiniLM-L6-v2, ONNX, runs locally) -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-embeddings-all-minilm-l6-v2</artifactId>
+        </dependency>
+
         <!-- Resilience4j -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>

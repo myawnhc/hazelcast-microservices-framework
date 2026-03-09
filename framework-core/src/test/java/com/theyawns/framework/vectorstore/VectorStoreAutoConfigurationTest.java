@@ -37,13 +37,27 @@ class VectorStoreAutoConfigurationTest {
     class WithHazelcast {
 
         @Test
-        @DisplayName("should enable VectorStoreProperties and VectorStoreService beans")
+        @DisplayName("should enable VectorStoreProperties, VectorStoreService, and EmbeddingProvider beans")
         void shouldEnableVectorStoreProperties() {
             contextRunner
                     .withUserConfiguration(HazelcastConfig.class)
                     .run(context -> {
                         assertThat(context).hasSingleBean(VectorStoreProperties.class);
                         assertThat(context).hasSingleBean(VectorStoreService.class);
+                        assertThat(context).hasSingleBean(EmbeddingProvider.class);
+                    });
+        }
+
+        @Test
+        @DisplayName("should create LangChain4j EmbeddingProvider by default")
+        void shouldCreateLangChain4jEmbeddingProviderByDefault() {
+            contextRunner
+                    .withUserConfiguration(HazelcastConfig.class)
+                    .run(context -> {
+                        final EmbeddingProvider provider = context.getBean(EmbeddingProvider.class);
+                        assertThat(provider).isInstanceOf(LangChain4jEmbeddingProvider.class);
+                        assertThat(provider.getDimension()).isEqualTo(384);
+                        assertThat(provider.getModelName()).isEqualTo("all-MiniLM-L6-v2");
                     });
         }
 
@@ -67,7 +81,7 @@ class VectorStoreAutoConfigurationTest {
                     .run(context -> {
                         final VectorStoreProperties props = context.getBean(VectorStoreProperties.class);
                         assertThat(props.getCollectionName()).isEqualTo("product-vectors");
-                        assertThat(props.getDimension()).isEqualTo(128);
+                        assertThat(props.getDimension()).isEqualTo(384);
                         assertThat(props.getMaxConnections()).isEqualTo(16);
                         assertThat(props.getEfConstruction()).isEqualTo(200);
                         assertThat(props.getMetric()).isEqualTo("COSINE");
@@ -130,6 +144,19 @@ class VectorStoreAutoConfigurationTest {
                         assertThat(service.getImplementationType()).isEqualTo("Custom Test Implementation");
                     });
         }
+
+        @Test
+        @DisplayName("should not override existing EmbeddingProvider bean")
+        void shouldNotOverrideExistingEmbeddingProviderBean() {
+            contextRunner
+                    .withUserConfiguration(HazelcastConfig.class, CustomEmbeddingProviderConfig.class)
+                    .run(context -> {
+                        assertThat(context).hasSingleBean(EmbeddingProvider.class);
+                        final EmbeddingProvider provider = context.getBean(EmbeddingProvider.class);
+                        assertThat(provider.getModelName()).isEqualTo("custom-test-model");
+                        assertThat(provider.getDimension()).isEqualTo(768);
+                    });
+        }
     }
 
     // ========== Test Configuration Classes ==========
@@ -156,6 +183,30 @@ class VectorStoreAutoConfigurationTest {
                 @Override
                 public String getImplementationType() {
                     return "Custom Test Implementation";
+                }
+            };
+        }
+    }
+
+    @Configuration
+    static class CustomEmbeddingProviderConfig {
+
+        @Bean
+        EmbeddingProvider embeddingProvider() {
+            return new EmbeddingProvider() {
+                @Override
+                public float[] embed(String text) {
+                    return new float[768];
+                }
+
+                @Override
+                public int getDimension() {
+                    return 768;
+                }
+
+                @Override
+                public String getModelName() {
+                    return "custom-test-model";
                 }
             };
         }

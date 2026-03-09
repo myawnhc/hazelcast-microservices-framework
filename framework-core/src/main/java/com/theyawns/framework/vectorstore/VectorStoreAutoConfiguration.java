@@ -37,6 +37,21 @@ public class VectorStoreAutoConfiguration {
     private static final Logger logger = LoggerFactory.getLogger(VectorStoreAutoConfiguration.class);
 
     /**
+     * Creates a default {@link EmbeddingProvider} using LangChain4j's all-MiniLM-L6-v2 model.
+     *
+     * <p>Applications can override this by defining their own {@code EmbeddingProvider} bean
+     * (e.g., wrapping OpenAI, Cohere, or another embedding service).
+     *
+     * @return a LangChain4j-based embedding provider
+     */
+    @Bean
+    @ConditionalOnMissingBean(EmbeddingProvider.class)
+    public EmbeddingProvider embeddingProvider() {
+        logger.info("Creating default EmbeddingProvider (LangChain4j all-MiniLM-L6-v2)");
+        return new LangChain4jEmbeddingProvider();
+    }
+
+    /**
      * Fallback: creates a NoOpVectorStoreService if no other VectorStoreService bean exists.
      *
      * <p>This covers the default Community Edition path and edge cases where the
