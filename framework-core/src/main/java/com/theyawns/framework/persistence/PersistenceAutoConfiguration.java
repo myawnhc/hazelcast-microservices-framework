@@ -1,6 +1,7 @@
 package com.theyawns.framework.persistence;
 
 import com.theyawns.framework.persistence.mapstore.EventStoreMapStore;
+import com.theyawns.framework.persistence.mapstore.OutboxMapStore;
 import com.theyawns.framework.persistence.mapstore.ViewStoreMapStore;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
@@ -28,6 +29,7 @@ import org.springframework.context.annotation.Bean;
  * @see PersistenceProperties
  * @see EventStoreMapStore
  * @see ViewStoreMapStore
+ * @see OutboxMapStore
  */
 @AutoConfiguration
 @ConditionalOnProperty(name = "framework.persistence.enabled", havingValue = "true")
@@ -83,6 +85,19 @@ public class PersistenceAutoConfiguration {
         return new InMemoryViewStorePersistence();
     }
 
+    /**
+     * Fallback in-memory outbox store persistence for when no external provider
+     * (e.g., PostgreSQL) is available. Useful for development and testing.
+     *
+     * @return the in-memory outbox store persistence
+     */
+    @Bean
+    @ConditionalOnMissingBean(OutboxStorePersistence.class)
+    public OutboxStorePersistence inMemoryOutboxStorePersistence() {
+        logger.info("No OutboxStorePersistence provider found — using InMemoryOutboxStorePersistence");
+        return new InMemoryOutboxStorePersistence();
+    }
+
     // ========================================================================
     // MapStore adapter beans
     // ========================================================================
@@ -119,5 +134,22 @@ public class PersistenceAutoConfiguration {
         logger.info("Creating ViewStoreMapStore with persistence provider: {}",
                 persistence.getClass().getSimpleName());
         return new ViewStoreMapStore(persistence, metrics);
+    }
+
+    /**
+     * Creates the OutboxMapStore bean when an OutboxStorePersistence provider is available.
+     *
+     * @param persistence the persistence provider
+     * @param metricsProvider the persistence metrics provider (empty if no MeterRegistry)
+     * @return the MapStore adapter for the outbox
+     */
+    @Bean
+    @ConditionalOnBean(OutboxStorePersistence.class)
+    public OutboxMapStore outboxMapStore(OutboxStorePersistence persistence,
+                                         ObjectProvider<PersistenceMetrics> metricsProvider) {
+        PersistenceMetrics metrics = metricsProvider.getIfAvailable();
+        logger.info("Creating OutboxMapStore with persistence provider: {}",
+                persistence.getClass().getSimpleName());
+        return new OutboxMapStore(persistence, metrics);
     }
 }

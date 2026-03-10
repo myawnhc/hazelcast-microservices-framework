@@ -1,11 +1,13 @@
 package com.theyawns.framework.persistence.postgres;
 
 import com.theyawns.framework.persistence.EventStorePersistence;
+import com.theyawns.framework.persistence.OutboxStorePersistence;
 import com.theyawns.framework.persistence.PersistenceAutoConfiguration;
 import com.theyawns.framework.persistence.PersistenceProperties;
 import com.theyawns.framework.persistence.ViewStorePersistence;
 import com.theyawns.framework.persistence.postgres.archival.EventArchivalService;
 import com.theyawns.framework.persistence.postgres.repository.EventStoreRepository;
+import com.theyawns.framework.persistence.postgres.repository.OutboxRepository;
 import com.theyawns.framework.persistence.postgres.repository.ViewStoreRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +77,21 @@ public class PostgresPersistenceAutoConfiguration {
                                                      JdbcTemplate jdbcTemplate) {
         logger.info("Creating PostgreSQL ViewStorePersistence");
         return new PostgresViewStorePersistence(repository, jdbcTemplate);
+    }
+
+    /**
+     * Creates the PostgreSQL outbox store persistence provider.
+     *
+     * @param repository the JPA repository
+     * @param jdbcTemplate the JDBC template
+     * @return the persistence provider
+     */
+    @Bean
+    @ConditionalOnMissingBean(OutboxStorePersistence.class)
+    public OutboxStorePersistence outboxStorePersistence(OutboxRepository repository,
+                                                         JdbcTemplate jdbcTemplate) {
+        logger.info("Creating PostgreSQL OutboxStorePersistence");
+        return new PostgresOutboxStorePersistence(repository, jdbcTemplate);
     }
 
     /**

@@ -21,6 +21,7 @@ import com.theyawns.framework.outbox.OutboxPublisher;
 import com.theyawns.framework.outbox.OutboxStore;
 import com.theyawns.framework.persistence.PersistenceProperties;
 import com.theyawns.framework.persistence.mapstore.EventStoreMapStore;
+import com.theyawns.framework.persistence.mapstore.OutboxMapStore;
 import com.theyawns.framework.persistence.mapstore.ViewStoreMapStore;
 import com.theyawns.framework.security.identity.EventAuthenticator;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
@@ -273,10 +274,12 @@ public class PaymentServiceConfig {
             HazelcastInstance hazelcastInstance,
             ObjectProvider<EventStoreMapStore> esMapStoreProvider,
             ObjectProvider<ViewStoreMapStore> viewMapStoreProvider,
+            ObjectProvider<OutboxMapStore> outboxMapStoreProvider,
             ObjectProvider<PersistenceProperties> propsProvider) {
 
         EventStoreMapStore esMapStore = esMapStoreProvider.getIfAvailable();
         ViewStoreMapStore viewMapStore = viewMapStoreProvider.getIfAvailable();
+        OutboxMapStore outboxMapStore = outboxMapStoreProvider.getIfAvailable();
         PersistenceProperties props = propsProvider.getIfAvailable();
 
         if (esMapStore != null && viewMapStore != null && props != null) {
@@ -327,6 +330,19 @@ public class PaymentServiceConfig {
                 logger.info("Eviction enabled for {}_VIEW (maxSize={}, policy={}, maxIdle={}s)",
                         DOMAIN_NAME, viewEviction.getMaxSize(), viewEviction.getEvictionPolicy(),
                         viewEviction.getMaxIdleSeconds());
+            }
+
+            // Attach MapStore to outbox map (if available)
+            if (outboxMapStore != null) {
+                MapConfig outboxConfig = hazelcastInstance.getConfig().getMapConfig("framework_OUTBOX");
+                outboxConfig.setMapStoreConfig(new MapStoreConfig()
+                        .setImplementation(outboxMapStore)
+                        .setEnabled(true)
+                        .setWriteDelaySeconds(props.getWriteDelaySeconds())
+                        .setWriteBatchSize(props.getWriteBatchSize())
+                        .setWriteCoalescing(true)
+                        .setInitialLoadMode(MapStoreConfig.InitialLoadMode.LAZY));
+                logger.info("Persistence enabled for framework_OUTBOX map (write-behind, coalescing)");
             }
         } else {
             logger.info("Persistence not available — {}_ES and {}_VIEW maps will use in-memory only",
