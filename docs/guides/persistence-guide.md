@@ -1,6 +1,6 @@
 # Persistence Guide
 
-This guide explains how the Hazelcast Microservices Framework persists event store and materialized view data to durable storage using write-behind MapStores.
+This guide explains how the Hazelcast Microservices Framework persists event store, materialized view, outbox, and dead letter queue data to durable storage — primarily using write-behind MapStores, with one notable exception for the DLQ.
 
 ## Overview
 
@@ -8,50 +8,68 @@ In a pure in-memory event sourcing system, all data lives in Hazelcast IMaps. Th
 
 - **Events survive restarts** — the append-only event log is written to PostgreSQL (or any provider)
 - **Views rebuild on cold start** — materialized views are loaded from the database via MapLoader
+- **Outbox entries recover** — in-flight entries are reloaded on restart so delivery resumes
+- **DLQ entries persist** — failed events are durably stored for later replay or discard
 - **Memory stays bounded** — IMap eviction keeps entries within limits while the database holds the full dataset
 - **No code changes needed** — persistence is configured via `application.yml`, not code
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    Microservice JVM                       │
-│                                                          │
-│  ┌─────────────┐        ┌──────────────────────────┐     │
-│  │   Service    │───────▶│  EventSourcingController  │     │
-│  │  (REST API)  │        └──────────┬───────────────┘     │
-│  └─────────────┘                    │                     │
-│                                     ▼                     │
-│                           ┌─────────────────┐             │
-│                           │  Jet Pipeline    │             │
-│                           └────────┬────────┘             │
-│                    ┌───────────────┼───────────────┐      │
-│                    ▼               ▼               ▼      │
-│           ┌──────────────┐ ┌──────────────┐ ┌──────────┐ │
-│           │  _ES IMap    │ │  _VIEW IMap  │ │  ITopic  │ │
-│           │  (events)    │ │  (views)     │ │  (pub)   │ │
-│           └──────┬───────┘ └──────┬───────┘ └──────────┘ │
-│                  │                │                       │
-│           ┌──────▼───────┐ ┌──────▼───────┐              │
-│           │ EventStore   │ │ ViewStore    │              │
-│           │ MapStore     │ │ MapStore     │              │
-│           │ (write-behind│ │ (write-behind│              │
-│           │  + MapLoader)│ │  + MapLoader)│              │
-│           └──────┬───────┘ └──────┬───────┘              │
-│                  │                │                       │
-│           ┌──────▼───────┐ ┌──────▼───────┐              │
-│           │ EventStore   │ │ ViewStore    │              │
-│           │ Persistence  │ │ Persistence  │  (interface) │
-│           └──────┬───────┘ └──────┬───────┘              │
-└──────────────────┼────────────────┼──────────────────────┘
-                   │                │
-            ┌──────▼────────────────▼──────┐
-            │        PostgreSQL 16         │
-            │  ┌──────────────────────┐    │
-            │  │   domain_events      │    │
-            │  │   domain_views       │    │
-            │  └──────────────────────┘    │
-            └──────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          Microservice JVM                               │
+│                                                                         │
+│  ┌─────────────┐        ┌──────────────────────────┐                    │
+│  │   Service    │───────▶│  EventSourcingController  │                    │
+│  │  (REST API)  │        └──────────┬───────────────┘                    │
+│  └─────────────┘                    │                                    │
+│                                     ▼                                    │
+│                           ┌─────────────────┐                            │
+│                           │  Jet Pipeline    │                            │
+│                           └────────┬────────┘                            │
+│               ┌────────────────────┼────────────────────┐                │
+│               ▼                    ▼                    ▼                │
+│      ┌──────────────┐     ┌──────────────┐     ┌──────────────┐         │
+│      │  _ES IMap     │     │  _VIEW IMap  │     │  OUTBOX IMap │         │
+│      │  (events)     │     │  (views)     │     │  (delivery)  │         │
+│      └──────┬───────┘     └──────┬───────┘     └──────┬───────┘         │
+│             │                    │                    │                  │
+│      ┌──────▼───────┐     ┌──────▼───────┐     ┌──────▼───────┐         │
+│      │ EventStore   │     │ ViewStore    │     │ Outbox       │         │
+│      │ MapStore     │     │ MapStore     │     │ MapStore     │         │
+│      │ (write-behind│     │ (write-behind│     │ (write-behind│         │
+│      │  + MapLoader)│     │  + MapLoader)│     │  + MapLoader)│         │
+│      └──────┬───────┘     └──────┬───────┘     └──────┬───────┘         │
+│             │                    │                    │                  │
+│      ┌──────▼───────┐     ┌──────▼───────┐     ┌──────▼───────┐         │
+│      │ EventStore   │     │ ViewStore    │     │ OutboxStore  │         │
+│      │ Persistence  │     │ Persistence  │     │ Persistence  │(iface)  │
+│      └──────┬───────┘     └──────┬───────┘     └──────┬───────┘         │
+└─────────────┼────────────────────┼────────────────────┼─────────────────┘
+              │                    │                    │
+              │    ┌───────────────┼────────────────────┘
+              │    │               │
+              ▼    ▼               ▼
+       ┌──────────────────────────────────────────┐
+       │             PostgreSQL 16                 │
+       │  ┌────────────────┐ ┌─────────────────┐  │
+       │  │ domain_events  │ │  domain_views   │  │
+       │  │ outbox_entries │ │  dead_letters   │  │
+       │  └────────────────┘ └─────────────────┘  │
+       └──────────────────────────────────────────┘
+
+  DLQ: Direct writes (no MapStore) — see "DLQ Persistence" below
+       ┌──────────────┐
+       │  DLQ IMap     │  (on shared cluster, accessed via hazelcastClient)
+       │  (failures)   │
+       └──────┬───────┘
+              │  HazelcastDeadLetterQueue calls
+              │  DlqStorePersistence.persist() directly
+              ▼
+       ┌──────────────┐
+       │  PostgreSQL   │
+       │  dead_letters │
+       └──────────────┘
 ```
 
 ## Components
@@ -60,18 +78,28 @@ In a pure in-memory event sourcing system, all data lives in Hazelcast IMaps. Th
 |-----------|--------|-------------|
 | `EventStorePersistence` | framework-core | Provider-agnostic interface for event persistence |
 | `ViewStorePersistence` | framework-core | Provider-agnostic interface for view persistence |
+| `OutboxStorePersistence` | framework-core | Provider-agnostic interface for outbox persistence |
+| `DlqStorePersistence` | framework-core | Provider-agnostic interface for DLQ persistence |
 | `PersistableEvent` | framework-core | Portable event record (decoupled from GenericRecord) |
 | `PersistableView` | framework-core | Portable view record (decoupled from GenericRecord) |
+| `PersistableOutboxEntry` | framework-core | Portable outbox record (decoupled from GenericRecord) |
+| `PersistableDeadLetterEntry` | framework-core | Portable DLQ record (decoupled from GenericRecord) |
 | `EventStoreMapStore` | framework-core | Hazelcast MapStore adapter for events |
 | `ViewStoreMapStore` | framework-core | Hazelcast MapStore adapter for views |
+| `OutboxMapStore` | framework-core | Hazelcast MapStore adapter for outbox |
 | `GenericRecordJsonConverter` | framework-core | Converts GenericRecord to/from JSON |
 | `PersistenceProperties` | framework-core | Spring Boot configuration properties |
 | `PersistenceAutoConfiguration` | framework-core | Auto-config for MapStore and fallback beans |
+| `DeadLetterQueueAutoConfiguration` | framework-core | Wires DlqStorePersistence into HazelcastDeadLetterQueue |
 | `PersistenceMetrics` | framework-core | Micrometer instrumentation for MapStore operations |
 | `InMemoryEventStorePersistence` | framework-core | In-memory fallback (dev/test, no database) |
 | `InMemoryViewStorePersistence` | framework-core | In-memory fallback (dev/test, no database) |
-| `PostgresEventStorePersistence` | framework-postgres | PostgreSQL implementation |
-| `PostgresViewStorePersistence` | framework-postgres | PostgreSQL implementation |
+| `InMemoryOutboxStorePersistence` | framework-core | In-memory fallback (dev/test, no database) |
+| `InMemoryDlqStorePersistence` | framework-core | In-memory fallback (dev/test, no database) |
+| `PostgresEventStorePersistence` | framework-postgres | PostgreSQL implementation for events |
+| `PostgresViewStorePersistence` | framework-postgres | PostgreSQL implementation for views |
+| `PostgresOutboxStorePersistence` | framework-postgres | PostgreSQL implementation for outbox |
+| `PostgresDlqStorePersistence` | framework-postgres | PostgreSQL implementation for DLQ |
 
 ## Configuration
 
@@ -103,22 +131,26 @@ framework:
       max-idle-seconds: 3600       # Views idle > 1hr are evicted (default)
 ```
 
+> **Note:** Outbox and DLQ maps are self-draining and don't require eviction tuning. Outbox entries transition through PENDING → CLAIMED → DELIVERED and expire via a 1-hour TTL. DLQ entries reach terminal states (REPLAYED or DISCARDED) and expire via a configurable TTL (`hazelcast.dlq.ttl-seconds`, default 3600s). Both maps also have LRU eviction as a safety net.
+
 ### Write-Behind vs Write-Through
 
 - **Write-behind** (`write-delay-seconds > 0`): Hazelcast batches writes and flushes asynchronously. Best for throughput.
 - **Write-through** (`write-delay-seconds: 0`): Every IMap put synchronously calls the MapStore. Best for durability guarantees.
 
-### Event Store vs View Store Behavior
+### MapStore Behavior by Map Type
 
-| Aspect | Event Store (`_ES`) | View Store (`_VIEW`) |
-|--------|--------------------|--------------------|
-| Coalescing | `false` — each event is unique | `true` — only latest state matters |
-| Initial Load | `LAZY` — events loaded on demand | `EAGER` — all keys loaded on cold start |
-| Write Semantics | `INSERT` (append-only) | `UPSERT` (latest wins) |
+| Aspect | Event Store (`_ES`) | View Store (`_VIEW`) | Outbox (`framework_OUTBOX`) |
+|--------|--------------------|--------------------|---------------------------|
+| Coalescing | `false` — each event is unique | `true` — only latest state matters | `true` — only latest status matters |
+| Initial Load | `LAZY` — events loaded on demand | `EAGER` — all keys loaded on cold start | `LAZY` — non-delivered entries on demand |
+| Write Semantics | `INSERT` (append-only) | `UPSERT` (latest wins) | `UPSERT` (status transitions) |
+
+> **Note:** The DLQ does not use MapStore — it uses direct persistence writes. See [DLQ Persistence](#dlq-persistence) below.
 
 ## Custom Provider
 
-To implement a custom persistence provider (e.g., MySQL, CockroachDB):
+To implement a custom persistence provider (e.g., MySQL, CockroachDB), implement all four interfaces: `EventStorePersistence`, `ViewStorePersistence`, `OutboxStorePersistence`, and `DlqStorePersistence`.
 
 ### Step 1: Implement the Interfaces
 
@@ -204,8 +236,11 @@ postgres:
 
 Schema is managed by Flyway. The `framework-postgres` module includes migrations:
 
-- `V1__create_domain_events.sql` — creates `domain_events` table with composite PK
-- `V2__create_domain_views.sql` — creates `domain_views` table with composite PK
+- `V1__create_event_store_table.sql` — creates `domain_events` table with composite PK
+- `V2__create_view_store_table.sql` — creates `domain_views` table with composite PK
+- `V3__add_archival_support.sql` — adds archival columns to event/view tables
+- `V4__create_outbox_table.sql` — creates `outbox_entries` table for reliable delivery
+- `V5__create_dead_letter_table.sql` — creates `dead_letters` table for failed events
 
 ### Service Configuration
 
@@ -227,7 +262,7 @@ framework:
 
 ## In-Memory Mode
 
-When `framework.persistence.enabled=true` but no external provider (e.g., PostgreSQL) is on the classpath, the framework automatically falls back to `InMemoryEventStorePersistence` and `InMemoryViewStorePersistence`.
+When `framework.persistence.enabled=true` but no external provider (e.g., PostgreSQL) is on the classpath, the framework automatically falls back to in-memory implementations for all four persistence interfaces: `InMemoryEventStorePersistence`, `InMemoryViewStorePersistence`, `InMemoryOutboxStorePersistence`, and `InMemoryDlqStorePersistence`.
 
 This is useful for:
 - **Local development** without running PostgreSQL
@@ -252,6 +287,38 @@ When persistence is enabled, IMaps become **bounded hot caches** backed by the d
 - **Increase `max-size`** if you have ample heap and want fewer database round-trips
 - **Decrease `max-idle-seconds`** for view maps if memory is constrained
 - **Set `eviction-policy: NONE`** to disable eviction (use only if heap is large enough for the full dataset)
+
+## DLQ Persistence
+
+The dead letter queue uses a different persistence strategy than the other maps. While the event store, view store, and outbox all use write-behind MapStore, the DLQ uses **direct synchronous writes**.
+
+### Why Not MapStore?
+
+The DLQ IMap lives on the **shared Hazelcast cluster** — the external 3-node cluster that services connect to as clients via `hazelcastClient`. MapStore is a server-side configuration: it's attached to a map on a Hazelcast member, and Hazelcast calls your code when entries change. Since services access the shared cluster as clients (not members), there's no way to attach a MapStore to the DLQ map.
+
+For full context on the dual-instance architecture, see [ADR 008](../architecture/adr/008-dual-instance-hazelcast-architecture.md).
+
+### How It Works
+
+`HazelcastDeadLetterQueue` writes to both the IMap and `DlqStorePersistence` in the same method call:
+
+```java
+public void add(DeadLetterEntry entry) {
+    GenericRecord record = toGenericRecord(entry);
+    dlqMap.set(entry.getId(), record);
+    persistIfAvailable(entry);
+}
+```
+
+This applies to `add()`, `replay()`, and `discard()` — every state transition is persisted immediately.
+
+- **Writes are synchronous**, not write-behind. This is acceptable because DLQ entries are rare (they represent failures).
+- **If persistence fails**, the entry is still in the IMap. The failure is logged but doesn't block the DLQ operation.
+- **On startup**, `loadFromPersistence()` hydrates the IMap with any PENDING entries from PostgreSQL. Terminal entries (REPLAYED, DISCARDED) are not recovered — they've already been handled.
+
+### Wiring
+
+`DeadLetterQueueAutoConfiguration` passes the optional `DlqStorePersistence` bean to `HazelcastDeadLetterQueue`. If no persistence provider is available, the DLQ operates in IMap-only mode (no database writes).
 
 ## Monitoring
 
@@ -314,6 +381,7 @@ A pre-built Grafana dashboard (`persistence-dashboard.json`) is included in `doc
 
 ## References
 
+- [ADR 008: Dual-Instance Hazelcast Architecture](../architecture/adr/008-dual-instance-hazelcast-architecture.md) — explains why DLQ can't use MapStore
 - [ADR 012: Write-Behind MapStore for Event Persistence](../architecture/adr/012-write-behind-mapstore-persistence.md)
 - [Hazelcast MapStore Documentation](https://docs.hazelcast.com/hazelcast/5.6/data-structures/working-with-external-data)
 - [Hazelcast Eviction Documentation](https://docs.hazelcast.com/hazelcast/5.6/data-structures/map#eviction)
