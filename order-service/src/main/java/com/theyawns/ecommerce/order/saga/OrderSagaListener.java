@@ -13,6 +13,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import com.theyawns.framework.dlq.DeadLetterEntry;
 import com.theyawns.framework.dlq.DeadLetterQueueOperations;
+import com.theyawns.framework.dlq.FaultInjectionState;
 import com.theyawns.framework.idempotency.IdempotencyGuard;
 import com.theyawns.framework.resilience.ResilienceException;
 import com.theyawns.framework.resilience.ResilientOperations;
@@ -59,6 +60,7 @@ public class OrderSagaListener {
     private IdempotencyGuard idempotencyGuard;
     private DeadLetterQueueOperations deadLetterQueue;
     private EventAuthenticator eventAuthenticator;
+    private FaultInjectionState faultInjection;
 
     /**
      * Creates a new OrderSagaListener.
@@ -129,6 +131,16 @@ public class OrderSagaListener {
     @Autowired(required = false)
     public void setEventAuthenticator(EventAuthenticator eventAuthenticator) {
         this.eventAuthenticator = eventAuthenticator;
+    }
+
+    /**
+     * Sets the fault injection state for DLQ demo scenarios (optional).
+     *
+     * @param faultInjection the fault injection state
+     */
+    @Autowired(required = false)
+    public void setFaultInjection(FaultInjectionState faultInjection) {
+        this.faultInjection = faultInjection;
     }
 
     /**
@@ -227,15 +239,24 @@ public class OrderSagaListener {
         public void onMessage(Message<GenericRecord> message) {
             GenericRecord record = unwrapEvent(message.getMessageObject());
 
-            String eventId = record.getString("eventId");
-            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
-                logger.debug("Duplicate event {} already processed, skipping", eventId);
-                return;
-            }
-
             String sagaId = record.getString("sagaId");
             if (sagaId == null || sagaId.isEmpty()) {
                 logger.debug("PaymentProcessed event without sagaId - not a saga event, ignoring");
+                return;
+            }
+
+            // Fault injection check BEFORE idempotency guard — the event must not
+            // be marked as "processed" when it's being sent to the DLQ, otherwise
+            // replay would be silently rejected as a duplicate.
+            if (faultInjection != null && faultInjection.isEnabled()) {
+                sendToDeadLetterQueue(record, "PaymentProcessed",
+                        new RuntimeException(faultInjection.getFailureMessage()));
+                return;
+            }
+
+            String eventId = record.getString("eventId");
+            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+                logger.debug("Duplicate event {} already processed, skipping", eventId);
                 return;
             }
 
@@ -292,15 +313,22 @@ public class OrderSagaListener {
         public void onMessage(Message<GenericRecord> message) {
             GenericRecord record = unwrapEvent(message.getMessageObject());
 
-            String eventId = record.getString("eventId");
-            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
-                logger.debug("Duplicate event {} already processed, skipping", eventId);
-                return;
-            }
-
             String sagaId = record.getString("sagaId");
             if (sagaId == null || sagaId.isEmpty()) {
                 logger.debug("PaymentFailed event without sagaId - not a saga event, ignoring");
+                return;
+            }
+
+            // Fault injection check BEFORE idempotency guard
+            if (faultInjection != null && faultInjection.isEnabled()) {
+                sendToDeadLetterQueue(record, "PaymentFailed",
+                        new RuntimeException(faultInjection.getFailureMessage()));
+                return;
+            }
+
+            String eventId = record.getString("eventId");
+            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+                logger.debug("Duplicate event {} already processed, skipping", eventId);
                 return;
             }
 
