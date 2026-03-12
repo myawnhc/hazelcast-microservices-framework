@@ -4,7 +4,7 @@ import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaState;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
@@ -76,7 +76,7 @@ class OrderFulfillmentSagaCompensationTest {
         // ===== Step 0: Order Created - Start Saga =====
         SagaState state = sagaStateStore.startSaga(
                 sagaId,
-                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA,
                 correlationId,
                 4,
                 Duration.ofSeconds(60)
@@ -88,9 +88,9 @@ class OrderFulfillmentSagaCompensationTest {
         // Record step 0 completed (OrderCreated published)
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CREATED,
-                SagaCompensationConfig.ORDER_SERVICE,
+                ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_SERVICE,
                 "evt-order-created"
         );
 
@@ -100,9 +100,9 @@ class OrderFulfillmentSagaCompensationTest {
         // ===== Step 1: Stock Reserved - Inventory Service =====
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_STOCK_RESERVED,
-                SagaCompensationConfig.STOCK_RESERVED,
-                SagaCompensationConfig.INVENTORY_SERVICE,
+                ECommerceCompensationConfig.STEP_STOCK_RESERVED,
+                ECommerceCompensationConfig.STOCK_RESERVED,
+                ECommerceCompensationConfig.INVENTORY_SERVICE,
                 "evt-stock-reserved"
         );
 
@@ -112,23 +112,23 @@ class OrderFulfillmentSagaCompensationTest {
         // ===== Step 2: Payment FAILS - Payment Service =====
         state = sagaStateStore.recordStepFailed(
                 sagaId,
-                SagaCompensationConfig.STEP_PAYMENT_PROCESSED,
-                SagaCompensationConfig.PAYMENT_FAILED,
-                SagaCompensationConfig.PAYMENT_SERVICE,
+                ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED,
+                ECommerceCompensationConfig.PAYMENT_FAILED,
+                ECommerceCompensationConfig.PAYMENT_SERVICE,
                 "Payment declined by processor"
         );
 
         assertEquals(SagaStatus.COMPENSATING, state.getStatus());
         assertNotNull(state.getFailureReason());
         assertEquals("Payment declined by processor", state.getFailureReason());
-        assertEquals(SagaCompensationConfig.STEP_PAYMENT_PROCESSED, state.getFailedAtStep());
+        assertEquals(ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED, state.getFailedAtStep());
 
         // ===== Compensation Step: Stock Released - Inventory Service =====
         state = sagaStateStore.recordCompensationStep(
                 sagaId,
-                SagaCompensationConfig.STEP_STOCK_RESERVED,
-                SagaCompensationConfig.STOCK_RELEASED,
-                SagaCompensationConfig.INVENTORY_SERVICE
+                ECommerceCompensationConfig.STEP_STOCK_RESERVED,
+                ECommerceCompensationConfig.STOCK_RELEASED,
+                ECommerceCompensationConfig.INVENTORY_SERVICE
         );
 
         // Still compensating (order cancellation pending)
@@ -137,9 +137,9 @@ class OrderFulfillmentSagaCompensationTest {
         // ===== Compensation Step: Order Cancelled - Order Service =====
         state = sagaStateStore.recordCompensationStep(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CANCELLED,
-                SagaCompensationConfig.ORDER_SERVICE
+                ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CANCELLED,
+                ECommerceCompensationConfig.ORDER_SERVICE
         );
 
         // Still COMPENSATING until completeSaga is called
@@ -164,7 +164,7 @@ class OrderFulfillmentSagaCompensationTest {
         SagaState finalState = sagaOpt.get();
         assertEquals(SagaStatus.COMPENSATED, finalState.getStatus());
         assertEquals(sagaId, finalState.getSagaId());
-        assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, finalState.getSagaType());
+        assertEquals(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA, finalState.getSagaType());
         assertEquals("Payment declined by processor", finalState.getFailureReason());
     }
 
@@ -207,8 +207,8 @@ class OrderFulfillmentSagaCompensationTest {
                 );
         paymentFailed.setSagaId(sagaId);
         paymentFailed.setCorrelationId(correlationId);
-        paymentFailed.setSagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA);
-        paymentFailed.setStepNumber(SagaCompensationConfig.STEP_PAYMENT_PROCESSED);
+        paymentFailed.setSagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA);
+        paymentFailed.setStepNumber(ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED);
 
         com.hazelcast.nio.serialization.genericrecord.GenericRecord failedRecord =
                 paymentFailed.toGenericRecord();

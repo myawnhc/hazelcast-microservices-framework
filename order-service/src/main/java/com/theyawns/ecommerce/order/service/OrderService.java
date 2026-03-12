@@ -16,7 +16,7 @@ import com.theyawns.ecommerce.order.exception.OrderNotFoundException;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.controller.SagaMetadata;
 import com.theyawns.framework.event.DomainEvent;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
 import com.theyawns.framework.view.HazelcastViewStore;
@@ -114,7 +114,7 @@ public class OrderService implements OrderOperations {
         // Start the Order Fulfillment saga
         sagaStateStore.startSaga(
                 sagaId,
-                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA,
                 correlationId.toString(),
                 SAGA_TOTAL_STEPS,
                 SAGA_TIMEOUT
@@ -123,8 +123,8 @@ public class OrderService implements OrderOperations {
         // Build saga metadata for step 0
         SagaMetadata sagaMetadata = SagaMetadata.builder()
                 .sagaId(sagaId)
-                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
-                .stepNumber(SagaCompensationConfig.STEP_ORDER_CREATED)
+                .sagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(ECommerceCompensationConfig.STEP_ORDER_CREATED)
                 .build();
 
         // Convert DTOs to domain objects
@@ -149,9 +149,9 @@ public class OrderService implements OrderOperations {
                     // Record step 0 completed in saga state store
                     sagaStateStore.recordStepCompleted(
                             sagaId,
-                            SagaCompensationConfig.STEP_ORDER_CREATED,
-                            SagaCompensationConfig.ORDER_CREATED,
-                            SagaCompensationConfig.ORDER_SERVICE,
+                            ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                            ECommerceCompensationConfig.ORDER_CREATED,
+                            ECommerceCompensationConfig.ORDER_SERVICE,
                             completionInfo.getEventId()
                     );
 
@@ -305,8 +305,8 @@ public class OrderService implements OrderOperations {
 
         SagaMetadata sagaMetadata = SagaMetadata.builder()
                 .sagaId(sagaId)
-                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
-                .stepNumber(SagaCompensationConfig.STEP_ORDER_CONFIRMED)
+                .sagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(ECommerceCompensationConfig.STEP_ORDER_CONFIRMED)
                 .build();
 
         return controller.handleEvent(event, UUID.fromString(correlationId), sagaMetadata)
@@ -318,9 +318,9 @@ public class OrderService implements OrderOperations {
                     // so SagaState automatically transitions to COMPLETED
                     sagaStateStore.recordStepCompleted(
                             sagaId,
-                            SagaCompensationConfig.STEP_ORDER_CONFIRMED,
-                            SagaCompensationConfig.ORDER_CONFIRMED,
-                            SagaCompensationConfig.ORDER_SERVICE,
+                            ECommerceCompensationConfig.STEP_ORDER_CONFIRMED,
+                            ECommerceCompensationConfig.ORDER_CONFIRMED,
+                            ECommerceCompensationConfig.ORDER_SERVICE,
                             completionInfo.getEventId()
                     );
 
@@ -364,8 +364,8 @@ public class OrderService implements OrderOperations {
 
         SagaMetadata sagaMetadata = SagaMetadata.builder()
                 .sagaId(sagaId)
-                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
-                .stepNumber(SagaCompensationConfig.STEP_ORDER_CREATED)
+                .sagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(ECommerceCompensationConfig.STEP_ORDER_CREATED)
                 .compensating(true)
                 .build();
 
@@ -377,9 +377,9 @@ public class OrderService implements OrderOperations {
                     // Record compensation step for order creation (step 0)
                     sagaStateStore.recordCompensationStep(
                             sagaId,
-                            SagaCompensationConfig.STEP_ORDER_CREATED,
-                            SagaCompensationConfig.ORDER_CANCELLED,
-                            SagaCompensationConfig.ORDER_SERVICE
+                            ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                            ECommerceCompensationConfig.ORDER_CANCELLED,
+                            ECommerceCompensationConfig.ORDER_SERVICE
                     );
 
                     // Mark the saga as COMPENSATED (all compensation steps done)

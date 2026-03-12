@@ -14,7 +14,7 @@ import com.theyawns.ecommerce.common.events.PaymentProcessedEvent;
 import com.theyawns.ecommerce.common.events.StockReservedEvent;
 import com.theyawns.ecommerce.order.service.OrderOperations;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaState;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
@@ -97,7 +97,7 @@ class OrderFulfillmentSagaIntegrationTest {
         // ===== Step 0: Order Created - Start Saga =====
         SagaState state = sagaStateStore.startSaga(
                 sagaId,
-                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA,
                 correlationId,
                 4,
                 Duration.ofSeconds(60)
@@ -105,16 +105,16 @@ class OrderFulfillmentSagaIntegrationTest {
 
         assertNotNull(state);
         assertEquals(SagaStatus.STARTED, state.getStatus());
-        assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, state.getSagaType());
+        assertEquals(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA, state.getSagaType());
         assertEquals(correlationId, state.getCorrelationId());
 
         // Record step 0 completed (OrderCreated published)
         // currentStep advances to stepNumber + 1
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CREATED,
-                SagaCompensationConfig.ORDER_SERVICE,
+                ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_SERVICE,
                 "evt-order-created"
         );
 
@@ -124,9 +124,9 @@ class OrderFulfillmentSagaIntegrationTest {
         // ===== Step 1: Stock Reserved - Inventory Service =====
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_STOCK_RESERVED,
-                SagaCompensationConfig.STOCK_RESERVED,
-                SagaCompensationConfig.INVENTORY_SERVICE,
+                ECommerceCompensationConfig.STEP_STOCK_RESERVED,
+                ECommerceCompensationConfig.STOCK_RESERVED,
+                ECommerceCompensationConfig.INVENTORY_SERVICE,
                 "evt-stock-reserved"
         );
 
@@ -136,9 +136,9 @@ class OrderFulfillmentSagaIntegrationTest {
         // ===== Step 2: Payment Processed - Payment Service =====
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_PAYMENT_PROCESSED,
-                SagaCompensationConfig.PAYMENT_PROCESSED,
-                SagaCompensationConfig.PAYMENT_SERVICE,
+                ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED,
+                ECommerceCompensationConfig.PAYMENT_PROCESSED,
+                ECommerceCompensationConfig.PAYMENT_SERVICE,
                 "evt-payment-processed"
         );
 
@@ -150,9 +150,9 @@ class OrderFulfillmentSagaIntegrationTest {
         // SagaState automatically transitions to COMPLETED
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CONFIRMED,
-                SagaCompensationConfig.ORDER_CONFIRMED,
-                SagaCompensationConfig.ORDER_SERVICE,
+                ECommerceCompensationConfig.STEP_ORDER_CONFIRMED,
+                ECommerceCompensationConfig.ORDER_CONFIRMED,
+                ECommerceCompensationConfig.ORDER_SERVICE,
                 "evt-order-confirmed"
         );
 
@@ -173,7 +173,7 @@ class OrderFulfillmentSagaIntegrationTest {
         SagaState finalState = sagaOpt.get();
         assertEquals(SagaStatus.COMPLETED, finalState.getStatus());
         assertEquals(sagaId, finalState.getSagaId());
-        assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, finalState.getSagaType());
+        assertEquals(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA, finalState.getSagaType());
     }
 
     @Test
@@ -181,7 +181,7 @@ class OrderFulfillmentSagaIntegrationTest {
     @org.junit.jupiter.api.Order(3)
     void shouldFindSagaByType() {
         List<SagaState> sagas = sagaStateStore.findSagasByType(
-                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA);
+                ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA);
         assertNotNull(sagas);
         assertTrue(sagas.size() >= 1);
         assertTrue(sagas.stream().anyMatch(s -> s.getSagaId().equals(sagaId)));
@@ -223,24 +223,24 @@ class OrderFulfillmentSagaIntegrationTest {
                 "123 Main St"
         );
         orderEvent.setSagaId(testSagaId);
-        orderEvent.setSagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA);
-        orderEvent.setStepNumber(SagaCompensationConfig.STEP_ORDER_CREATED);
+        orderEvent.setSagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA);
+        orderEvent.setStepNumber(ECommerceCompensationConfig.STEP_ORDER_CREATED);
         orderEvent.setIsCompensating(false);
         orderEvent.setCorrelationId(testCorrelationId);
 
         // Serialize and verify saga fields are preserved
         GenericRecord orderRecord = orderEvent.toGenericRecord();
         assertEquals(testSagaId, orderRecord.getString("sagaId"));
-        assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, orderRecord.getString("sagaType"));
-        assertEquals(SagaCompensationConfig.STEP_ORDER_CREATED, orderRecord.getInt32("stepNumber"));
+        assertEquals(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA, orderRecord.getString("sagaType"));
+        assertEquals(ECommerceCompensationConfig.STEP_ORDER_CREATED, orderRecord.getInt32("stepNumber"));
         assertEquals(false, orderRecord.getBoolean("isCompensating"));
         assertEquals(testCorrelationId, orderRecord.getString("correlationId"));
 
         // StockReservedEvent with saga context
         StockReservedEvent stockEvent = new StockReservedEvent(productId, 2, orderId);
         stockEvent.setSagaId(testSagaId);
-        stockEvent.setSagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA);
-        stockEvent.setStepNumber(SagaCompensationConfig.STEP_STOCK_RESERVED);
+        stockEvent.setSagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA);
+        stockEvent.setStepNumber(ECommerceCompensationConfig.STEP_STOCK_RESERVED);
         stockEvent.setIsCompensating(false);
         stockEvent.setCorrelationId(testCorrelationId);
         stockEvent.setCustomerId(customerId);
@@ -250,7 +250,7 @@ class OrderFulfillmentSagaIntegrationTest {
 
         GenericRecord stockRecord = stockEvent.toGenericRecord();
         assertEquals(testSagaId, stockRecord.getString("sagaId"));
-        assertEquals(SagaCompensationConfig.STEP_STOCK_RESERVED, stockRecord.getInt32("stepNumber"));
+        assertEquals(ECommerceCompensationConfig.STEP_STOCK_RESERVED, stockRecord.getInt32("stepNumber"));
         assertEquals(customerId, stockRecord.getString("customerId"));
         assertEquals("22.00", stockRecord.getString("amount"));
         assertEquals(orderId, stockRecord.getString("orderId"));
@@ -261,25 +261,25 @@ class OrderFulfillmentSagaIntegrationTest {
                 new BigDecimal("22.00"), "USD", "txn-123", "CREDIT_CARD"
         );
         paymentEvent.setSagaId(testSagaId);
-        paymentEvent.setSagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA);
-        paymentEvent.setStepNumber(SagaCompensationConfig.STEP_PAYMENT_PROCESSED);
+        paymentEvent.setSagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA);
+        paymentEvent.setStepNumber(ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED);
         paymentEvent.setCorrelationId(testCorrelationId);
 
         GenericRecord paymentRecord = paymentEvent.toGenericRecord();
         assertEquals(testSagaId, paymentRecord.getString("sagaId"));
-        assertEquals(SagaCompensationConfig.STEP_PAYMENT_PROCESSED, paymentRecord.getInt32("stepNumber"));
+        assertEquals(ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED, paymentRecord.getInt32("stepNumber"));
         assertEquals(orderId, paymentRecord.getString("orderId"));
 
         // OrderConfirmedEvent with saga context
         OrderConfirmedEvent confirmEvent = new OrderConfirmedEvent(orderId, "CONF-123");
         confirmEvent.setSagaId(testSagaId);
-        confirmEvent.setSagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA);
-        confirmEvent.setStepNumber(SagaCompensationConfig.STEP_ORDER_CONFIRMED);
+        confirmEvent.setSagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA);
+        confirmEvent.setStepNumber(ECommerceCompensationConfig.STEP_ORDER_CONFIRMED);
         confirmEvent.setCorrelationId(testCorrelationId);
 
         GenericRecord confirmRecord = confirmEvent.toGenericRecord();
         assertEquals(testSagaId, confirmRecord.getString("sagaId"));
-        assertEquals(SagaCompensationConfig.STEP_ORDER_CONFIRMED, confirmRecord.getInt32("stepNumber"));
+        assertEquals(ECommerceCompensationConfig.STEP_ORDER_CONFIRMED, confirmRecord.getInt32("stepNumber"));
     }
 
     @Test

@@ -48,37 +48,4 @@ public class SagaCompensationConfig {
         return new CompensationRegistry();
     }
 
-    /**
-     * Order fulfillment saga type name.
-     * Used to identify events participating in this saga.
-     */
-    public static final String ORDER_FULFILLMENT_SAGA = "OrderFulfillment";
-
-    /**
-     * Customer onboarding saga type name.
-     */
-    public static final String CUSTOMER_ONBOARDING_SAGA = "CustomerOnboarding";
-
-    // Event type constants for Order Fulfillment Saga
-    public static final String ORDER_CREATED = "OrderCreated";
-    public static final String ORDER_CANCELLED = "OrderCancelled";
-    public static final String ORDER_CONFIRMED = "OrderConfirmed";
-    public static final String STOCK_RESERVED = "StockReserved";
-    public static final String STOCK_RELEASED = "StockReleased";
-    public static final String PAYMENT_PROCESSED = "PaymentProcessed";
-    public static final String PAYMENT_FAILED = "PaymentFailed";
-    public static final String PAYMENT_REFUNDED = "PaymentRefunded";
-    public static final String STOCK_RESERVATION_FAILED = "StockReservationFailed";
-
-    // Service name constants
-    public static final String ORDER_SERVICE = "order-service";
-    public static final String INVENTORY_SERVICE = "inventory-service";
-    public static final String PAYMENT_SERVICE = "payment-service";
-    public static final String ACCOUNT_SERVICE = "account-service";
-
-    // Step numbers for Order Fulfillment Saga
-    public static final int STEP_ORDER_CREATED = 0;
-    public static final int STEP_STOCK_RESERVED = 1;
-    public static final int STEP_PAYMENT_PROCESSED = 2;
-    public static final int STEP_ORDER_CONFIRMED = 3;
 }

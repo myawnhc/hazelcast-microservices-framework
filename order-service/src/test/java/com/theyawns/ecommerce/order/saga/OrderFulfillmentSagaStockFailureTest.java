@@ -4,7 +4,7 @@ import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaState;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
@@ -78,7 +78,7 @@ class OrderFulfillmentSagaStockFailureTest {
         // Start saga
         SagaState state = sagaStateStore.startSaga(
                 sagaId,
-                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA,
                 correlationId,
                 4,
                 Duration.ofSeconds(60)
@@ -90,9 +90,9 @@ class OrderFulfillmentSagaStockFailureTest {
         // Record step 0 completed (OrderCreated published)
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CREATED,
-                SagaCompensationConfig.ORDER_SERVICE,
+                ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_SERVICE,
                 "evt-order-created"
         );
 
@@ -107,15 +107,15 @@ class OrderFulfillmentSagaStockFailureTest {
         // Step 1 FAILS - Insufficient stock
         SagaState state = sagaStateStore.recordStepFailed(
                 sagaId,
-                SagaCompensationConfig.STEP_STOCK_RESERVED,
+                ECommerceCompensationConfig.STEP_STOCK_RESERVED,
                 "InsufficientStock",
-                SagaCompensationConfig.INVENTORY_SERVICE,
+                ECommerceCompensationConfig.INVENTORY_SERVICE,
                 "Product SKU-001 out of stock"
         );
 
         assertEquals(SagaStatus.COMPENSATING, state.getStatus());
         assertEquals("Product SKU-001 out of stock", state.getFailureReason());
-        assertEquals(SagaCompensationConfig.STEP_STOCK_RESERVED, state.getFailedAtStep());
+        assertEquals(ECommerceCompensationConfig.STEP_STOCK_RESERVED, state.getFailedAtStep());
     }
 
     @Test
@@ -125,9 +125,9 @@ class OrderFulfillmentSagaStockFailureTest {
         // Only step 0 needs compensation (stock was never reserved)
         SagaState state = sagaStateStore.recordCompensationStep(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CANCELLED,
-                SagaCompensationConfig.ORDER_SERVICE
+                ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CANCELLED,
+                ECommerceCompensationConfig.ORDER_SERVICE
         );
 
         assertEquals(SagaStatus.COMPENSATING, state.getStatus());
@@ -155,7 +155,7 @@ class OrderFulfillmentSagaStockFailureTest {
         SagaState finalState = sagaOpt.get();
         assertEquals(SagaStatus.COMPENSATED, finalState.getStatus());
         assertEquals("Product SKU-001 out of stock", finalState.getFailureReason());
-        assertEquals(SagaCompensationConfig.STEP_STOCK_RESERVED, finalState.getFailedAtStep());
+        assertEquals(ECommerceCompensationConfig.STEP_STOCK_RESERVED, finalState.getFailedAtStep());
     }
 
     @Test
@@ -170,7 +170,7 @@ class OrderFulfillmentSagaStockFailureTest {
 
         SagaState finalState = sagaOpt.get();
         // The failed step was step 1 (StockReserved), so only step 0 needed compensation
-        assertEquals(SagaCompensationConfig.STEP_STOCK_RESERVED, finalState.getFailedAtStep());
+        assertEquals(ECommerceCompensationConfig.STEP_STOCK_RESERVED, finalState.getFailedAtStep());
 
         // Verify this saga is not active
         List<SagaState> activeSagas = sagaStateStore.findActiveSagas();
@@ -185,7 +185,7 @@ class OrderFulfillmentSagaStockFailureTest {
         assertTrue(compensatedSagas.stream().anyMatch(s -> s.getSagaId().equals(sagaId)));
 
         List<SagaState> orderSagas = sagaStateStore.findSagasByType(
-                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA);
+                ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA);
         assertTrue(orderSagas.stream().anyMatch(s -> s.getSagaId().equals(sagaId)));
     }
 }

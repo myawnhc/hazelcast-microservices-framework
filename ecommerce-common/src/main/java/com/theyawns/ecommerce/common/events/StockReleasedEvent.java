@@ -3,7 +3,7 @@ package com.theyawns.ecommerce.common.events;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.theyawns.framework.event.DomainEvent;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaEvent;
 import com.theyawns.ecommerce.common.domain.Product;
 
@@ -28,7 +28,7 @@ import java.time.Instant;
  * @see SagaEvent
  */
 public class StockReleasedEvent extends DomainEvent<Product, String>
-        implements SagaEvent<Product, String> {
+        implements SagaEvent {
 
     public static final String SCHEMA_NAME = "StockReleasedEvent";
     public static final String EVENT_TYPE = "StockReleased";
@@ -191,7 +191,7 @@ public class StockReleasedEvent extends DomainEvent<Product, String>
      */
     @Override
     public int getSagaStepNumber() {
-        return SagaCompensationConfig.STEP_STOCK_RESERVED;
+        return ECommerceCompensationConfig.STEP_STOCK_RESERVED;
     }
 
     /**
@@ -221,6 +221,6 @@ public class StockReleasedEvent extends DomainEvent<Product, String>
      */
     @Override
     public String getSagaTypeName() {
-        return SagaCompensationConfig.ORDER_FULFILLMENT_SAGA;
+        return ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA;
     }
 }

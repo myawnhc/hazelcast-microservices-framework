@@ -252,8 +252,8 @@ class DefaultSagaCompensatorTest {
         }
 
         @Test
-        @DisplayName("should publish Spring events for compensation requests")
-        void shouldPublishSpringEventsForCompensationRequests() throws Exception {
+        @DisplayName("should notify local listeners for compensation requests")
+        void shouldNotifyLocalListenersForCompensationRequests() throws Exception {
             SagaState saga = createSagaWithSteps(SagaStatus.IN_PROGRESS);
 
             when(sagaStateStore.recordCompensationStarted(anyString())).thenReturn(saga);

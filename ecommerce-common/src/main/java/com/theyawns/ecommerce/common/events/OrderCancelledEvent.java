@@ -3,7 +3,7 @@ package com.theyawns.ecommerce.common.events;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.theyawns.framework.event.DomainEvent;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaEvent;
 import com.theyawns.ecommerce.common.domain.Order;
 
@@ -36,7 +36,7 @@ import java.time.Instant;
  * @see SagaEvent
  */
 public class OrderCancelledEvent extends DomainEvent<Order, String>
-        implements SagaEvent<Order, String> {
+        implements SagaEvent {
 
     public static final String SCHEMA_NAME = "OrderCancelledEvent";
     public static final String EVENT_TYPE = "OrderCancelled";
@@ -183,7 +183,7 @@ public class OrderCancelledEvent extends DomainEvent<Order, String>
      */
     @Override
     public int getSagaStepNumber() {
-        return SagaCompensationConfig.STEP_ORDER_CREATED;
+        return ECommerceCompensationConfig.STEP_ORDER_CREATED;
     }
 
     /**
@@ -213,6 +213,6 @@ public class OrderCancelledEvent extends DomainEvent<Order, String>
      */
     @Override
     public String getSagaTypeName() {
-        return SagaCompensationConfig.ORDER_FULFILLMENT_SAGA;
+        return ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA;
     }
 }

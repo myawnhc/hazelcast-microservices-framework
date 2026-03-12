@@ -65,7 +65,7 @@ public class DefaultSagaCompensator implements SagaCompensator {
      * @param sagaStateStore the saga state store
      * @param compensationRegistry the compensation mapping registry
      * @param hazelcast the Hazelcast instance for topic publishing
-     * @param eventPublisher Spring's application event publisher
+     * @param eventPublisher application event publisher for local listeners
      * @param meterRegistry the metrics registry (may be null)
      */
     public DefaultSagaCompensator(SagaStateStore sagaStateStore,
@@ -249,7 +249,7 @@ public class DefaultSagaCompensator implements SagaCompensator {
 
             logger.debug("Published compensation request to topic {}: {}", topicName, compensatingEventType);
 
-            // Also publish as Spring event for local listeners
+            // Also notify local listeners via ApplicationEventPublisher
             if (eventPublisher != null) {
                 eventPublisher.publishEvent(request);
             }

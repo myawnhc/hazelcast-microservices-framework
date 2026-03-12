@@ -15,7 +15,7 @@ import com.theyawns.ecommerce.inventory.exception.ProductNotFoundException;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.controller.SagaMetadata;
 import com.theyawns.framework.event.DomainEvent;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.vectorstore.EmbeddingProvider;
 import com.theyawns.framework.vectorstore.VectorStoreService;
@@ -207,8 +207,8 @@ public class InventoryService implements ProductService {
 
         SagaMetadata sagaMetadata = SagaMetadata.builder()
                 .sagaId(sagaId)
-                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
-                .stepNumber(SagaCompensationConfig.STEP_STOCK_RESERVED)
+                .sagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(ECommerceCompensationConfig.STEP_STOCK_RESERVED)
                 .build();
 
         return controller.handleEvent(event, UUID.fromString(correlationId), sagaMetadata)
@@ -222,9 +222,9 @@ public class InventoryService implements ProductService {
                     // Record step 1 completed
                     sagaStateStore.recordStepCompleted(
                             sagaId,
-                            SagaCompensationConfig.STEP_STOCK_RESERVED,
-                            SagaCompensationConfig.STOCK_RESERVED,
-                            SagaCompensationConfig.INVENTORY_SERVICE,
+                            ECommerceCompensationConfig.STEP_STOCK_RESERVED,
+                            ECommerceCompensationConfig.STOCK_RESERVED,
+                            ECommerceCompensationConfig.INVENTORY_SERVICE,
                             completionInfo.getEventId()
                     );
 
@@ -258,17 +258,17 @@ public class InventoryService implements ProductService {
             // Still record compensation step even if no reservations found
             sagaStateStore.recordCompensationStep(
                     sagaId,
-                    SagaCompensationConfig.STEP_STOCK_RESERVED,
-                    SagaCompensationConfig.STOCK_RELEASED,
-                    SagaCompensationConfig.INVENTORY_SERVICE
+                    ECommerceCompensationConfig.STEP_STOCK_RESERVED,
+                    ECommerceCompensationConfig.STOCK_RELEASED,
+                    ECommerceCompensationConfig.INVENTORY_SERVICE
             );
             return CompletableFuture.completedFuture(null);
         }
 
         SagaMetadata sagaMetadata = SagaMetadata.builder()
                 .sagaId(sagaId)
-                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
-                .stepNumber(SagaCompensationConfig.STEP_STOCK_RESERVED)
+                .sagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(ECommerceCompensationConfig.STEP_STOCK_RESERVED)
                 .compensating(true)
                 .build();
 
@@ -297,9 +297,9 @@ public class InventoryService implements ProductService {
         return lastFuture.thenApply(product -> {
             sagaStateStore.recordCompensationStep(
                     sagaId,
-                    SagaCompensationConfig.STEP_STOCK_RESERVED,
-                    SagaCompensationConfig.STOCK_RELEASED,
-                    SagaCompensationConfig.INVENTORY_SERVICE
+                    ECommerceCompensationConfig.STEP_STOCK_RESERVED,
+                    ECommerceCompensationConfig.STOCK_RELEASED,
+                    ECommerceCompensationConfig.INVENTORY_SERVICE
             );
             return product;
         });

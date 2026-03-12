@@ -300,7 +300,7 @@ class SagaTimeoutDetectorTest {
 
             detector.checkForTimedOutSagas();
 
-            // Verify Spring event
+            // Verify local event notification
             verify(eventPublisher).publishEvent(any(SagaTimedOutEvent.class));
 
             // Verify Hazelcast topic

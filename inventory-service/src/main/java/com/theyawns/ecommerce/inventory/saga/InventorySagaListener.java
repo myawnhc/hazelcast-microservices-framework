@@ -11,9 +11,10 @@ import com.theyawns.ecommerce.common.events.PaymentFailedEvent;
 import com.theyawns.ecommerce.common.events.StockReservationFailedEvent;
 import com.theyawns.ecommerce.inventory.exception.InsufficientStockException;
 import com.theyawns.ecommerce.inventory.service.ProductService;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.dlq.DeadLetterEntry;
 import com.theyawns.framework.dlq.DeadLetterQueueOperations;
+import com.theyawns.framework.dlq.FaultInjectionState;
 import com.theyawns.framework.idempotency.IdempotencyGuard;
 import com.theyawns.framework.resilience.ResilienceException;
 import com.theyawns.framework.resilience.ResilientOperations;
@@ -59,6 +60,7 @@ public class InventorySagaListener {
     private IdempotencyGuard idempotencyGuard;
     private DeadLetterQueueOperations deadLetterQueue;
     private EventAuthenticator eventAuthenticator;
+    private FaultInjectionState faultInjection;
 
     /**
      * Creates a new InventorySagaListener.
@@ -127,6 +129,16 @@ public class InventorySagaListener {
     @Autowired(required = false)
     public void setEventAuthenticator(EventAuthenticator eventAuthenticator) {
         this.eventAuthenticator = eventAuthenticator;
+    }
+
+    /**
+     * Sets the fault injection state for DLQ demo scenarios (optional).
+     *
+     * @param faultInjection the fault injection state
+     */
+    @Autowired(required = false)
+    public void setFaultInjection(FaultInjectionState faultInjection) {
+        this.faultInjection = faultInjection;
     }
 
     /**
@@ -239,7 +251,7 @@ public class InventorySagaListener {
         StockReservationFailedEvent event = new StockReservationFailedEvent(
                 productId, orderId, requestedQuantity, availableQuantity, reason);
         event.setSagaId(sagaId);
-        event.setSagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA);
+        event.setSagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA);
         event.setCorrelationId(correlationId);
 
         ITopic<GenericRecord> topic = hazelcast.getTopic("StockReservationFailed");
@@ -260,15 +272,24 @@ public class InventorySagaListener {
         public void onMessage(Message<GenericRecord> message) {
             GenericRecord record = unwrapEvent(message.getMessageObject());
 
-            String eventId = record.getString("eventId");
-            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
-                logger.debug("Duplicate event {} already processed, skipping", eventId);
-                return;
-            }
-
             String sagaId = record.getString("sagaId");
             if (sagaId == null || sagaId.isEmpty()) {
                 logger.debug("OrderCreated event without sagaId - not a saga event, ignoring");
+                return;
+            }
+
+            // Fault injection check BEFORE idempotency guard — the event must not
+            // be marked as "processed" when it's being sent to the DLQ, otherwise
+            // replay would be silently rejected as a duplicate.
+            if (faultInjection != null && faultInjection.isEnabled()) {
+                sendToDeadLetterQueue(record, "OrderCreated",
+                        new RuntimeException(faultInjection.getFailureMessage()));
+                return;
+            }
+
+            String eventId = record.getString("eventId");
+            if (idempotencyGuard != null && eventId != null && !idempotencyGuard.tryProcess(eventId)) {
+                logger.debug("Duplicate event {} already processed, skipping", eventId);
                 return;
             }
 

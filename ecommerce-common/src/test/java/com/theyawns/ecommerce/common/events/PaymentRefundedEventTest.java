@@ -3,7 +3,7 @@ package com.theyawns.ecommerce.common.events;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.theyawns.ecommerce.common.domain.Payment;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -308,7 +308,7 @@ class PaymentRefundedEventTest {
         @Test
         @DisplayName("should return step 2 for saga step number (compensates PaymentProcessed)")
         void shouldReturnStep2ForSagaStepNumber() {
-            assertEquals(SagaCompensationConfig.STEP_PAYMENT_PROCESSED, event.getSagaStepNumber());
+            assertEquals(ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED, event.getSagaStepNumber());
             assertEquals(2, event.getSagaStepNumber());
         }
 
@@ -327,7 +327,7 @@ class PaymentRefundedEventTest {
         @Test
         @DisplayName("should return OrderFulfillment saga type")
         void shouldReturnOrderFulfillmentSagaType() {
-            assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, event.getSagaTypeName());
+            assertEquals(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA, event.getSagaTypeName());
             assertEquals("OrderFulfillment", event.getSagaTypeName());
         }
     }

@@ -1,7 +1,7 @@
 package com.theyawns.ecommerce.common.saga;
 
 import com.theyawns.framework.saga.CompensationRegistry;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +44,33 @@ import jakarta.annotation.PostConstruct;
 public class ECommerceCompensationConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(ECommerceCompensationConfig.class);
+
+    // Saga type names
+    public static final String ORDER_FULFILLMENT_SAGA = "OrderFulfillment";
+    public static final String CUSTOMER_ONBOARDING_SAGA = "CustomerOnboarding";
+
+    // Event type constants for Order Fulfillment Saga
+    public static final String ORDER_CREATED = "OrderCreated";
+    public static final String ORDER_CANCELLED = "OrderCancelled";
+    public static final String ORDER_CONFIRMED = "OrderConfirmed";
+    public static final String STOCK_RESERVED = "StockReserved";
+    public static final String STOCK_RELEASED = "StockReleased";
+    public static final String PAYMENT_PROCESSED = "PaymentProcessed";
+    public static final String PAYMENT_FAILED = "PaymentFailed";
+    public static final String PAYMENT_REFUNDED = "PaymentRefunded";
+    public static final String STOCK_RESERVATION_FAILED = "StockReservationFailed";
+
+    // Service name constants
+    public static final String ORDER_SERVICE = "order-service";
+    public static final String INVENTORY_SERVICE = "inventory-service";
+    public static final String PAYMENT_SERVICE = "payment-service";
+    public static final String ACCOUNT_SERVICE = "account-service";
+
+    // Step numbers for Order Fulfillment Saga
+    public static final int STEP_ORDER_CREATED = 0;
+    public static final int STEP_STOCK_RESERVED = 1;
+    public static final int STEP_PAYMENT_PROCESSED = 2;
+    public static final int STEP_ORDER_CONFIRMED = 3;
 
     private final CompensationRegistry compensationRegistry;
 
@@ -97,26 +124,26 @@ public class ECommerceCompensationConfig {
     private void registerOrderFulfillmentCompensations() {
         // Step 0: OrderCreated -> OrderCancelled
         compensationRegistry.register(
-                SagaCompensationConfig.ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CANCELLED,
-                SagaCompensationConfig.ORDER_SERVICE,
-                SagaCompensationConfig.STEP_ORDER_CREATED
+                ECommerceCompensationConfig.ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CANCELLED,
+                ECommerceCompensationConfig.ORDER_SERVICE,
+                ECommerceCompensationConfig.STEP_ORDER_CREATED
         );
 
         // Step 1: StockReserved -> StockReleased
         compensationRegistry.register(
-                SagaCompensationConfig.STOCK_RESERVED,
-                SagaCompensationConfig.STOCK_RELEASED,
-                SagaCompensationConfig.INVENTORY_SERVICE,
-                SagaCompensationConfig.STEP_STOCK_RESERVED
+                ECommerceCompensationConfig.STOCK_RESERVED,
+                ECommerceCompensationConfig.STOCK_RELEASED,
+                ECommerceCompensationConfig.INVENTORY_SERVICE,
+                ECommerceCompensationConfig.STEP_STOCK_RESERVED
         );
 
         // Step 2: PaymentProcessed -> PaymentRefunded
         compensationRegistry.register(
-                SagaCompensationConfig.PAYMENT_PROCESSED,
-                SagaCompensationConfig.PAYMENT_REFUNDED,
-                SagaCompensationConfig.PAYMENT_SERVICE,
-                SagaCompensationConfig.STEP_PAYMENT_PROCESSED
+                ECommerceCompensationConfig.PAYMENT_PROCESSED,
+                ECommerceCompensationConfig.PAYMENT_REFUNDED,
+                ECommerceCompensationConfig.PAYMENT_SERVICE,
+                ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED
         );
 
         // Step 3: OrderConfirmed - no compensation (final success state)

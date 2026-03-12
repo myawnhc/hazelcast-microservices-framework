@@ -13,7 +13,7 @@ import com.theyawns.ecommerce.payment.exception.PaymentNotFoundException;
 import com.theyawns.framework.controller.EventSourcingController;
 import com.theyawns.framework.controller.SagaMetadata;
 import com.theyawns.framework.event.DomainEvent;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaStateStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -157,8 +157,8 @@ public class PaymentService implements PaymentOperations {
 
         SagaMetadata sagaMetadata = SagaMetadata.builder()
                 .sagaId(sagaId)
-                .sagaType(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA)
-                .stepNumber(SagaCompensationConfig.STEP_PAYMENT_PROCESSED)
+                .sagaType(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA)
+                .stepNumber(ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED)
                 .build();
 
         if (paymentSucceeded) {
@@ -179,9 +179,9 @@ public class PaymentService implements PaymentOperations {
                         // Record step 2 completed in saga state store
                         sagaStateStore.recordStepCompleted(
                                 sagaId,
-                                SagaCompensationConfig.STEP_PAYMENT_PROCESSED,
-                                SagaCompensationConfig.PAYMENT_PROCESSED,
-                                SagaCompensationConfig.PAYMENT_SERVICE,
+                                ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED,
+                                ECommerceCompensationConfig.PAYMENT_PROCESSED,
+                                ECommerceCompensationConfig.PAYMENT_SERVICE,
                                 completionInfo.getEventId()
                         );
 
@@ -204,9 +204,9 @@ public class PaymentService implements PaymentOperations {
                         // Record step 2 failed - triggers compensation
                         sagaStateStore.recordStepFailed(
                                 sagaId,
-                                SagaCompensationConfig.STEP_PAYMENT_PROCESSED,
-                                SagaCompensationConfig.PAYMENT_FAILED,
-                                SagaCompensationConfig.PAYMENT_SERVICE,
+                                ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED,
+                                ECommerceCompensationConfig.PAYMENT_FAILED,
+                                ECommerceCompensationConfig.PAYMENT_SERVICE,
                                 "Payment declined by processor"
                         );
 

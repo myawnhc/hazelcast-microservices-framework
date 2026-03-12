@@ -3,7 +3,7 @@ package com.theyawns.ecommerce.common.events;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.theyawns.ecommerce.common.domain.Order;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -249,7 +249,7 @@ class OrderCancelledEventTest {
         @Test
         @DisplayName("should return step 0 for saga step number (compensates OrderCreated)")
         void shouldReturnStep0ForSagaStepNumber() {
-            assertEquals(SagaCompensationConfig.STEP_ORDER_CREATED, event.getSagaStepNumber());
+            assertEquals(ECommerceCompensationConfig.STEP_ORDER_CREATED, event.getSagaStepNumber());
             assertEquals(0, event.getSagaStepNumber());
         }
 
@@ -268,7 +268,7 @@ class OrderCancelledEventTest {
         @Test
         @DisplayName("should return OrderFulfillment saga type")
         void shouldReturnOrderFulfillmentSagaType() {
-            assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, event.getSagaTypeName());
+            assertEquals(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA, event.getSagaTypeName());
             assertEquals("OrderFulfillment", event.getSagaTypeName());
         }
     }

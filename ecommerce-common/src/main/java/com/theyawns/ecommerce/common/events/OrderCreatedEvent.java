@@ -3,7 +3,7 @@ package com.theyawns.ecommerce.common.events;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.theyawns.framework.event.DomainEvent;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaEvent;
 import com.theyawns.ecommerce.common.domain.Order;
 import com.theyawns.ecommerce.common.domain.OrderLineItem;
@@ -36,7 +36,7 @@ import java.util.List;
  * @see SagaEvent
  */
 public class OrderCreatedEvent extends DomainEvent<Order, String>
-        implements SagaEvent<Order, String> {
+        implements SagaEvent {
 
     public static final String SCHEMA_NAME = "OrderCreatedEvent";
     public static final String EVENT_TYPE = "OrderCreated";
@@ -264,7 +264,7 @@ public class OrderCreatedEvent extends DomainEvent<Order, String>
      */
     @Override
     public int getSagaStepNumber() {
-        return SagaCompensationConfig.STEP_ORDER_CREATED;
+        return ECommerceCompensationConfig.STEP_ORDER_CREATED;
     }
 
     /**
@@ -274,7 +274,7 @@ public class OrderCreatedEvent extends DomainEvent<Order, String>
      */
     @Override
     public String getCompensatingEventType() {
-        return SagaCompensationConfig.ORDER_CANCELLED;
+        return ECommerceCompensationConfig.ORDER_CANCELLED;
     }
 
     /**
@@ -294,6 +294,6 @@ public class OrderCreatedEvent extends DomainEvent<Order, String>
      */
     @Override
     public String getSagaTypeName() {
-        return SagaCompensationConfig.ORDER_FULFILLMENT_SAGA;
+        return ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA;
     }
 }

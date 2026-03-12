@@ -4,7 +4,7 @@ import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaState;
 import com.theyawns.framework.saga.SagaStateStore;
 import com.theyawns.framework.saga.SagaStatus;
@@ -76,7 +76,7 @@ class OrderFulfillmentSagaIdempotencyTest {
     void shouldStartSagaAndCompleteStep0() {
         SagaState state = sagaStateStore.startSaga(
                 sagaId,
-                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA,
                 correlationId,
                 4,
                 Duration.ofSeconds(60)
@@ -88,9 +88,9 @@ class OrderFulfillmentSagaIdempotencyTest {
         // Record step 0 completed
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CREATED,
-                SagaCompensationConfig.ORDER_SERVICE,
+                ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_SERVICE,
                 "evt-order-created-1"
         );
 
@@ -105,9 +105,9 @@ class OrderFulfillmentSagaIdempotencyTest {
         // Record step 0 completed AGAIN (duplicate event)
         SagaState state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CREATED,
-                SagaCompensationConfig.ORDER_SERVICE,
+                ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_SERVICE,
                 "evt-order-created-duplicate"
         );
 
@@ -119,7 +119,7 @@ class OrderFulfillmentSagaIdempotencyTest {
         // Verify the step list has exactly the right number of entries
         // (updateOrAddStep replaces by stepNumber, so no duplicate step records)
         long step0Count = state.getSteps().stream()
-                .filter(s -> s.getStepNumber() == SagaCompensationConfig.STEP_ORDER_CREATED)
+                .filter(s -> s.getStepNumber() == ECommerceCompensationConfig.STEP_ORDER_CREATED)
                 .count();
         assertEquals(1, step0Count, "Step 0 should appear exactly once in step records");
     }
@@ -131,9 +131,9 @@ class OrderFulfillmentSagaIdempotencyTest {
         // Step 1: Stock Reserved
         SagaState state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_STOCK_RESERVED,
-                SagaCompensationConfig.STOCK_RESERVED,
-                SagaCompensationConfig.INVENTORY_SERVICE,
+                ECommerceCompensationConfig.STEP_STOCK_RESERVED,
+                ECommerceCompensationConfig.STOCK_RESERVED,
+                ECommerceCompensationConfig.INVENTORY_SERVICE,
                 "evt-stock-reserved"
         );
 
@@ -143,9 +143,9 @@ class OrderFulfillmentSagaIdempotencyTest {
         // Step 2: Payment Processed
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_PAYMENT_PROCESSED,
-                SagaCompensationConfig.PAYMENT_PROCESSED,
-                SagaCompensationConfig.PAYMENT_SERVICE,
+                ECommerceCompensationConfig.STEP_PAYMENT_PROCESSED,
+                ECommerceCompensationConfig.PAYMENT_PROCESSED,
+                ECommerceCompensationConfig.PAYMENT_SERVICE,
                 "evt-payment-processed"
         );
 
@@ -155,9 +155,9 @@ class OrderFulfillmentSagaIdempotencyTest {
         // Step 3: Order Confirmed (final step)
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CONFIRMED,
-                SagaCompensationConfig.ORDER_CONFIRMED,
-                SagaCompensationConfig.ORDER_SERVICE,
+                ECommerceCompensationConfig.STEP_ORDER_CONFIRMED,
+                ECommerceCompensationConfig.ORDER_CONFIRMED,
+                ECommerceCompensationConfig.ORDER_SERVICE,
                 "evt-order-confirmed"
         );
 
@@ -176,7 +176,7 @@ class OrderFulfillmentSagaIdempotencyTest {
         assertEquals(SagaStatus.COMPLETED, finalState.getStatus());
         assertTrue(finalState.getStatus().isTerminal());
         assertEquals(sagaId, finalState.getSagaId());
-        assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, finalState.getSagaType());
+        assertEquals(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA, finalState.getSagaType());
 
         // Should have exactly 4 step records despite duplicate step 0
         assertEquals(4, finalState.getSteps().size(),

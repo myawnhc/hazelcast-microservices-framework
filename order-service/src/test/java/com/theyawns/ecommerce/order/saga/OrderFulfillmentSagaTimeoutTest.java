@@ -6,7 +6,7 @@ import com.hazelcast.core.HazelcastInstance;
 import com.theyawns.framework.saga.CompensationRegistry;
 import com.theyawns.framework.saga.DefaultSagaCompensator;
 import com.theyawns.framework.saga.HazelcastSagaStateStore;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaCompensator;
 import com.theyawns.framework.saga.SagaState;
 import com.theyawns.framework.saga.SagaStateStore;
@@ -79,19 +79,19 @@ class OrderFulfillmentSagaTimeoutTest {
         // Set up compensation registry with order fulfillment mappings
         compensationRegistry = new CompensationRegistry();
         compensationRegistry.register(
-                SagaCompensationConfig.ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CANCELLED,
-                SagaCompensationConfig.ORDER_SERVICE
+                ECommerceCompensationConfig.ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CANCELLED,
+                ECommerceCompensationConfig.ORDER_SERVICE
         );
         compensationRegistry.register(
-                SagaCompensationConfig.STOCK_RESERVED,
-                SagaCompensationConfig.STOCK_RELEASED,
-                SagaCompensationConfig.INVENTORY_SERVICE
+                ECommerceCompensationConfig.STOCK_RESERVED,
+                ECommerceCompensationConfig.STOCK_RELEASED,
+                ECommerceCompensationConfig.INVENTORY_SERVICE
         );
         compensationRegistry.register(
-                SagaCompensationConfig.PAYMENT_PROCESSED,
-                SagaCompensationConfig.PAYMENT_REFUNDED,
-                SagaCompensationConfig.PAYMENT_SERVICE
+                ECommerceCompensationConfig.PAYMENT_PROCESSED,
+                ECommerceCompensationConfig.PAYMENT_REFUNDED,
+                ECommerceCompensationConfig.PAYMENT_SERVICE
         );
 
         // Configure timeout detection
@@ -107,7 +107,7 @@ class OrderFulfillmentSagaTimeoutTest {
                 sagaStateStore,
                 compensationRegistry,
                 hazelcast,
-                null, // no Spring event publisher in integration test
+                null, // no event publisher in integration test
                 meterRegistry
         );
 
@@ -116,7 +116,7 @@ class OrderFulfillmentSagaTimeoutTest {
                 compensator,
                 timeoutConfig,
                 hazelcast,
-                null, // no Spring event publisher in integration test
+                null, // no event publisher in integration test
                 meterRegistry
         );
     }
@@ -135,7 +135,7 @@ class OrderFulfillmentSagaTimeoutTest {
         // ===== Start saga with a very short deadline (100ms) =====
         SagaState state = sagaStateStore.startSaga(
                 sagaId,
-                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA,
                 correlationId,
                 4,
                 Duration.ofMillis(100) // Very short deadline to trigger timeout
@@ -147,9 +147,9 @@ class OrderFulfillmentSagaTimeoutTest {
         // ===== Step 0: Order Created =====
         state = sagaStateStore.recordStepCompleted(
                 sagaId,
-                SagaCompensationConfig.STEP_ORDER_CREATED,
-                SagaCompensationConfig.ORDER_CREATED,
-                SagaCompensationConfig.ORDER_SERVICE,
+                ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_CREATED,
+                ECommerceCompensationConfig.ORDER_SERVICE,
                 "evt-order-created"
         );
 
@@ -230,7 +230,7 @@ class OrderFulfillmentSagaTimeoutTest {
         for (String id : List.of(sagaId1, sagaId2, sagaId3)) {
             SagaState state = sagaStateStore.startSaga(
                     id,
-                    SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                    ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA,
                     UUID.randomUUID().toString(),
                     4,
                     Duration.ofMillis(50)
@@ -239,9 +239,9 @@ class OrderFulfillmentSagaTimeoutTest {
             // Complete step 0 only
             sagaStateStore.recordStepCompleted(
                     id,
-                    SagaCompensationConfig.STEP_ORDER_CREATED,
-                    SagaCompensationConfig.ORDER_CREATED,
-                    SagaCompensationConfig.ORDER_SERVICE,
+                    ECommerceCompensationConfig.STEP_ORDER_CREATED,
+                    ECommerceCompensationConfig.ORDER_CREATED,
+                    ECommerceCompensationConfig.ORDER_SERVICE,
                     "evt-" + id
             );
         }
@@ -271,7 +271,7 @@ class OrderFulfillmentSagaTimeoutTest {
             String id = UUID.randomUUID().toString();
             sagaStateStore.startSaga(
                     id,
-                    SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                    ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA,
                     UUID.randomUUID().toString(),
                     4,
                     Duration.ofMillis(50)
@@ -301,7 +301,7 @@ class OrderFulfillmentSagaTimeoutTest {
         String completedSagaId = UUID.randomUUID().toString();
         sagaStateStore.startSaga(
                 completedSagaId,
-                SagaCompensationConfig.ORDER_FULFILLMENT_SAGA,
+                ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA,
                 UUID.randomUUID().toString(),
                 4,
                 Duration.ofMillis(100)
@@ -309,13 +309,13 @@ class OrderFulfillmentSagaTimeoutTest {
 
         // Complete all steps quickly
         sagaStateStore.recordStepCompleted(completedSagaId, 0,
-                SagaCompensationConfig.ORDER_CREATED, SagaCompensationConfig.ORDER_SERVICE, "evt-0");
+                ECommerceCompensationConfig.ORDER_CREATED, ECommerceCompensationConfig.ORDER_SERVICE, "evt-0");
         sagaStateStore.recordStepCompleted(completedSagaId, 1,
-                SagaCompensationConfig.STOCK_RESERVED, SagaCompensationConfig.INVENTORY_SERVICE, "evt-1");
+                ECommerceCompensationConfig.STOCK_RESERVED, ECommerceCompensationConfig.INVENTORY_SERVICE, "evt-1");
         sagaStateStore.recordStepCompleted(completedSagaId, 2,
-                SagaCompensationConfig.PAYMENT_PROCESSED, SagaCompensationConfig.PAYMENT_SERVICE, "evt-2");
+                ECommerceCompensationConfig.PAYMENT_PROCESSED, ECommerceCompensationConfig.PAYMENT_SERVICE, "evt-2");
         sagaStateStore.recordStepCompleted(completedSagaId, 3,
-                SagaCompensationConfig.ORDER_CONFIRMED, SagaCompensationConfig.ORDER_SERVICE, "evt-3");
+                ECommerceCompensationConfig.ORDER_CONFIRMED, ECommerceCompensationConfig.ORDER_SERVICE, "evt-3");
 
         // Wait for what would be the deadline
         Thread.sleep(200);

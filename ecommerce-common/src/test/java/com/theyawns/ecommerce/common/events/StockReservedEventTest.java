@@ -2,7 +2,7 @@ package com.theyawns.ecommerce.common.events;
 
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.theyawns.ecommerce.common.domain.Product;
-import com.theyawns.framework.saga.SagaCompensationConfig;
+import com.theyawns.ecommerce.common.saga.ECommerceCompensationConfig;
 import com.theyawns.framework.saga.SagaEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -143,14 +143,14 @@ class StockReservedEventTest {
         @Test
         @DisplayName("should return step 1 for saga step number")
         void shouldReturnStep1ForSagaStepNumber() {
-            assertEquals(SagaCompensationConfig.STEP_STOCK_RESERVED, event.getSagaStepNumber());
+            assertEquals(ECommerceCompensationConfig.STEP_STOCK_RESERVED, event.getSagaStepNumber());
             assertEquals(1, event.getSagaStepNumber());
         }
 
         @Test
         @DisplayName("should return StockReleased as compensating event type")
         void shouldReturnStockReleasedAsCompensatingEventType() {
-            assertEquals(SagaCompensationConfig.STOCK_RELEASED, event.getCompensatingEventType());
+            assertEquals(ECommerceCompensationConfig.STOCK_RELEASED, event.getCompensatingEventType());
             assertEquals("StockReleased", event.getCompensatingEventType());
         }
 
@@ -163,7 +163,7 @@ class StockReservedEventTest {
         @Test
         @DisplayName("should return OrderFulfillment saga type")
         void shouldReturnOrderFulfillmentSagaType() {
-            assertEquals(SagaCompensationConfig.ORDER_FULFILLMENT_SAGA, event.getSagaTypeName());
+            assertEquals(ECommerceCompensationConfig.ORDER_FULFILLMENT_SAGA, event.getSagaTypeName());
             assertEquals("OrderFulfillment", event.getSagaTypeName());
         }
     }
