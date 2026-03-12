@@ -1,11 +1,13 @@
 package com.theyawns.framework.persistence.postgres;
 
+import com.theyawns.framework.persistence.DlqStorePersistence;
 import com.theyawns.framework.persistence.EventStorePersistence;
 import com.theyawns.framework.persistence.OutboxStorePersistence;
 import com.theyawns.framework.persistence.PersistenceAutoConfiguration;
 import com.theyawns.framework.persistence.PersistenceProperties;
 import com.theyawns.framework.persistence.ViewStorePersistence;
 import com.theyawns.framework.persistence.postgres.archival.EventArchivalService;
+import com.theyawns.framework.persistence.postgres.repository.DeadLetterRepository;
 import com.theyawns.framework.persistence.postgres.repository.EventStoreRepository;
 import com.theyawns.framework.persistence.postgres.repository.OutboxRepository;
 import com.theyawns.framework.persistence.postgres.repository.ViewStoreRepository;
@@ -92,6 +94,21 @@ public class PostgresPersistenceAutoConfiguration {
                                                          JdbcTemplate jdbcTemplate) {
         logger.info("Creating PostgreSQL OutboxStorePersistence");
         return new PostgresOutboxStorePersistence(repository, jdbcTemplate);
+    }
+
+    /**
+     * Creates the PostgreSQL DLQ store persistence provider.
+     *
+     * @param repository the JPA repository
+     * @param jdbcTemplate the JDBC template
+     * @return the persistence provider
+     */
+    @Bean
+    @ConditionalOnMissingBean(DlqStorePersistence.class)
+    public DlqStorePersistence dlqStorePersistence(DeadLetterRepository repository,
+                                                    JdbcTemplate jdbcTemplate) {
+        logger.info("Creating PostgreSQL DlqStorePersistence");
+        return new PostgresDlqStorePersistence(repository, jdbcTemplate);
     }
 
     /**

@@ -98,6 +98,19 @@ public class PersistenceAutoConfiguration {
         return new InMemoryOutboxStorePersistence();
     }
 
+    /**
+     * Fallback in-memory DLQ store persistence for when no external provider
+     * (e.g., PostgreSQL) is available. Useful for development and testing.
+     *
+     * @return the in-memory DLQ store persistence
+     */
+    @Bean
+    @ConditionalOnMissingBean(DlqStorePersistence.class)
+    public DlqStorePersistence inMemoryDlqStorePersistence() {
+        logger.info("No DlqStorePersistence provider found — using InMemoryDlqStorePersistence");
+        return new InMemoryDlqStorePersistence();
+    }
+
     // ========================================================================
     // MapStore adapter beans
     // ========================================================================

@@ -6,6 +6,9 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.hazelcast.query.Predicates;
 import com.hazelcast.topic.ITopic;
+import com.theyawns.framework.persistence.DlqStorePersistence;
+import com.theyawns.framework.persistence.PersistableDeadLetterEntry;
+import com.theyawns.framework.persistence.mapstore.GenericRecordJsonConverter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,9 +48,10 @@ public class HazelcastDeadLetterQueue implements DeadLetterQueueOperations {
     private final IMap<String, GenericRecord> dlqMap;
     private final DeadLetterQueueProperties properties;
     private final MeterRegistry meterRegistry;
+    private final DlqStorePersistence persistence;
 
     /**
-     * Creates a new HazelcastDeadLetterQueue.
+     * Creates a new HazelcastDeadLetterQueue without persistence.
      *
      * @param hazelcast the Hazelcast instance (shared cluster preferred)
      * @param properties the DLQ configuration properties
@@ -56,17 +60,39 @@ public class HazelcastDeadLetterQueue implements DeadLetterQueueOperations {
     public HazelcastDeadLetterQueue(final HazelcastInstance hazelcast,
                                      final DeadLetterQueueProperties properties,
                                      final MeterRegistry meterRegistry) {
+        this(hazelcast, properties, meterRegistry, null);
+    }
+
+    /**
+     * Creates a new HazelcastDeadLetterQueue with optional persistence.
+     *
+     * <p>When persistence is provided, entries are persisted on add/replay/discard
+     * and PENDING entries are recovered from persistence on startup.
+     *
+     * @param hazelcast the Hazelcast instance (shared cluster preferred)
+     * @param properties the DLQ configuration properties
+     * @param meterRegistry the meter registry for metrics
+     * @param persistence the optional persistence provider (nullable)
+     */
+    public HazelcastDeadLetterQueue(final HazelcastInstance hazelcast,
+                                     final DeadLetterQueueProperties properties,
+                                     final MeterRegistry meterRegistry,
+                                     final DlqStorePersistence persistence) {
         this.hazelcast = Objects.requireNonNull(hazelcast, "hazelcast cannot be null");
         this.properties = Objects.requireNonNull(properties, "properties cannot be null");
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry cannot be null");
+        this.persistence = persistence;
         this.dlqMap = hazelcast.getMap(properties.getMapName());
-        logger.info("Initialized HazelcastDeadLetterQueue with map: {}", properties.getMapName());
+        logger.info("Initialized HazelcastDeadLetterQueue with map: {}, persistence: {}",
+                properties.getMapName(), persistence != null ? persistence.getClass().getSimpleName() : "none");
+        loadFromPersistence();
     }
 
     @Override
     public void add(final DeadLetterEntry entry) {
         Objects.requireNonNull(entry, "entry cannot be null");
         dlqMap.set(entry.getDlqEntryId(), toRecord(entry));
+        persistIfAvailable(entry);
         meterRegistry.counter("dlq.entries.added").increment();
         logger.info("Added DLQ entry: dlqEntryId={}, originalEventId={}, eventType={}, sourceService={}",
                 entry.getDlqEntryId(), entry.getOriginalEventId(),
@@ -119,6 +145,7 @@ public class HazelcastDeadLetterQueue implements DeadLetterQueueOperations {
         entry.setReplayCount(entry.getReplayCount() + 1);
         entry.setStatus(DeadLetterEntry.Status.REPLAYED);
         dlqMap.set(dlqEntryId, toRecord(entry));
+        persistIfAvailable(entry);
 
         meterRegistry.counter("dlq.entries.replayed").increment();
         logger.info("Replayed DLQ entry: dlqEntryId={}, originalEventId={}, topicName={}",
@@ -141,6 +168,7 @@ public class HazelcastDeadLetterQueue implements DeadLetterQueueOperations {
 
         entry.setStatus(DeadLetterEntry.Status.DISCARDED);
         dlqMap.set(dlqEntryId, toRecord(entry));
+        persistIfAvailable(entry);
 
         meterRegistry.counter("dlq.entries.discarded").increment();
         logger.info("Discarded DLQ entry: dlqEntryId={}, originalEventId={}",
@@ -197,6 +225,111 @@ public class HazelcastDeadLetterQueue implements DeadLetterQueueOperations {
                 record.getString("correlationId"),
                 record.getInt32("replayCount"),
                 DeadLetterEntry.Status.valueOf(record.getString("status"))
+        );
+    }
+
+    /**
+     * Persists a DLQ entry if a persistence provider is available.
+     *
+     * @param entry the entry to persist
+     */
+    private void persistIfAvailable(final DeadLetterEntry entry) {
+        if (persistence != null) {
+            try {
+                persistence.persist(toPersistableEntry(entry));
+            } catch (Exception e) {
+                logger.warn("Failed to persist DLQ entry {}: {}", entry.getDlqEntryId(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Loads PENDING entries from persistence into the IMap on startup.
+     */
+    private void loadFromPersistence() {
+        if (persistence == null || !persistence.isAvailable()) {
+            return;
+        }
+        try {
+            int recovered = 0;
+            for (String key : persistence.loadPendingKeys()) {
+                if (!dlqMap.containsKey(key)) {
+                    persistence.load(key).ifPresent(persistable -> {
+                        DeadLetterEntry entry = fromPersistableEntry(persistable);
+                        dlqMap.set(entry.getDlqEntryId(), toRecord(entry));
+                    });
+                    recovered++;
+                }
+            }
+            if (recovered > 0) {
+                logger.info("Recovered {} PENDING DLQ entries from persistence", recovered);
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to load DLQ entries from persistence: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Converts a DeadLetterEntry to a PersistableDeadLetterEntry for database storage.
+     *
+     * @param entry the DLQ entry
+     * @return the persistable representation
+     */
+    static PersistableDeadLetterEntry toPersistableEntry(final DeadLetterEntry entry) {
+        String eventDataJson = null;
+        if (entry.getEventRecord() != null) {
+            try {
+                eventDataJson = GenericRecordJsonConverter.toJson(entry.getEventRecord());
+            } catch (Exception e) {
+                logger.warn("Failed to serialize event record for DLQ entry {}: {}",
+                        entry.getDlqEntryId(), e.getMessage());
+            }
+        }
+        return new PersistableDeadLetterEntry(
+                entry.getDlqEntryId(),
+                entry.getOriginalEventId(),
+                entry.getEventType(),
+                entry.getTopicName(),
+                eventDataJson,
+                entry.getFailureReason(),
+                entry.getFailureTimestamp().toEpochMilli(),
+                entry.getSourceService(),
+                entry.getSagaId(),
+                entry.getCorrelationId(),
+                entry.getReplayCount(),
+                entry.getStatus().name()
+        );
+    }
+
+    /**
+     * Reconstitutes a DeadLetterEntry from a PersistableDeadLetterEntry loaded from the database.
+     *
+     * @param persistable the persistable entry
+     * @return the reconstituted DLQ entry
+     */
+    static DeadLetterEntry fromPersistableEntry(final PersistableDeadLetterEntry persistable) {
+        GenericRecord eventRecord = null;
+        if (persistable.eventData() != null) {
+            try {
+                eventRecord = GenericRecordJsonConverter.fromJson(persistable.eventData());
+            } catch (Exception e) {
+                logger.warn("Failed to deserialize event record for DLQ entry {}: {}",
+                        persistable.dlqEntryId(), e.getMessage());
+            }
+        }
+        return DeadLetterEntry.reconstitute(
+                persistable.dlqEntryId(),
+                persistable.originalEventId(),
+                persistable.eventType(),
+                persistable.topicName(),
+                eventRecord,
+                persistable.failureReason(),
+                Instant.ofEpochMilli(persistable.failureTimestampMillis()),
+                persistable.sourceService(),
+                persistable.sagaId(),
+                persistable.correlationId(),
+                persistable.replayCount(),
+                DeadLetterEntry.Status.valueOf(persistable.status())
         );
     }
 }

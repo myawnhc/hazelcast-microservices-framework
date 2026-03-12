@@ -1,6 +1,7 @@
 package com.theyawns.framework.dlq;
 
 import com.hazelcast.core.HazelcastInstance;
+import com.theyawns.framework.persistence.DlqStorePersistence;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +47,7 @@ public class DeadLetterQueueAutoConfiguration {
      * @param sharedHazelcast the shared Hazelcast client (nullable)
      * @param properties the DLQ properties
      * @param meterRegistry the meter registry
+     * @param dlqStorePersistence the optional DLQ persistence provider
      * @return the DLQ operations
      */
     @Bean
@@ -56,11 +58,14 @@ public class DeadLetterQueueAutoConfiguration {
             @Autowired(required = false)
             final HazelcastInstance sharedHazelcast,
             final DeadLetterQueueProperties properties,
-            final MeterRegistry meterRegistry) {
+            final MeterRegistry meterRegistry,
+            @Autowired(required = false)
+            final DlqStorePersistence dlqStorePersistence) {
         HazelcastInstance hz = sharedHazelcast != null ? sharedHazelcast : hazelcastInstance;
-        logger.info("Creating HazelcastDeadLetterQueue bean (instance={})",
-                sharedHazelcast != null ? "shared cluster" : "embedded");
-        return new HazelcastDeadLetterQueue(hz, properties, meterRegistry);
+        logger.info("Creating HazelcastDeadLetterQueue bean (instance={}, persistence={})",
+                sharedHazelcast != null ? "shared cluster" : "embedded",
+                dlqStorePersistence != null ? dlqStorePersistence.getClass().getSimpleName() : "none");
+        return new HazelcastDeadLetterQueue(hz, properties, meterRegistry, dlqStorePersistence);
     }
 
     /**
@@ -75,5 +80,31 @@ public class DeadLetterQueueAutoConfiguration {
             final DeadLetterQueueOperations deadLetterQueue) {
         logger.info("Creating DeadLetterQueueController bean");
         return new DeadLetterQueueController(deadLetterQueue);
+    }
+
+    /**
+     * Creates the shared FaultInjectionState bean.
+     *
+     * @return the fault injection state
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public FaultInjectionState faultInjectionState() {
+        logger.info("Creating FaultInjectionState bean");
+        return new FaultInjectionState();
+    }
+
+    /**
+     * Creates the fault injection REST controller.
+     *
+     * @param faultInjectionState the shared fault injection state
+     * @return the fault injection controller
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public FaultInjectionController faultInjectionController(
+            final FaultInjectionState faultInjectionState) {
+        logger.info("Creating FaultInjectionController bean");
+        return new FaultInjectionController(faultInjectionState);
     }
 }

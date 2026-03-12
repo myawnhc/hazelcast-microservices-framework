@@ -8,6 +8,8 @@ import com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder;
 import com.hazelcast.topic.ITopic;
 import com.hazelcast.topic.Message;
 import com.hazelcast.topic.MessageListener;
+import com.theyawns.framework.persistence.InMemoryDlqStorePersistence;
+import com.theyawns.framework.persistence.PersistableDeadLetterEntry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -17,7 +19,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -455,6 +459,89 @@ class HazelcastDeadLetterQueueTest {
 
             // Count (no PENDING entries remain)
             assertThat(dlq.count()).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("Persistence integration")
+    class PersistenceIntegration {
+
+        private InMemoryDlqStorePersistence persistence;
+        private HazelcastDeadLetterQueue persistentDlq;
+
+        @BeforeEach
+        void setUpPersistence() {
+            persistence = new InMemoryDlqStorePersistence();
+            DeadLetterQueueProperties props = new DeadLetterQueueProperties();
+            props.setMapName("test_DLQ_persist_" + System.nanoTime());
+            persistentDlq = new HazelcastDeadLetterQueue(hazelcast, props, new SimpleMeterRegistry(), persistence);
+        }
+
+        @Test
+        @DisplayName("should persist entry on add")
+        void shouldPersistOnAdd() {
+            DeadLetterEntry entry = createTestEntry("evt-persist-add", "PersistTopic");
+            persistentDlq.add(entry);
+
+            Optional<PersistableDeadLetterEntry> persisted = persistence.load(entry.getDlqEntryId());
+            assertThat(persisted).isPresent();
+            assertThat(persisted.get().originalEventId()).isEqualTo("evt-persist-add");
+            assertThat(persisted.get().status()).isEqualTo("PENDING");
+        }
+
+        @Test
+        @DisplayName("should persist entry on replay")
+        void shouldPersistOnReplay() {
+            DeadLetterEntry entry = createTestEntry("evt-persist-replay", "PersistReplayTopic");
+            persistentDlq.add(entry);
+            persistentDlq.replay(entry.getDlqEntryId());
+
+            Optional<PersistableDeadLetterEntry> persisted = persistence.load(entry.getDlqEntryId());
+            assertThat(persisted).isPresent();
+            assertThat(persisted.get().status()).isEqualTo("REPLAYED");
+            assertThat(persisted.get().replayCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should persist entry on discard")
+        void shouldPersistOnDiscard() {
+            DeadLetterEntry entry = createTestEntry("evt-persist-discard", "PersistDiscardTopic");
+            persistentDlq.add(entry);
+            persistentDlq.discard(entry.getDlqEntryId());
+
+            Optional<PersistableDeadLetterEntry> persisted = persistence.load(entry.getDlqEntryId());
+            assertThat(persisted).isPresent();
+            assertThat(persisted.get().status()).isEqualTo("DISCARDED");
+        }
+
+        @Test
+        @DisplayName("should load PENDING entries from persistence on startup")
+        void shouldLoadFromPersistenceOnStartup() {
+            // Pre-populate persistence with a PENDING entry
+            PersistableDeadLetterEntry pending = new PersistableDeadLetterEntry(
+                    "dlq-recovery-1", "evt-recovery", "TestCreated", "RecoveryTopic",
+                    null, "Test failure", System.currentTimeMillis(),
+                    "test-service", null, null, 0, "PENDING"
+            );
+            PersistableDeadLetterEntry replayed = new PersistableDeadLetterEntry(
+                    "dlq-recovery-2", "evt-recovery-2", "TestCreated", "RecoveryTopic",
+                    null, "Test failure", System.currentTimeMillis(),
+                    "test-service", null, null, 1, "REPLAYED"
+            );
+            persistence.persist(pending);
+            persistence.persist(replayed);
+
+            // Create new DLQ instance — should recover PENDING entries from persistence
+            DeadLetterQueueProperties recoveryProps = new DeadLetterQueueProperties();
+            recoveryProps.setMapName("test_DLQ_recovery_" + System.nanoTime());
+            HazelcastDeadLetterQueue recoveryDlq =
+                    new HazelcastDeadLetterQueue(hazelcast, recoveryProps, new SimpleMeterRegistry(), persistence);
+
+            // Only the PENDING entry should be in the IMap
+            assertThat(recoveryDlq.getEntry("dlq-recovery-1")).isNotNull();
+            assertThat(recoveryDlq.getEntry("dlq-recovery-1").getStatus()).isEqualTo(DeadLetterEntry.Status.PENDING);
+            // REPLAYED entry should NOT be recovered
+            assertThat(recoveryDlq.getEntry("dlq-recovery-2")).isNull();
         }
     }
 }
