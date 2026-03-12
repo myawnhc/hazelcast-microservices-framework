@@ -234,15 +234,17 @@ The dual-instance approach avoids these issues by keeping service-specific code 
 
 ## Future Considerations
 
-### If Enterprise Edition Becomes Available
+### Why This Architecture Holds Even With Enterprise Edition
 
-With Enterprise Edition, consider migrating to a single cluster with User Code Namespaces:
+User Code Namespaces (Enterprise) solves the *technical* problem — classloading across services. It does not solve the *architectural* concerns that make dual-instance the better design regardless of edition:
 
-1. Each service uploads its domain classes to a dedicated namespace
-2. Jet jobs specify their namespace for class loading
-3. Remove the embedded instance, use only the shared cluster
+- **Blast radius isolation**: A misbehaving Jet pipeline on a shared cluster affects all services. With embedded instances, it only affects the owning service.
+- **Partial failure independence**: If the shared cluster goes down, each service continues processing local events. A single-cluster architecture turns a saga failure into a total system outage.
+- **Hot-path performance**: In-process IMap access (11µs) vs. any network hop (270-340µs). UCN doesn't eliminate serialization and network overhead for distributed Jet execution.
+- **Deployment independence**: Services can deploy and upgrade independently without coordinating shared cluster changes.
+- **Data isolation by construction**: Separate instances make cross-service data access physically impossible, not just conventionally discouraged.
 
-This would reduce memory overhead but requires careful namespace management.
+A single cluster with UCN would simplify configuration and eliminate the ~1-5ms republishing latency. For very small deployments (2-3 services) where operational simplicity outweighs isolation guarantees, it may be a reasonable trade-off. But for production-grade systems, the separation of local processing from shared communication is the right architectural boundary.
 
 ### Potential Optimizations
 

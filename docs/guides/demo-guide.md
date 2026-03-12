@@ -18,7 +18,7 @@ This starts all services in demo mode, loads sample data (customers + products),
 **What to open**:
 - Grafana: http://localhost:3000 (admin/admin)
 - API Gateway: http://localhost:8080
-- Management Center: http://localhost:8180
+- Management Center: http://localhost:8888
 
 ---
 
