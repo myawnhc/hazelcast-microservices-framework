@@ -22,6 +22,8 @@ class McpRoleTest {
         assertThat(McpRole.VIEWER.canAccess("inspectSaga")).isTrue();
         assertThat(McpRole.VIEWER.canAccess("listSagas")).isTrue();
         assertThat(McpRole.VIEWER.canAccess("getMetrics")).isTrue();
+        assertThat(McpRole.VIEWER.canAccess("listDlqEntries")).isTrue();
+        assertThat(McpRole.VIEWER.canAccess("inspectDlqEntry")).isTrue();
     }
 
     @Test
@@ -29,6 +31,7 @@ class McpRoleTest {
     void viewerShouldNotAccessWriteTools() {
         assertThat(McpRole.VIEWER.canAccess("submitEvent")).isFalse();
         assertThat(McpRole.VIEWER.canAccess("runDemo")).isFalse();
+        assertThat(McpRole.VIEWER.canAccess("replayDlqEntry")).isFalse();
     }
 
     @Test
@@ -41,6 +44,9 @@ class McpRoleTest {
         assertThat(McpRole.OPERATOR.canAccess("getMetrics")).isTrue();
         assertThat(McpRole.OPERATOR.canAccess("submitEvent")).isTrue();
         assertThat(McpRole.OPERATOR.canAccess("runDemo")).isTrue();
+        assertThat(McpRole.OPERATOR.canAccess("listDlqEntries")).isTrue();
+        assertThat(McpRole.OPERATOR.canAccess("inspectDlqEntry")).isTrue();
+        assertThat(McpRole.OPERATOR.canAccess("replayDlqEntry")).isTrue();
     }
 
     @Test
@@ -53,6 +59,9 @@ class McpRoleTest {
         assertThat(McpRole.ADMIN.canAccess("getMetrics")).isTrue();
         assertThat(McpRole.ADMIN.canAccess("submitEvent")).isTrue();
         assertThat(McpRole.ADMIN.canAccess("runDemo")).isTrue();
+        assertThat(McpRole.ADMIN.canAccess("listDlqEntries")).isTrue();
+        assertThat(McpRole.ADMIN.canAccess("inspectDlqEntry")).isTrue();
+        assertThat(McpRole.ADMIN.canAccess("replayDlqEntry")).isTrue();
     }
 
     @Test
@@ -66,8 +75,8 @@ class McpRoleTest {
     @Test
     @DisplayName("getAllowedTools should return correct set size per role")
     void getAllowedToolsShouldReturnCorrectSize() {
-        assertThat(McpRole.VIEWER.getAllowedTools()).hasSize(5);
-        assertThat(McpRole.OPERATOR.getAllowedTools()).hasSize(7);
-        assertThat(McpRole.ADMIN.getAllowedTools()).hasSize(7);
+        assertThat(McpRole.VIEWER.getAllowedTools()).hasSize(7);
+        assertThat(McpRole.OPERATOR.getAllowedTools()).hasSize(10);
+        assertThat(McpRole.ADMIN.getAllowedTools()).hasSize(10);
     }
 }

@@ -15,16 +15,12 @@
     <description>Model Context Protocol server for AI assistant integration with eCommerce services</description>
 
     <dependencies>
-        <!-- Spring AI MCP Server (stdio transport) -->
+        <!-- Spring AI MCP Server (WebMVC: SSE + optional STDIO transport) -->
+        <!-- SSE auto-configures when web server is running (Docker profile);
+             STDIO enabled via spring.ai.mcp.server.stdio=true (default profile) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-mcp-server</artifactId>
-        </dependency>
-
-        <!-- Spring Boot Web (for RestClient; Tomcat disabled via config) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
         </dependency>
 
         <!-- Actuator (health endpoint for Docker health checks) -->

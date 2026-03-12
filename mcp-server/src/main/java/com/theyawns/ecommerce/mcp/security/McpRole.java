@@ -21,23 +21,23 @@ public enum McpRole {
 
     /**
      * Read-only access. Can query views, inspect sagas, list sagas, read event
-     * history, and view metrics. Cannot modify state.
+     * history, view metrics, and inspect DLQ entries. Cannot modify state.
      */
-    VIEWER(Set.of("queryView", "getEventHistory", "inspectSaga", "listSagas", "getMetrics")),
+    VIEWER(Set.of("queryView", "getEventHistory", "inspectSaga", "listSagas", "getMetrics",
+            "listDlqEntries", "inspectDlqEntry")),
 
     /**
      * Read + write access. Includes all VIEWER permissions plus the ability to
-     * submit events and run demo scenarios.
+     * submit events, run demo scenarios, and replay DLQ entries.
      */
     OPERATOR(Set.of("queryView", "getEventHistory", "inspectSaga", "listSagas", "getMetrics",
-            "submitEvent", "runDemo")),
+            "submitEvent", "runDemo", "listDlqEntries", "inspectDlqEntry", "replayDlqEntry")),
 
     /**
-     * Full administrative access. Currently identical to OPERATOR; reserved for
-     * future admin-only tools (DLQ management, configuration, etc.).
+     * Full administrative access. Includes all OPERATOR permissions.
      */
     ADMIN(Set.of("queryView", "getEventHistory", "inspectSaga", "listSagas", "getMetrics",
-            "submitEvent", "runDemo"));
+            "submitEvent", "runDemo", "listDlqEntries", "inspectDlqEntry", "replayDlqEntry"));
 
     private final Set<String> allowedTools;
 

@@ -169,6 +169,37 @@ class RunDemoToolTest {
     }
 
     @Test
+    @DisplayName("should run dlq_investigation scenario with fault injection")
+    void shouldRunDlqInvestigation() throws JsonProcessingException {
+        when(serviceClient.createEntity(eq("customer"), any()))
+                .thenReturn(Map.of("customerId", "c-dlq", "name", "DLQ Demo Customer"));
+        when(serviceClient.createEntity(eq("product"), any()))
+                .thenReturn(Map.of("productId", "p-dlq", "name", "DLQ Demo Widget"));
+        when(serviceClient.enableFaultInjection(eq("inventory"), any()))
+                .thenReturn(Map.of("enabled", true, "failureMessage", "Simulated transient failure for DLQ demo"));
+        when(serviceClient.createEntity(eq("order"), any()))
+                .thenReturn(Map.of("orderId", "o-dlq", "status", "PENDING"));
+        when(serviceClient.disableFaultInjection("inventory"))
+                .thenReturn(Map.of("enabled", false));
+
+        String result = runDemoTool.runDemo("dlq_investigation");
+
+        verify(serviceClient).createEntity(eq("customer"), any());
+        verify(serviceClient).createEntity(eq("product"), any());
+        verify(serviceClient).enableFaultInjection(eq("inventory"), any());
+        verify(serviceClient).createEntity(eq("order"), any());
+        verify(serviceClient).disableFaultInjection("inventory");
+
+        Map<String, Object> parsed = objectMapper.readValue(result, new TypeReference<>() {});
+        assertEquals("dlq_investigation", parsed.get("scenario"));
+        assertNotNull(parsed.get("steps"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) parsed.get("steps");
+        assertEquals(5, steps.size());
+        assertNotNull(parsed.get("nextActions"));
+    }
+
+    @Test
     @DisplayName("should return error for unknown scenario")
     void shouldReturnErrorForUnknownScenario() throws JsonProcessingException {
         String result = runDemoTool.runDemo("unknown_scenario");

@@ -2,9 +2,12 @@ package com.theyawns.ecommerce.mcp.config;
 
 import com.theyawns.ecommerce.mcp.tools.GetEventHistoryTool;
 import com.theyawns.ecommerce.mcp.tools.GetMetricsTool;
+import com.theyawns.ecommerce.mcp.tools.InspectDlqEntryTool;
 import com.theyawns.ecommerce.mcp.tools.InspectSagaTool;
+import com.theyawns.ecommerce.mcp.tools.ListDlqEntriesTool;
 import com.theyawns.ecommerce.mcp.tools.ListSagasTool;
 import com.theyawns.ecommerce.mcp.tools.QueryViewTool;
+import com.theyawns.ecommerce.mcp.tools.ReplayDlqEntryTool;
 import com.theyawns.ecommerce.mcp.tools.RunDemoTool;
 import com.theyawns.ecommerce.mcp.tools.SubmitEventTool;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -34,6 +37,9 @@ public class McpToolConfig {
      * @param listSagas the list sagas tool
      * @param getMetrics the get metrics tool
      * @param runDemo the run demo tool
+     * @param listDlqEntries the list DLQ entries tool
+     * @param inspectDlqEntry the inspect DLQ entry tool
+     * @param replayDlqEntry the replay DLQ entry tool
      * @return the tool callback provider
      */
     @Bean
@@ -43,10 +49,14 @@ public class McpToolConfig {
                                          InspectSagaTool inspectSaga,
                                          ListSagasTool listSagas,
                                          GetMetricsTool getMetrics,
-                                         RunDemoTool runDemo) {
+                                         RunDemoTool runDemo,
+                                         ListDlqEntriesTool listDlqEntries,
+                                         InspectDlqEntryTool inspectDlqEntry,
+                                         ReplayDlqEntryTool replayDlqEntry) {
         return MethodToolCallbackProvider.builder()
                 .toolObjects(queryView, submitEvent, getEventHistory,
-                        inspectSaga, listSagas, getMetrics, runDemo)
+                        inspectSaga, listSagas, getMetrics, runDemo,
+                        listDlqEntries, inspectDlqEntry, replayDlqEntry)
                 .build();
     }
 }

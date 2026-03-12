@@ -6,6 +6,7 @@
 #   ./scripts/demo-scenarios.sh           # Interactive menu
 #   ./scripts/demo-scenarios.sh 1         # Run scenario 1 directly
 #   ./scripts/demo-scenarios.sh 4         # Run scenario 4 directly
+#   ./scripts/demo-scenarios.sh 7         # Run scenario 7 (DLQ) directly
 #   ./scripts/demo-scenarios.sh all       # Run all scenarios
 #
 # Prerequisites:
@@ -1238,6 +1239,276 @@ scenario_6_timeout() {
 }
 
 # ============================================================================
+# SCENARIO 7: DLQ Investigation & Recovery
+# ============================================================================
+scenario_7_dlq_investigation() {
+    print_header "SCENARIO 7: Dead Letter Queue Investigation & Recovery"
+
+    echo "This scenario demonstrates DLQ fault injection, investigation, and replay:"
+    echo "  1. Enable fault injection on inventory-service"
+    echo "  2. Place an order → inventory listener fails → event goes to DLQ"
+    echo "  3. Investigate the DLQ entry (list, inspect)"
+    echo "  4. Disable fault injection (fix the 'problem')"
+    echo "  5. Replay the DLQ entry → saga completes normally"
+    echo ""
+    echo "DLQ flow:"
+    echo "  OrderCreated → Inventory listener FAILS (fault injected)"
+    echo "                       ↓"
+    echo "  Circuit breaker exhausted → Event sent to Dead Letter Queue"
+    echo "                       ↓"
+    echo "  Investigate → Fix root cause → Replay → Saga completes"
+    wait_for_keypress
+
+    # Step 1: Create a customer (or use existing)
+    local customer_id="${ALICE_ID:-}"
+
+    if [ -z "$customer_id" ]; then
+        print_step "1" "Creating a customer for this scenario"
+        local customer_response=$(api_post "$ACCOUNT_SERVICE/api/customers" '{
+            "email": "dlq.demo@example.com",
+            "name": "DLQ Demo Customer",
+            "address": "42 Dead Letter Lane",
+            "phone": "555-DLQ0"
+        }')
+        customer_id=$(extract_id "$customer_response")
+        print_success "Customer created: $customer_id"
+    else
+        print_step "1" "Using existing customer (Alice)"
+        print_success "Customer ID: $customer_id"
+    fi
+    wait_for_keypress
+
+    # Step 2: Create a product
+    print_step "2" "Creating a product for this scenario"
+    local product_response=$(api_post "$INVENTORY_SERVICE/api/products" '{
+        "sku": "DLQ-DEMO-001",
+        "name": "DLQ Demo Widget",
+        "description": "Widget for dead letter queue demo",
+        "price": 29.99,
+        "quantityOnHand": 100,
+        "category": "Demo"
+    }')
+
+    local product_id=$(extract_id "$product_response")
+
+    if [ -n "$product_id" ]; then
+        print_success "Product created: $product_id (price: \$29.99)"
+    else
+        print_error "Failed to create product"
+        echo "$product_response"
+        return 1
+    fi
+    wait_for_keypress
+
+    # Step 3: Check initial DLQ state
+    print_step "3" "Checking initial DLQ state"
+    print_substep "GET /api/admin/dlq/count"
+
+    local initial_count_response=$(api_get "$ORDER_SERVICE/api/admin/dlq/count")
+    local initial_count=$(echo "$initial_count_response" | grep -oE '"count" *: *[0-9]+' | grep -oE '[0-9]+$')
+    echo "  Current pending DLQ entries: ${initial_count:-0}"
+    wait_for_keypress
+
+    # Step 4: Enable fault injection on inventory-service
+    print_step "4" "Enabling fault injection on inventory-service"
+    echo ""
+    echo -e "  ${YELLOW}This makes the inventory saga listener throw an exception${NC}"
+    echo -e "  ${YELLOW}on every incoming event, simulating a transient failure.${NC}"
+    echo ""
+    print_substep "POST /api/admin/fault?enabled=true"
+
+    local fault_response=$(curl -s -X POST "$INVENTORY_SERVICE/api/admin/fault?enabled=true&failureMessage=Simulated+transient+failure+for+DLQ+demo")
+    print_success "Fault injection enabled on inventory-service"
+    print_json "$fault_response"
+    wait_for_keypress
+
+    # Step 5: Place an order → inventory fails → DLQ entry
+    print_step "5" "Placing order (inventory listener will FAIL)"
+    echo ""
+    echo "  Expected flow:"
+    echo "    1. OrderCreated event published to ITopic"
+    echo "    2. Inventory listener receives it, but fault injection is active"
+    echo "    3. Circuit breaker retries exhaust → event sent to DLQ"
+    echo ""
+
+    local order_response=$(api_post "$ORDER_SERVICE/api/orders" "{
+        \"customerId\": \"$customer_id\",
+        \"lineItems\": [
+            {
+                \"productId\": \"$product_id\",
+                \"quantity\": 1,
+                \"unitPrice\": 29.99
+            }
+        ],
+        \"shippingAddress\": \"42 Dead Letter Lane\"
+    }")
+
+    local order_id=$(extract_id "$order_response")
+
+    if [ -n "$order_id" ]; then
+        print_success "Order created: $order_id"
+        echo "  The saga has started, but inventory processing will fail..."
+    else
+        print_error "Failed to create order"
+        echo "$order_response"
+        # Disable fault injection before returning
+        curl -s -X POST "$INVENTORY_SERVICE/api/admin/fault?enabled=false" > /dev/null
+        return 1
+    fi
+
+    # Wait for DLQ entry to appear (circuit breaker retries take a few seconds)
+    echo ""
+    echo -n "  Waiting for event to reach DLQ (circuit breaker retries)"
+    local dlq_wait=0
+    local dlq_found=""
+    while [ $dlq_wait -lt 30 ]; do
+        local count_resp=$(api_get "$ORDER_SERVICE/api/admin/dlq/count")
+        local current_count=$(echo "$count_resp" | grep -oE '"count" *: *[0-9]+' | grep -oE '[0-9]+$')
+        if [ -n "$current_count" ] && [ "$current_count" -gt "${initial_count:-0}" ]; then
+            dlq_found="true"
+            echo ""
+            break
+        fi
+        echo -n "."
+        sleep 2
+        dlq_wait=$((dlq_wait + 2))
+    done
+
+    if [ -z "$dlq_found" ]; then
+        echo " (timed out — DLQ entry may not have been created yet)"
+        echo -e "  ${YELLOW}The circuit breaker may need more time to exhaust retries.${NC}"
+    else
+        print_success "New DLQ entry detected!"
+    fi
+    wait_for_keypress
+
+    # Step 6: List DLQ entries
+    print_step "6" "Listing DLQ entries"
+    print_substep "GET /api/admin/dlq"
+
+    local dlq_list=$(api_get "$ORDER_SERVICE/api/admin/dlq?limit=5")
+    print_json "$dlq_list"
+
+    # Extract the first DLQ entry ID
+    local dlq_entry_id=$(echo "$dlq_list" | grep -oE '"dlqEntryId" *: *"[^"]*"' | head -1 | sed 's/.*: *"//;s/"$//')
+
+    if [ -n "$dlq_entry_id" ]; then
+        print_success "Found DLQ entry: $dlq_entry_id"
+    else
+        echo -e "  ${YELLOW}No DLQ entries found — circuit breaker may still be retrying.${NC}"
+        echo "  Try running this scenario again or check inventory-service logs."
+        curl -s -X POST "$INVENTORY_SERVICE/api/admin/fault?enabled=false" > /dev/null
+        return 1
+    fi
+    wait_for_keypress
+
+    # Step 7: Inspect the DLQ entry in detail
+    print_step "7" "Inspecting DLQ entry details"
+    print_substep "GET /api/admin/dlq/$dlq_entry_id"
+
+    local dlq_detail=$(api_get "$ORDER_SERVICE/api/admin/dlq/$dlq_entry_id")
+    print_json "$dlq_detail"
+
+    local failure_reason=$(echo "$dlq_detail" | grep -oE '"failureReason" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
+    echo ""
+    echo "  Diagnosis:"
+    echo "    - Failure reason: ${failure_reason:-unknown}"
+    echo "    - Root cause: fault injection was active on inventory-service"
+    echo "    - Fix: disable fault injection, then replay the entry"
+    wait_for_keypress
+
+    # Step 8: Disable fault injection (fix the root cause)
+    print_step "8" "Disabling fault injection (fixing the root cause)"
+    print_substep "POST /api/admin/fault?enabled=false"
+
+    local disable_response=$(curl -s -X POST "$INVENTORY_SERVICE/api/admin/fault?enabled=false")
+    print_success "Fault injection disabled — inventory-service is healthy again"
+    print_json "$disable_response"
+    wait_for_keypress
+
+    # Step 9: Replay the DLQ entry
+    print_step "9" "Replaying the DLQ entry"
+    echo ""
+    echo "  The original OrderCreated event will be republished to the ITopic."
+    echo "  With fault injection disabled, inventory will process it normally."
+    echo ""
+    print_substep "POST /api/admin/dlq/$dlq_entry_id/replay"
+
+    local replay_response=$(curl -s -X POST "$ORDER_SERVICE/api/admin/dlq/$dlq_entry_id/replay")
+    print_json "$replay_response"
+
+    local replay_status=$(echo "$replay_response" | grep -oE '"status" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
+    if [ "$replay_status" = "replayed" ] || [ "$replay_status" = "REPLAYED" ]; then
+        print_success "DLQ entry replayed! Event republished to topic."
+    else
+        echo "  Replay response: $replay_response"
+    fi
+    wait_for_keypress
+
+    # Step 10: Wait for saga to complete after replay
+    print_step "10" "Waiting for saga to complete after replay"
+    echo ""
+    echo "  Expected flow after replay:"
+    echo "    1. OrderCreated event re-delivered to inventory listener"
+    echo "    2. Inventory reserves stock (StockReserved)"
+    echo "    3. Payment processes (PaymentProcessed)"
+    echo "    4. Order confirmed (CONFIRMED)"
+
+    if wait_for_order_status "$order_id" "CONFIRMED" 30; then
+        print_success "Saga completed! Order is CONFIRMED"
+    else
+        local current_order=$(api_get "$ORDER_SERVICE/api/orders/$order_id")
+        local current_status=$(echo "$current_order" | grep -oE '"status" *: *"[^"]*"' | sed 's/.*: *"//;s/"$//')
+        echo "  Current order status: ${current_status:-unknown}"
+        echo "  (Saga may still be processing after replay)"
+    fi
+    wait_for_keypress
+
+    # Step 11: Verify DLQ entry is now REPLAYED
+    print_step "11" "Verifying DLQ entry status"
+    print_substep "GET /api/admin/dlq/$dlq_entry_id"
+
+    local final_dlq=$(api_get "$ORDER_SERVICE/api/admin/dlq/$dlq_entry_id")
+    local final_dlq_status=$(echo "$final_dlq" | grep -oE '"status" *: *"[^"]*"' | head -1 | sed 's/.*: *"//;s/"$//')
+
+    if [ "$final_dlq_status" = "REPLAYED" ]; then
+        print_success "DLQ entry status: REPLAYED (terminal state)"
+    else
+        echo "  DLQ entry status: ${final_dlq_status:-unknown}"
+    fi
+
+    # Show final order state
+    echo ""
+    print_substep "Final order state:"
+    local final_order=$(api_get "$ORDER_SERVICE/api/orders/$order_id")
+    print_json "$final_order"
+
+    echo ""
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  SCENARIO 7 COMPLETE: DLQ Investigation & Recovery${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "Key observations:"
+    echo "  1. Fault injection simulated a transient inventory-service failure"
+    echo "  2. The circuit breaker exhausted retries → event routed to the DLQ"
+    echo "  3. DLQ entries are inspectable: event data, failure reason, replay count"
+    echo "  4. After fixing the root cause, replaying re-published the original event"
+    echo "  5. The saga completed normally after replay — no data was lost"
+    echo "  6. DLQ entries persist in PostgreSQL (survive service restarts)"
+    echo ""
+    echo -e "${CYAN}Tip: For the AI-powered version of this investigation, connect the${NC}"
+    echo -e "${CYAN}MCP server to your LLM client (Claude Desktop, Claude Code, etc.)${NC}"
+    echo -e "${CYAN}and use this prompt:${NC}"
+    echo ""
+    echo -e "${WHITE}  \"Run the DLQ investigation demo — inject a failure, place an order,${NC}"
+    echo -e "${WHITE}   and show me what's in the dead letter queue.\"${NC}"
+    echo ""
+    echo -e "${CYAN}The LLM will set up the scenario, report what it finds in the DLQ,${NC}"
+    echo -e "${CYAN}and suggest a resolution. When you say \"replay it\", it replays the${NC}"
+    echo -e "${CYAN}entry and confirms the saga completes — all through conversation.${NC}"
+}
+
+# ============================================================================
 # Main menu
 # ============================================================================
 show_menu() {
@@ -1264,10 +1535,15 @@ show_menu() {
     echo "  6) Saga Timeout (Service Unavailable)"
     echo "     Stop payment service → saga stalls → timeout → auto-recovery"
     echo ""
+    echo -e "  ${CYAN}--- Resilience ---${NC}"
+    echo ""
+    echo "  7) DLQ Investigation & Recovery"
+    echo "     Fault inject → event fails → DLQ → investigate → replay → recover"
+    echo ""
     echo "  all) Run all scenarios"
     echo "  q) Quit"
     echo ""
-    echo -n "Select scenario [1-6, all, q]: "
+    echo -n "Select scenario [1-7, all, q]: "
 }
 
 # ============================================================================
@@ -1283,6 +1559,7 @@ if [ -n "$1" ]; then
         4) scenario_4_similar_products ;;
         5) scenario_5_payment_failure ;;
         6) scenario_6_timeout ;;
+        7) scenario_7_dlq_investigation ;;
         all)
             scenario_1_happy_path
             wait_for_keypress
@@ -1295,10 +1572,12 @@ if [ -n "$1" ]; then
             scenario_5_payment_failure
             wait_for_keypress
             scenario_6_timeout
+            wait_for_keypress
+            scenario_7_dlq_investigation
             ;;
         *)
             echo "Unknown scenario: $1"
-            echo "Usage: $0 [1|2|3|4|5|6|all]"
+            echo "Usage: $0 [1|2|3|4|5|6|7|all]"
             exit 1
             ;;
     esac
@@ -1317,6 +1596,7 @@ while true; do
         4) scenario_4_similar_products ;;
         5) scenario_5_payment_failure ;;
         6) scenario_6_timeout ;;
+        7) scenario_7_dlq_investigation ;;
         all)
             scenario_1_happy_path
             wait_for_keypress
@@ -1329,13 +1609,15 @@ while true; do
             scenario_5_payment_failure
             wait_for_keypress
             scenario_6_timeout
+            wait_for_keypress
+            scenario_7_dlq_investigation
             ;;
         q|Q)
             echo "Goodbye!"
             exit 0
             ;;
         *)
-            echo -e "${RED}Invalid choice. Please select 1-6, all, or q.${NC}"
+            echo -e "${RED}Invalid choice. Please select 1-7, all, or q.${NC}"
             ;;
     esac
 

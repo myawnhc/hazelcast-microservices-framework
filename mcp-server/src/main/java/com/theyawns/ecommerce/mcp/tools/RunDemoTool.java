@@ -77,10 +77,12 @@ public class RunDemoTool {
             + "saga_timeout (triggers saga timeout), "
             + "orchestrated_happy_path (successful orchestrated order), "
             + "orchestrated_payment_failure (orchestrated order with payment rejection), "
-            + "load_sample_data (creates sample entities)")
+            + "load_sample_data (creates sample entities), "
+            + "dlq_investigation (fault-injects inventory → creates DLQ entries → ready for investigation)")
     public String runDemo(
             @ToolParam(description = "Scenario: happy_path, payment_failure, saga_timeout, "
-                    + "orchestrated_happy_path, orchestrated_payment_failure, or load_sample_data")
+                    + "orchestrated_happy_path, orchestrated_payment_failure, load_sample_data, "
+                    + "or dlq_investigation")
             String scenario) {
 
         if (toolAuthorizer != null) {
@@ -100,9 +102,11 @@ public class RunDemoTool {
                 case "orchestrated_happy_path" -> runOrchestratedHappyPath();
                 case "orchestrated_payment_failure" -> runOrchestratedPaymentFailure();
                 case "load_sample_data" -> runLoadSampleData();
+                case "dlq_investigation" -> runDlqInvestigation();
                 default -> throw new IllegalArgumentException("Unknown scenario: " + scenario
                         + ". Available: happy_path, payment_failure, saga_timeout, "
-                        + "orchestrated_happy_path, orchestrated_payment_failure, load_sample_data");
+                        + "orchestrated_happy_path, orchestrated_payment_failure, "
+                        + "load_sample_data, dlq_investigation");
             };
             return toJson(result);
         } catch (IllegalArgumentException e) {
@@ -398,6 +402,71 @@ public class RunDemoTool {
 
         result.put("steps", steps);
         result.put("entitiesCreated", Map.of("customers", customers.length, "products", products.length));
+        return result;
+    }
+
+    /**
+     * Runs the DLQ investigation scenario:
+     * 1. Ensures sample data exists (customer + product)
+     * 2. Enables fault injection on inventory-service
+     * 3. Creates an order → inventory listener fails → DLQ entry
+     * 4. Disables fault injection
+     * 5. Returns instructions for DLQ investigation
+     */
+    private Map<String, Object> runDlqInvestigation() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("scenario", "dlq_investigation");
+        result.put("description", "Creates DLQ entries by fault-injecting inventory-service, "
+                + "then disables fault injection so replays succeed");
+        List<Map<String, Object>> steps = new ArrayList<>();
+
+        // Step 1: Create customer
+        Map<String, Object> customer = serviceClient.createEntity("customer", Map.of(
+                "name", "DLQ Demo Customer",
+                "email", "dlq-demo-" + shortId() + "@example.com",
+                "address", "42 Dead Letter Lane"
+        ));
+        steps.add(Map.of("step", "CreateCustomer", "result", customer));
+
+        // Step 2: Create product
+        Map<String, Object> product = serviceClient.createEntity("product", Map.of(
+                "sku", "DLQ-" + shortId(),
+                "name", "DLQ Demo Widget",
+                "price", "29.99",
+                "quantityOnHand", 100
+        ));
+        steps.add(Map.of("step", "CreateProduct", "result", product));
+
+        // Step 3: Enable fault injection on inventory-service
+        Map<String, Object> faultEnabled = serviceClient.enableFaultInjection(
+                "inventory", "Simulated transient failure for DLQ demo");
+        steps.add(Map.of("step", "EnableFaultInjection", "service", "inventory", "result", faultEnabled));
+
+        // Step 4: Create order → inventory listener will fail → event goes to DLQ
+        String customerId = extractId(customer, "customerId");
+        String productId = extractId(product, "productId");
+        Map<String, Object> order = serviceClient.createEntity("order", Map.of(
+                "customerId", customerId,
+                "customerName", "DLQ Demo Customer",
+                "shippingAddress", "42 Dead Letter Lane",
+                "lineItems", List.of(Map.of(
+                        "productId", productId,
+                        "productName", "DLQ Demo Widget",
+                        "sku", "DLQ-001",
+                        "quantity", 1,
+                        "unitPrice", 29.99
+                ))
+        ));
+        steps.add(Map.of("step", "CreateOrder", "result", order));
+
+        // Step 5: Disable fault injection so replays will succeed
+        Map<String, Object> faultDisabled = serviceClient.disableFaultInjection("inventory");
+        steps.add(Map.of("step", "DisableFaultInjection", "service", "inventory", "result", faultDisabled));
+
+        result.put("steps", steps);
+        result.put("nextActions", "DLQ entries created. Use listDlqEntries to see them, "
+                + "inspectDlqEntry to examine the failure details, and replayDlqEntry to recover. "
+                + "Fault injection is now disabled, so replays should succeed.");
         return result;
     }
 

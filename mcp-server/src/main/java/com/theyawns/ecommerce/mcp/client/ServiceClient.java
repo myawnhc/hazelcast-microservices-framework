@@ -323,6 +323,160 @@ public class ServiceClient implements ServiceClientOperations {
         }
     }
 
+    // ========================================================================
+    // DLQ operations
+    // ========================================================================
+
+    @Override
+    public List<Map<String, Object>> listDlqEntries(String serviceName, int limit) {
+        String url = resolveDlqUrl(serviceName) + "?limit=" + limit;
+        logger.debug("GET {}", url);
+        try {
+            String json = restClient.get().uri(url).retrieve().body(String.class);
+            return parseList(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to list DLQ entries: {} {}", e.getStatusCode(), e.getStatusText());
+            return List.of(Map.of("error", "Failed to list DLQ entries", "status", e.getStatusCode().value()));
+        }
+    }
+
+    @Override
+    public Map<String, Object> getDlqEntry(String serviceName, String id) {
+        String url = resolveDlqUrl(serviceName) + "/" + id;
+        logger.debug("GET {}", url);
+        try {
+            String json = restClient.get().uri(url).retrieve().body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to get DLQ entry {}: {} {}", id, e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "DLQ entry not found", "id", id, "status", e.getStatusCode().value());
+        }
+    }
+
+    @Override
+    public Map<String, Object> getDlqCount(String serviceName) {
+        String url = resolveDlqUrl(serviceName) + "/count";
+        logger.debug("GET {}", url);
+        try {
+            String json = restClient.get().uri(url).retrieve().body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to get DLQ count: {} {}", e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "Failed to get DLQ count", "status", e.getStatusCode().value());
+        }
+    }
+
+    @Override
+    public Map<String, Object> replayDlqEntry(String serviceName, String id) {
+        String url = resolveDlqUrl(serviceName) + "/" + id + "/replay";
+        logger.debug("POST {}", url);
+        try {
+            String json = restClient.post().uri(url).retrieve().body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to replay DLQ entry {}: {} {}", id, e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "Failed to replay DLQ entry", "id", id,
+                    "status", e.getStatusCode().value(), "message", e.getResponseBodyAsString());
+        }
+    }
+
+    @Override
+    public Map<String, Object> discardDlqEntry(String serviceName, String id) {
+        String url = resolveDlqUrl(serviceName) + "/" + id;
+        logger.debug("DELETE {}", url);
+        try {
+            String json = restClient.delete().uri(url).retrieve().body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to discard DLQ entry {}: {} {}", id, e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "Failed to discard DLQ entry", "id", id,
+                    "status", e.getStatusCode().value(), "message", e.getResponseBodyAsString());
+        }
+    }
+
+    // ========================================================================
+    // Fault injection operations
+    // ========================================================================
+
+    @Override
+    public Map<String, Object> enableFaultInjection(String serviceName, String message) {
+        String url = resolveFaultUrl(serviceName) + "?enabled=true"
+                + (message != null ? "&failureMessage=" + message : "");
+        logger.debug("POST {}", url);
+        try {
+            String json = restClient.post().uri(url).retrieve().body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to enable fault injection on {}: {} {}", serviceName,
+                    e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "Failed to enable fault injection",
+                    "service", serviceName, "status", e.getStatusCode().value());
+        }
+    }
+
+    @Override
+    public Map<String, Object> disableFaultInjection(String serviceName) {
+        String url = resolveFaultUrl(serviceName) + "?enabled=false";
+        logger.debug("POST {}", url);
+        try {
+            String json = restClient.post().uri(url).retrieve().body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to disable fault injection on {}: {} {}", serviceName,
+                    e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "Failed to disable fault injection",
+                    "service", serviceName, "status", e.getStatusCode().value());
+        }
+    }
+
+    @Override
+    public Map<String, Object> getFaultInjectionState(String serviceName) {
+        String url = resolveFaultUrl(serviceName);
+        logger.debug("GET {}", url);
+        try {
+            String json = restClient.get().uri(url).retrieve().body(String.class);
+            return parseMap(json);
+        } catch (RestClientResponseException e) {
+            logger.warn("Failed to get fault injection state from {}: {} {}", serviceName,
+                    e.getStatusCode(), e.getStatusText());
+            return Map.of("error", "Failed to get fault injection state",
+                    "service", serviceName, "status", e.getStatusCode().value());
+        }
+    }
+
+    /**
+     * Resolves a service name to the DLQ admin endpoint URL.
+     * Any service sees the same DLQ data (shared cluster), null defaults to order-service.
+     */
+    private String resolveDlqUrl(String serviceName) {
+        String baseUrl = resolveServiceBaseUrl(serviceName);
+        return baseUrl + "/api/admin/dlq";
+    }
+
+    /**
+     * Resolves a service name to the fault injection endpoint URL.
+     */
+    private String resolveFaultUrl(String serviceName) {
+        String baseUrl = resolveServiceBaseUrl(serviceName);
+        return baseUrl + "/api/admin/fault";
+    }
+
+    /**
+     * Resolves a service name to its base URL.
+     */
+    private String resolveServiceBaseUrl(String serviceName) {
+        if (serviceName == null || serviceName.isBlank()) {
+            return properties.resolveBaseUrl(properties.getOrderUrl());
+        }
+        return switch (serviceName.toLowerCase()) {
+            case "account", "customer" -> properties.resolveBaseUrl(properties.getAccountUrl());
+            case "inventory", "product" -> properties.resolveBaseUrl(properties.getInventoryUrl());
+            case "order" -> properties.resolveBaseUrl(properties.getOrderUrl());
+            case "payment" -> properties.resolveBaseUrl(properties.getPaymentUrl());
+            default -> properties.resolveBaseUrl(properties.getOrderUrl());
+        };
+    }
+
     /**
      * Resolves a view name to a full base URL with entity path.
      *

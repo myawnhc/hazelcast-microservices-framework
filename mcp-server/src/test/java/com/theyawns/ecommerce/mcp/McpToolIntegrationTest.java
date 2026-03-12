@@ -8,9 +8,12 @@ import com.theyawns.ecommerce.mcp.config.McpServerProperties;
 import com.theyawns.ecommerce.mcp.config.McpToolConfig;
 import com.theyawns.ecommerce.mcp.tools.GetEventHistoryTool;
 import com.theyawns.ecommerce.mcp.tools.GetMetricsTool;
+import com.theyawns.ecommerce.mcp.tools.InspectDlqEntryTool;
 import com.theyawns.ecommerce.mcp.tools.InspectSagaTool;
+import com.theyawns.ecommerce.mcp.tools.ListDlqEntriesTool;
 import com.theyawns.ecommerce.mcp.tools.ListSagasTool;
 import com.theyawns.ecommerce.mcp.tools.QueryViewTool;
+import com.theyawns.ecommerce.mcp.tools.ReplayDlqEntryTool;
 import com.theyawns.ecommerce.mcp.tools.RunDemoTool;
 import com.theyawns.ecommerce.mcp.tools.SubmitEventTool;
 import org.junit.jupiter.api.DisplayName;
@@ -34,7 +37,7 @@ import static org.mockito.Mockito.when;
  * Integration tests for MCP tool wiring and end-to-end execution.
  *
  * <p>Verifies that all MCP tool beans are created correctly by Spring,
- * the {@link McpToolConfig} registers all 7 tools with the
+ * the {@link McpToolConfig} registers all 10 tools with the
  * {@link ToolCallbackProvider}, and tools produce correct output when
  * invoked through the full bean dependency chain.
  *
@@ -55,7 +58,7 @@ class McpToolIntegrationTest {
             .withBean(McpServerProperties.class);
 
     @Test
-    @DisplayName("should create all 7 tool beans")
+    @DisplayName("should create all 10 tool beans")
     void shouldCreateAllToolBeans() {
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(QueryViewTool.class);
@@ -65,6 +68,9 @@ class McpToolIntegrationTest {
             assertThat(context).hasSingleBean(ListSagasTool.class);
             assertThat(context).hasSingleBean(GetMetricsTool.class);
             assertThat(context).hasSingleBean(RunDemoTool.class);
+            assertThat(context).hasSingleBean(ListDlqEntriesTool.class);
+            assertThat(context).hasSingleBean(InspectDlqEntryTool.class);
+            assertThat(context).hasSingleBean(ReplayDlqEntryTool.class);
         });
     }
 
@@ -74,7 +80,7 @@ class McpToolIntegrationTest {
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(ToolCallbackProvider.class);
             ToolCallbackProvider provider = context.getBean(ToolCallbackProvider.class);
-            assertThat(provider.getToolCallbacks()).hasSize(7);
+            assertThat(provider.getToolCallbacks()).hasSize(10);
         });
     }
 
@@ -92,6 +98,9 @@ class McpToolIntegrationTest {
             assertThat(context.getBean(ListSagasTool.class)).isNotNull();
             assertThat(context.getBean(GetMetricsTool.class)).isNotNull();
             assertThat(context.getBean(RunDemoTool.class)).isNotNull();
+            assertThat(context.getBean(ListDlqEntriesTool.class)).isNotNull();
+            assertThat(context.getBean(InspectDlqEntryTool.class)).isNotNull();
+            assertThat(context.getBean(ReplayDlqEntryTool.class)).isNotNull();
         });
     }
 
@@ -189,6 +198,46 @@ class McpToolIntegrationTest {
         });
     }
 
+    @Test
+    @DisplayName("should execute listDlqEntries end-to-end returning entries and count")
+    void shouldExecuteListDlqEntriesEndToEnd() {
+        contextRunner.run(context -> {
+            ListDlqEntriesTool tool = context.getBean(ListDlqEntriesTool.class);
+            String result = tool.listDlqEntries(null, null);
+
+            Map<String, Object> parsed = parseJson(result);
+            assertThat(parsed).containsKey("entries");
+            assertThat(parsed).containsKey("count");
+            assertThat(parsed).containsKey("pendingCount");
+        });
+    }
+
+    @Test
+    @DisplayName("should execute inspectDlqEntry end-to-end returning entry details")
+    void shouldExecuteInspectDlqEntryEndToEnd() {
+        contextRunner.run(context -> {
+            InspectDlqEntryTool tool = context.getBean(InspectDlqEntryTool.class);
+            String result = tool.inspectDlqEntry("dlq-1", null);
+
+            Map<String, Object> parsed = parseJson(result);
+            assertThat(parsed.get("dlqEntryId")).isEqualTo("dlq-1");
+            assertThat(parsed.get("failureReason")).isEqualTo("Simulated failure");
+        });
+    }
+
+    @Test
+    @DisplayName("should execute replayDlqEntry end-to-end returning replay result")
+    void shouldExecuteReplayDlqEntryEndToEnd() {
+        contextRunner.run(context -> {
+            ReplayDlqEntryTool tool = context.getBean(ReplayDlqEntryTool.class);
+            String result = tool.replayDlqEntry("dlq-1", null);
+
+            Map<String, Object> parsed = parseJson(result);
+            assertThat(parsed.get("dlqEntryId")).isEqualTo("dlq-1");
+            assertThat(parsed.get("status")).isEqualTo("REPLAYED");
+        });
+    }
+
     private Map<String, Object> parseJson(String json) throws JsonProcessingException {
         return objectMapper.readValue(json, new TypeReference<>() {});
     }
@@ -251,6 +300,31 @@ class McpToolIntegrationTest {
                     "status", "PENDING"
             ));
 
+            // DLQ responses
+            when(mock.listDlqEntries(any(), eq(20))).thenReturn(List.of(
+                    Map.of("dlqEntryId", "dlq-1", "eventType", "OrderCreated", "status", "PENDING")
+            ));
+            when(mock.getDlqCount(any())).thenReturn(Map.of("pendingCount", 1));
+            when(mock.getDlqEntry(any(), eq("dlq-1"))).thenReturn(Map.of(
+                    "dlqEntryId", "dlq-1",
+                    "eventType", "OrderCreated",
+                    "failureReason", "Simulated failure",
+                    "status", "PENDING"
+            ));
+            when(mock.replayDlqEntry(any(), eq("dlq-1"))).thenReturn(Map.of(
+                    "dlqEntryId", "dlq-1",
+                    "status", "REPLAYED"
+            ));
+
+            // Fault injection responses (for dlq_investigation scenario)
+            when(mock.enableFaultInjection(any(), any())).thenReturn(Map.of(
+                    "enabled", true,
+                    "failureMessage", "Simulated transient failure for DLQ demo"
+            ));
+            when(mock.disableFaultInjection(any())).thenReturn(Map.of(
+                    "enabled", false
+            ));
+
             return mock;
         }
 
@@ -287,6 +361,21 @@ class McpToolIntegrationTest {
         @Bean
         RunDemoTool runDemoTool(ServiceClientOperations client) {
             return new RunDemoTool(client);
+        }
+
+        @Bean
+        ListDlqEntriesTool listDlqEntriesTool(ServiceClientOperations client) {
+            return new ListDlqEntriesTool(client);
+        }
+
+        @Bean
+        InspectDlqEntryTool inspectDlqEntryTool(ServiceClientOperations client) {
+            return new InspectDlqEntryTool(client);
+        }
+
+        @Bean
+        ReplayDlqEntryTool replayDlqEntryTool(ServiceClientOperations client) {
+            return new ReplayDlqEntryTool(client);
         }
     }
 }

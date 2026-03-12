@@ -107,4 +107,81 @@ public interface ServiceClientOperations {
      * @return the metrics summary as a map
      */
     Map<String, Object> getMetricsSummary();
+
+    // ========================================================================
+    // DLQ operations
+    // ========================================================================
+
+    /**
+     * Lists DLQ entries from a service.
+     *
+     * @param serviceName optional service name to target (null defaults to order-service)
+     * @param limit the maximum number of entries to return
+     * @return list of DLQ entries as maps
+     */
+    List<Map<String, Object>> listDlqEntries(String serviceName, int limit);
+
+    /**
+     * Gets a single DLQ entry by ID from a service.
+     *
+     * @param serviceName optional service name to target (null defaults to order-service)
+     * @param id the DLQ entry ID
+     * @return the DLQ entry as a map
+     */
+    Map<String, Object> getDlqEntry(String serviceName, String id);
+
+    /**
+     * Gets the count of pending DLQ entries from a service.
+     *
+     * @param serviceName optional service name to target (null defaults to order-service)
+     * @return the count as a map
+     */
+    Map<String, Object> getDlqCount(String serviceName);
+
+    /**
+     * Replays a DLQ entry by ID.
+     *
+     * @param serviceName optional service name to target (null defaults to order-service)
+     * @param id the DLQ entry ID
+     * @return the replay result as a map
+     */
+    Map<String, Object> replayDlqEntry(String serviceName, String id);
+
+    /**
+     * Discards a DLQ entry by ID.
+     *
+     * @param serviceName optional service name to target (null defaults to order-service)
+     * @param id the DLQ entry ID
+     * @return the discard result as a map
+     */
+    Map<String, Object> discardDlqEntry(String serviceName, String id);
+
+    // ========================================================================
+    // Fault injection operations
+    // ========================================================================
+
+    /**
+     * Enables fault injection on a service.
+     *
+     * @param serviceName the service name (e.g., "inventory")
+     * @param message the failure message to inject
+     * @return the fault injection state as a map
+     */
+    Map<String, Object> enableFaultInjection(String serviceName, String message);
+
+    /**
+     * Disables fault injection on a service.
+     *
+     * @param serviceName the service name
+     * @return the fault injection state as a map
+     */
+    Map<String, Object> disableFaultInjection(String serviceName);
+
+    /**
+     * Gets the current fault injection state from a service.
+     *
+     * @param serviceName the service name
+     * @return the fault injection state as a map
+     */
+    Map<String, Object> getFaultInjectionState(String serviceName);
 }
