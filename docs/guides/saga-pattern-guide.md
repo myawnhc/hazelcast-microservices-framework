@@ -549,7 +549,7 @@ public class MySagaEndpoint {
 
 ## Resilience Patterns
 
-Saga listeners are protected by multiple resilience patterns that prevent cascade failures, guarantee delivery, and handle permanent processing failures.
+Saga listeners are protected by multiple resilience patterns that prevent cascade failures, guarantee delivery, and handle permanent processing failures. For how resilience applies across all execution paths (not just sagas), see the [Resilience Guide](resilience-guide.md).
 
 ### Circuit Breaker + Retry
 

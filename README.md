@@ -25,12 +25,14 @@ Microservices can't share a database transaction. Sagas coordinate multi-service
 
 ### Resilience & Reliability
 
-In a distributed system, partial failure is normal. The framework ensures no event is lost and no failure goes unhandled.
+In a distributed system, partial failure is normal. Different execution paths need different resilience strategies — the framework applies protection where the cost of failure justifies it, not everywhere uniformly.
 
-- **Circuit Breakers**: Resilience4j circuit breakers with retry and exponential backoff on all saga listeners — fail fast when a downstream service is unhealthy
+- **Circuit Breakers**: Resilience4j circuit breakers with retry and exponential backoff on saga listeners — fail fast when a downstream service is unhealthy
 - **Transactional Outbox**: Guaranteed at-least-once event delivery — events are written atomically with state changes, then published asynchronously
 - **Dead Letter Queue**: Failed events land in a DLQ with admin REST endpoints for inspection, replay, and discard
 - **Idempotency Guards**: Exactly-once processing semantics prevent duplicate side effects when events are retried
+- **Jet Processing Guarantees**: AT_LEAST_ONCE delivery with event journal replay for the event sourcing pipeline
+- [Resilience Guide](docs/guides/resilience-guide.md) — which paths need what protection and why
 
 ### Security
 
@@ -294,7 +296,7 @@ curl -X POST http://localhost:8084/api/payments/<payment-id>/refund \
   -d '{"reason": "Customer requested cancellation"}'
 ```
 
-### Find Similar Products (Enterprise)
+### Find Similar Products
 
 ```bash
 curl http://localhost:8082/api/products/<product-id>/similar?limit=5
@@ -307,6 +309,7 @@ curl http://localhost:8082/api/products/<product-id>/similar?limit=5
 - [Architecture](docs/architecture/) - System design and patterns
 - [Demo Walkthrough](docs/demo/demo-walkthrough.md) - Step-by-step demo guide
 - [Saga Pattern Guide](docs/guides/saga-pattern-guide.md) - Choreographed and orchestrated saga patterns
+- [Resilience Guide](docs/guides/resilience-guide.md) - Resilience architecture across execution paths
 - [API Gateway](api-gateway/README.md) - Routing, rate limiting, circuit breakers, and CORS
 - [Dashboard Setup Guide](docs/guides/dashboard-setup-guide.md) - Grafana, Prometheus, and Jaeger setup
 - [MCP Server Guide](mcp-server/README.md) - AI assistant integration via Model Context Protocol
