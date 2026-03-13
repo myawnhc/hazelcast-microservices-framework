@@ -7,11 +7,14 @@ import java.util.Map;
  * Abstraction for vector similarity search operations.
  *
  * <p>Provides a unified API for storing embeddings and performing similarity searches.
- * Two implementations exist:
+ * Three implementations exist:
  * <ul>
  *   <li>{@code HazelcastVectorStoreService} (in {@code framework-enterprise} module) —
  *       Enterprise path using Hazelcast {@code VectorCollection} with HNSW indexing</li>
- *   <li>{@link NoOpVectorStoreService} — Community fallback returning empty results</li>
+ *   <li>{@link SimpleVectorStoreService} — Community fallback using IMap with brute-force
+ *       cosine similarity (functional, O(n) per query)</li>
+ *   <li>{@link NoOpVectorStoreService} — Reserve no-op fallback returning empty results
+ *       (not auto-wired by default)</li>
  * </ul>
  *
  * <p>Callers should check {@link #isAvailable()} before assuming results will be returned.
@@ -62,7 +65,7 @@ public interface VectorStoreService {
     /**
      * Returns a human-readable name for this implementation.
      *
-     * @return implementation type name (e.g., "IMap-Based Cosine Similarity" or "No-Op (Community)")
+     * @return implementation type name (e.g., "VectorCollection (Enterprise)" or "No-Op (Community Edition)")
      */
     String getImplementationType();
 }

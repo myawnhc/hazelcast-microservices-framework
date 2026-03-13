@@ -62,14 +62,14 @@ class VectorStoreAutoConfigurationTest {
         }
 
         @Test
-        @DisplayName("should create NoOp fallback when no other VectorStoreService exists")
-        void shouldCreateNoOpFallbackWhenNoOtherServiceExists() {
+        @DisplayName("should create SimpleVectorStoreService fallback when no other VectorStoreService exists")
+        void shouldCreateSimpleFallbackWhenNoOtherServiceExists() {
             contextRunner
                     .withUserConfiguration(HazelcastConfig.class)
                     .run(context -> {
                         final VectorStoreService service = context.getBean(VectorStoreService.class);
-                        assertThat(service).isInstanceOf(NoOpVectorStoreService.class);
-                        assertThat(service.isAvailable()).isFalse();
+                        assertThat(service).isInstanceOf(SimpleVectorStoreService.class);
+                        assertThat(service.isAvailable()).isTrue();
                     });
         }
 
