@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hazelcast Microservices Framework — Datasheet</title>
+<title>Hazelcast Microservices Framework — SA Technical Brief</title>
 <style>
   /* ===== Reset & Base ===== */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -556,7 +556,7 @@
       <div class="metric-label">P50 E2E Latency</div>
     </div>
     <div class="metric-box">
-      <div class="metric-value orange">7</div>
+      <div class="metric-value orange">10</div>
       <div class="metric-label">MCP AI Tools</div>
     </div>
     <div class="metric-box">
@@ -668,7 +668,8 @@
           Hazelcast VectorCollection with HNSW indexing for product similarity.
           Supports cosine, dot-product, and euclidean metrics.
           <code style="font-size: 7pt;">GET /api/products/{id}/similar</code>.
-          Enterprise opt-in with Community NoOp fallback.
+          Enterprise VectorCollection with HNSW indexing; Community fallback
+          uses IMap with brute-force cosine similarity.
         </div>
       </div>
 
@@ -678,9 +679,9 @@
           AI Integration (MCP)
         </div>
         <div class="feature-card-body">
-          7 MCP tools let AI assistants query views, submit events, inspect
-          saga state, check metrics, and run demos. Supports stdio and HTTP/SSE
-          transport with API key RBAC.
+          10 MCP tools let AI assistants query views, submit events, inspect
+          saga state, manage dead letter queues, check metrics, and run demos.
+          Supports stdio and HTTP/SSE transport with API key RBAC.
         </div>
       </div>
 
@@ -690,9 +691,9 @@
           Full Observability
         </div>
         <div class="feature-card-body">
-          Micrometer + Prometheus metrics across all services. Six pre-provisioned
-          Grafana dashboards. Jaeger distributed tracing via OTLP. Per-step saga
-          duration metrics.
+          Micrometer + Prometheus metrics across all services. Seven pre-provisioned
+          Grafana dashboards including business metrics. Jaeger distributed tracing
+          via OTLP. Per-step saga duration metrics.
         </div>
       </div>
 
@@ -748,8 +749,8 @@
   <!-- Dashboard Showcase -->
   <div class="dashboard-showcase">
     <p class="dashboard-intro">
-      Six pre-provisioned Grafana dashboards provide real-time visibility into every layer of the
-      framework &mdash; from high-level system health down to individual event flow, saga coordination,
+      Seven pre-provisioned Grafana dashboards provide real-time visibility into every layer of the
+      framework &mdash; from executive business metrics down to event flow, saga coordination,
       materialized view performance, and database persistence. Dashboards are auto-provisioned via
       Docker Compose and Helm charts &mdash; no manual setup required.
     </p>
@@ -842,9 +843,10 @@
       </table>
     </div>
     <div>
-      <div class="section-title">Modules (9 Total)</div>
+      <div class="section-title">Modules (10 Total)</div>
       <ul class="modules-list">
         <li><span class="module-name">framework-core</span> <span class="module-desc">Domain-agnostic event sourcing engine</span></li>
+        <li><span class="module-name">framework-enterprise</span> <span class="module-desc">Enterprise Edition extensions (VectorCollection)</span></li>
         <li><span class="module-name">framework-postgres</span> <span class="module-desc">Write-behind MapStore persistence</span></li>
         <li><span class="module-name">ecommerce-common</span> <span class="module-desc">Shared domain objects, events, DTOs</span></li>
         <li><span class="module-name">account-service</span> <span class="module-desc">Customer management (:8081)</span></li>
@@ -875,7 +877,7 @@
 
   <!-- Blog Series Callout -->
   <div class="blog-callout">
-    <strong>Accompanying Blog Series:</strong> A 10-part blog series walks through
+    <strong>Accompanying Blog Series:</strong> A 13-part blog series walks through
     every architectural decision, from event sourcing fundamentals through saga patterns,
     persistence, AI integration, resilience, and production deployment. Each post maps to
     a working code milestone in the framework &mdash; ideal for customer-facing technical

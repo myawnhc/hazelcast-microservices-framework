@@ -1,20 +1,22 @@
 #!/bin/bash
-# Generate PDF from the HTML datasheet
+# Generate PDFs from the HTML datasheets (SA and PM versions)
 #
 # Requirements (pick one):
 #   Option A: Google Chrome / Chromium (recommended - best CSS support)
 #   Option B: wkhtmltopdf (brew install wkhtmltopdf)
 #
 # Usage:
-#   ./generate-pdf.sh              # Auto-detect available tool
-#   ./generate-pdf.sh --chrome     # Force Chrome
-#   ./generate-pdf.sh --wkhtmltopdf # Force wkhtmltopdf
+#   ./generate-pdf.sh              # Generate both SA and PM PDFs
+#   ./generate-pdf.sh sa           # Generate SA version only
+#   ./generate-pdf.sh pm           # Generate PM version only
+#   ./generate-pdf.sh --chrome     # Force Chrome (both versions)
+#   ./generate-pdf.sh --wkhtmltopdf # Force wkhtmltopdf (both versions)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-INPUT="$SCRIPT_DIR/datasheet.html"
-OUTPUT="$SCRIPT_DIR/Hazelcast-Microservices-Framework-Datasheet.pdf"
+TOOL=""
+TARGETS=""
 
 # Detect Chrome on macOS
 find_chrome() {
@@ -32,6 +34,8 @@ find_chrome() {
 }
 
 generate_with_chrome() {
+    local input="$1"
+    local output="$2"
     CHROME="$(find_chrome)"
     if [ -z "$CHROME" ]; then
         echo "ERROR: Chrome/Chromium not found."
@@ -39,27 +43,29 @@ generate_with_chrome() {
         exit 1
     fi
 
-    echo "Generating PDF with Chrome..."
+    echo "Generating PDF with Chrome: $(basename "$output")"
     "$CHROME" \
         --headless \
         --disable-gpu \
         --no-sandbox \
-        --print-to-pdf="$OUTPUT" \
+        --print-to-pdf="$output" \
         --print-to-pdf-no-header \
         --no-margins \
-        "file://$INPUT"
+        "file://$input"
 
-    echo "Done: $OUTPUT"
+    echo "  Done: $output"
 }
 
 generate_with_wkhtmltopdf() {
+    local input="$1"
+    local output="$2"
     if ! command -v wkhtmltopdf > /dev/null 2>&1; then
         echo "ERROR: wkhtmltopdf not found."
         echo "  Install with: brew install wkhtmltopdf"
         exit 1
     fi
 
-    echo "Generating PDF with wkhtmltopdf..."
+    echo "Generating PDF with wkhtmltopdf: $(basename "$output")"
     wkhtmltopdf \
         --page-size Letter \
         --no-outline \
@@ -69,36 +75,94 @@ generate_with_wkhtmltopdf() {
         --margin-right 0 \
         --enable-local-file-access \
         --print-media-type \
-        "$INPUT" \
-        "$OUTPUT"
+        "$input" \
+        "$output"
 
-    echo "Done: $OUTPUT"
+    echo "  Done: $output"
 }
 
-# Main
-case "${1:-}" in
-    --chrome)
-        generate_with_chrome
-        ;;
-    --wkhtmltopdf)
-        generate_with_wkhtmltopdf
-        ;;
-    *)
-        # Auto-detect: prefer Chrome
-        if [ -n "$(find_chrome)" ]; then
-            generate_with_chrome
-        elif command -v wkhtmltopdf > /dev/null 2>&1; then
-            generate_with_wkhtmltopdf
-        else
-            echo "ERROR: No PDF generator found."
+generate_one() {
+    local input="$1"
+    local output="$2"
+
+    if [ ! -f "$input" ]; then
+        echo "WARNING: $input not found, skipping."
+        return
+    fi
+
+    case "$TOOL" in
+        chrome)
+            generate_with_chrome "$input" "$output"
+            ;;
+        wkhtmltopdf)
+            generate_with_wkhtmltopdf "$input" "$output"
+            ;;
+        *)
+            if [ -n "$(find_chrome)" ]; then
+                generate_with_chrome "$input" "$output"
+            elif command -v wkhtmltopdf > /dev/null 2>&1; then
+                generate_with_wkhtmltopdf "$input" "$output"
+            else
+                echo "ERROR: No PDF generator found."
+                echo ""
+                echo "Install one of:"
+                echo "  - Google Chrome (recommended)"
+                echo "  - wkhtmltopdf: brew install wkhtmltopdf"
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+# Parse arguments
+for arg in "$@"; do
+    case "$arg" in
+        --chrome)
+            TOOL="chrome"
+            ;;
+        --wkhtmltopdf)
+            TOOL="wkhtmltopdf"
+            ;;
+        sa|SA)
+            TARGETS="${TARGETS} sa"
+            ;;
+        pm|PM)
+            TARGETS="${TARGETS} pm"
+            ;;
+        -h|--help)
+            echo "Usage: $0 [sa|pm] [--chrome|--wkhtmltopdf]"
             echo ""
-            echo "Install one of:"
-            echo "  - Google Chrome (recommended)"
-            echo "  - wkhtmltopdf: brew install wkhtmltopdf"
+            echo "  sa             Generate SA (Solution Architect) version only"
+            echo "  pm             Generate PM (Product Marketing) version only"
+            echo "  --chrome       Force Chrome for PDF generation"
+            echo "  --wkhtmltopdf  Force wkhtmltopdf for PDF generation"
             echo ""
-            echo "Or open the HTML directly in Chrome and use Print > Save as PDF:"
-            echo "  open '$INPUT'"
-            exit 1
-        fi
-        ;;
-esac
+            echo "  No arguments generates both versions."
+            exit 0
+            ;;
+    esac
+done
+
+# Default: both versions
+if [ -z "$TARGETS" ]; then
+    TARGETS="sa pm"
+fi
+
+# Generate requested versions
+for target in $TARGETS; do
+    case "$target" in
+        sa)
+            generate_one \
+                "$SCRIPT_DIR/datasheet-sa.html" \
+                "$SCRIPT_DIR/Hazelcast-Microservices-Framework-SA.pdf"
+            ;;
+        pm)
+            generate_one \
+                "$SCRIPT_DIR/datasheet-pm.html" \
+                "$SCRIPT_DIR/Hazelcast-Microservices-Framework-PM.pdf"
+            ;;
+    esac
+done
+
+echo ""
+echo "All done."

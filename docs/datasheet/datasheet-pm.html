@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hazelcast Microservices Framework — Product Marketing Brief</title>
+<style>
+  /* ===== Reset & Base ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --hz-blue: #1a6dca;
+    --hz-dark: #0d4a8a;
+    --hz-navy: #16213e;
+    --hz-light: #e8f0fe;
+    --green: #16a34a;
+    --purple: #6d28d9;
+    --orange: #d97706;
+    --red: #dc2626;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+  }
+
+  @page {
+    size: letter;
+    margin: 0;
+  }
+
+  body {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 9.5pt;
+    line-height: 1.45;
+    color: var(--gray-800);
+    background: white;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ===== Page Structure ===== */
+  .page {
+    width: 8.5in;
+    min-height: 11in;
+    max-height: 11in;
+    overflow: hidden;
+    padding: 0;
+    page-break-after: always;
+    position: relative;
+  }
+
+  .page:last-child {
+    page-break-after: auto;
+  }
+
+  /* ===== Hero Header ===== */
+  .hero {
+    background: linear-gradient(135deg, var(--hz-navy) 0%, var(--hz-dark) 50%, var(--hz-blue) 100%);
+    color: white;
+    padding: 0.4in 0.5in 0.3in;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -40%;
+    right: -10%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.08in;
+  }
+
+  .hero-logo {
+    font-size: 10pt;
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+
+  .hero-badge {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 20px;
+    padding: 3px 14px;
+    font-size: 8pt;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  .hero h1 {
+    font-size: 22pt;
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 0.06in;
+    letter-spacing: -0.3px;
+  }
+
+  .hero-subtitle {
+    font-size: 11pt;
+    font-weight: 300;
+    opacity: 0.9;
+    max-width: 6in;
+    line-height: 1.4;
+  }
+
+  /* Key Metrics Strip */
+  .metrics-strip {
+    display: flex;
+    gap: 0;
+    background: var(--gray-50);
+    border-bottom: 2px solid var(--hz-blue);
+  }
+
+  .metric-box {
+    flex: 1;
+    text-align: center;
+    padding: 0.14in 0.1in;
+    border-right: 1px solid var(--gray-200);
+  }
+
+  .metric-box:last-child { border-right: none; }
+
+  .metric-value {
+    font-size: 16pt;
+    font-weight: 800;
+    color: var(--hz-blue);
+    line-height: 1.1;
+  }
+
+  .metric-value.green { color: var(--green); }
+  .metric-value.purple { color: var(--purple); }
+  .metric-value.orange { color: var(--orange); }
+
+  .metric-label {
+    font-size: 7pt;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 600;
+    margin-top: 1px;
+  }
+
+  /* Section Titles */
+  .section-title {
+    font-size: 12pt;
+    font-weight: 700;
+    color: var(--hz-navy);
+    margin-bottom: 0.08in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .section-title::before {
+    content: '';
+    width: 4px;
+    height: 16px;
+    background: var(--hz-blue);
+    border-radius: 2px;
+    display: inline-block;
+  }
+
+  /* ===== PAGE 1 Sections ===== */
+
+  .positioning {
+    padding: 0.22in 0.5in 0.12in;
+  }
+
+  .positioning p {
+    font-size: 9.5pt;
+    color: var(--gray-700);
+    line-height: 1.55;
+  }
+
+  .positioning strong {
+    color: var(--hz-dark);
+  }
+
+  .two-column-story {
+    padding: 0.08in 0.5in 0.15in;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .story-box {
+    padding: 10px 14px;
+    border-radius: 6px;
+  }
+
+  .story-box.what {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+  }
+
+  .story-box.how {
+    background: var(--hz-light);
+    border: 1px solid #b8d4f0;
+  }
+
+  .story-box h3 {
+    font-size: 10pt;
+    font-weight: 700;
+    margin-bottom: 5px;
+  }
+
+  .story-box.what h3 { color: var(--gray-600); }
+  .story-box.how h3 { color: var(--hz-dark); }
+
+  .story-box ul {
+    list-style: none;
+    font-size: 8pt;
+    color: var(--gray-700);
+    line-height: 1.55;
+  }
+
+  .story-box ul li {
+    padding: 1.5px 0;
+    padding-left: 12px;
+    position: relative;
+  }
+
+  .story-box ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 7px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+
+  .story-box.what ul li::before { background: var(--gray-400); }
+  .story-box.how ul li::before { background: var(--hz-blue); }
+
+  /* Hazelcast feature showcase */
+  .hz-features {
+    padding: 0.08in 0.5in 0.15in;
+  }
+
+  .hz-feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .hz-feature-chip {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    padding: 6px 10px;
+    text-align: center;
+  }
+
+  .hz-feature-chip .primitive-name {
+    font-size: 8.5pt;
+    font-weight: 700;
+    color: var(--hz-dark);
+  }
+
+  .hz-feature-chip .primitive-use {
+    font-size: 7pt;
+    color: var(--gray-500);
+    margin-top: 1px;
+  }
+
+  /* Dashboard preview on page 1 */
+  .dashboard-preview {
+    padding: 0.08in 0.5in 0.15in;
+  }
+
+  .dashboard-grid-small {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .dashboard-thumb {
+    border: 1px solid var(--gray-200);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .dashboard-thumb img {
+    width: 100%;
+    display: block;
+  }
+
+  .dashboard-thumb-caption {
+    background: var(--gray-100);
+    padding: 3px 8px;
+    font-size: 7pt;
+    color: var(--gray-600);
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* ===== PAGE 2+ HEADERS ===== */
+
+  .page-header {
+    background: var(--hz-navy);
+    color: white;
+    padding: 0.16in 0.5in;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .page-header h2 {
+    font-size: 13pt;
+    font-weight: 700;
+  }
+
+  .page-header .page-num {
+    font-size: 8pt;
+    opacity: 0.6;
+  }
+
+  /* ===== PAGE 2: Proven Performance + AI ===== */
+
+  .selling-points {
+    padding: 0.2in 0.5in 0.12in;
+  }
+
+  .sp-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .sp-card {
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--gray-200);
+    background: white;
+  }
+
+  .sp-card.highlight {
+    border-color: var(--orange);
+    background: #fffbeb;
+  }
+
+  .sp-card h3 {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: var(--hz-navy);
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .sp-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  .sp-card p {
+    font-size: 7.8pt;
+    color: var(--gray-600);
+    line-height: 1.45;
+  }
+
+  .sp-card .stat {
+    font-weight: 700;
+    color: var(--hz-dark);
+  }
+
+  /* Transition section */
+  .transition-callout {
+    margin: 0.12in 0.5in 0.1in;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #fef3c7 0%, #fff7ed 100%);
+    border: 1px solid #fbbf24;
+    border-radius: 6px;
+    font-size: 8.5pt;
+    color: var(--gray-700);
+    line-height: 1.5;
+  }
+
+  .transition-callout strong {
+    color: var(--orange);
+  }
+
+  /* Content enablement section */
+  .enablement {
+    padding: 0.12in 0.5in 0.1in;
+  }
+
+  .enablement-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+
+  .enablement-card {
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--gray-200);
+    background: var(--gray-50);
+    text-align: center;
+  }
+
+  .enablement-card .e-number {
+    font-size: 18pt;
+    font-weight: 800;
+    color: var(--hz-blue);
+    line-height: 1.1;
+  }
+
+  .enablement-card .e-label {
+    font-size: 8pt;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin-top: 2px;
+  }
+
+  .enablement-card .e-desc {
+    font-size: 7pt;
+    color: var(--gray-500);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
+  /* Deployment callout */
+  .deployment-callout {
+    margin: 0.12in 0.5in 0.1in;
+    padding: 10px 14px;
+    background: var(--hz-light);
+    border-left: 4px solid var(--hz-blue);
+    border-radius: 0 6px 6px 0;
+    font-size: 8.5pt;
+    color: var(--gray-700);
+    line-height: 1.5;
+  }
+
+  .deployment-callout strong {
+    color: var(--hz-dark);
+  }
+
+  /* ===== PAGE 3: DASHBOARDS ===== */
+
+  .dashboard-showcase {
+    padding: 0.2in 0.5in 0.15in;
+  }
+
+  .dashboard-intro {
+    font-size: 9pt;
+    color: var(--gray-700);
+    line-height: 1.5;
+    margin-bottom: 0.15in;
+  }
+
+  .dashboard-grid-large {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 12px;
+  }
+
+  .dashboard-card {
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .dashboard-card img {
+    width: 100%;
+    display: block;
+  }
+
+  .dashboard-card-caption {
+    background: var(--gray-100);
+    padding: 5px 10px;
+    font-size: 7.5pt;
+    color: var(--gray-700);
+    font-weight: 600;
+  }
+
+  .dashboard-card-desc {
+    font-size: 7pt;
+    color: var(--gray-500);
+    font-weight: 400;
+    margin-top: 1px;
+  }
+
+  /* ===== PAGE 4: USE CASES + CTA ===== */
+
+  .use-cases {
+    padding: 0.2in 0.5in 0.12in;
+  }
+
+  .use-case-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .use-case-card {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--gray-200);
+    background: white;
+  }
+
+  .use-case-card h4 {
+    font-size: 9pt;
+    font-weight: 700;
+    color: var(--hz-navy);
+    margin-bottom: 3px;
+  }
+
+  .use-case-card p {
+    font-size: 7.8pt;
+    color: var(--gray-600);
+    line-height: 1.4;
+  }
+
+  /* Tech stack compact */
+  .tech-compact {
+    padding: 0.1in 0.5in 0.1in;
+  }
+
+  .tech-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 7.8pt;
+  }
+
+  .tech-table th {
+    background: var(--hz-navy);
+    color: white;
+    padding: 3px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 7.5pt;
+  }
+
+  .tech-table td {
+    padding: 2.5px 8px;
+    border-bottom: 1px solid var(--gray-100);
+    color: var(--gray-700);
+  }
+
+  .tech-table tr:nth-child(even) td {
+    background: var(--gray-50);
+  }
+
+  /* Blog callout */
+  .blog-callout {
+    margin: 0.12in 0.5in 0.1in;
+    padding: 10px 14px;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 8.5pt;
+    color: var(--gray-700);
+    line-height: 1.5;
+  }
+
+  .blog-callout strong {
+    color: var(--hz-dark);
+  }
+
+  /* CTA */
+  .cta-section {
+    background: linear-gradient(135deg, var(--hz-navy) 0%, var(--hz-blue) 100%);
+    color: white;
+    padding: 0.18in 0.5in;
+    margin-top: 0.12in;
+  }
+
+  .cta-section h3 {
+    font-size: 11pt;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .cta-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .cta-text {
+    font-size: 8.5pt;
+    opacity: 0.9;
+    max-width: 4.5in;
+    line-height: 1.4;
+  }
+
+  .cta-links {
+    font-size: 8pt;
+    text-align: right;
+    opacity: 0.8;
+  }
+
+  .cta-links div {
+    margin-bottom: 2px;
+  }
+
+  /* Footer */
+  .page-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 4px 0.5in;
+    font-size: 7pt;
+    color: var(--gray-400);
+    display: flex;
+    justify-content: space-between;
+    background: white;
+  }
+
+  /* Print */
+  @media print {
+    body { margin: 0; }
+    .page { margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== PAGE 1 ==================== -->
+<div class="page">
+
+  <!-- Hero Header -->
+  <div class="hero">
+    <div class="hero-top">
+      <div class="hero-logo">HAZELCAST</div>
+      <div class="hero-badge">Product Marketing Brief</div>
+    </div>
+    <h1>Microservices Framework</h1>
+    <div class="hero-subtitle">
+      A complete reference architecture that shows customers <em>how</em> to build
+      microservices on Hazelcast &mdash; not just <em>that</em> they can.
+    </div>
+  </div>
+
+  <!-- Key Metrics -->
+  <div class="metrics-strip">
+    <div class="metric-box">
+      <div class="metric-value">100K+</div>
+      <div class="metric-label">View Ops/Sec</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-value green">&lt;1ms</div>
+      <div class="metric-label">P99 Latency</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-value purple">10</div>
+      <div class="metric-label">Modules</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-value orange">10</div>
+      <div class="metric-label">MCP AI Tools</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-value">13</div>
+      <div class="metric-label">Blog Posts</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-value">7</div>
+      <div class="metric-label">Dashboards</div>
+    </div>
+  </div>
+
+  <!-- Positioning -->
+  <div class="positioning">
+    <p>
+      Customers know Hazelcast is fast. What they often lack is a blueprint for putting that
+      speed to work inside a microservices architecture. This framework fills that gap: a
+      <strong>four-service eCommerce application</strong> built entirely on Hazelcast and
+      Spring Boot, demonstrating every pattern needed to go from a monolith to independently
+      deployable, event-driven services. It ships with a <strong>13-part blog series</strong>,
+      <strong>seven Grafana dashboards</strong>, and <strong>10 AI-powered MCP tools</strong>
+      &mdash; ready for demos, PoCs, enablement, and blog content.
+    </p>
+  </div>
+
+  <!-- What vs How -->
+  <div class="two-column-story">
+    <div class="story-box what">
+      <h3>The "What" (Everyone Says This)</h3>
+      <ul>
+        <li>"Use Hazelcast for in-memory data"</li>
+        <li>"Hazelcast is fast and scalable"</li>
+        <li>"Put Hazelcast in your microservices"</li>
+        <li>"Hazelcast supports event streaming"</li>
+      </ul>
+    </div>
+    <div class="story-box how">
+      <h3>The "How" (This Framework Shows It)</h3>
+      <ul>
+        <li>Event sourcing with IMap, Event Journal, and Jet pipelines</li>
+        <li>100K+ ops/sec views at &lt;1ms P99 via materialized views</li>
+        <li>Distributed sagas coordinated through ITopic pub/sub</li>
+        <li>Write-behind persistence, circuit breakers, dead letter queues</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Hazelcast Primitives Showcase -->
+  <div class="hz-features">
+    <div class="section-title">Hazelcast Features in Action</div>
+    <div class="hz-feature-grid">
+      <div class="hz-feature-chip">
+        <div class="primitive-name">IMap</div>
+        <div class="primitive-use">Event store, views, saga state, outbox, DLQ</div>
+      </div>
+      <div class="hz-feature-chip">
+        <div class="primitive-name">Jet Pipeline</div>
+        <div class="primitive-use">Real-time stream processing</div>
+      </div>
+      <div class="hz-feature-chip">
+        <div class="primitive-name">ITopic</div>
+        <div class="primitive-use">Cross-service event bus</div>
+      </div>
+      <div class="hz-feature-chip">
+        <div class="primitive-name">Event Journal</div>
+        <div class="primitive-use">Change data capture</div>
+      </div>
+      <div class="hz-feature-chip">
+        <div class="primitive-name">Entry Processor</div>
+        <div class="primitive-use">Atomic in-place updates</div>
+      </div>
+      <div class="hz-feature-chip">
+        <div class="primitive-name">MapStore</div>
+        <div class="primitive-use">Write-behind to PostgreSQL</div>
+      </div>
+      <div class="hz-feature-chip">
+        <div class="primitive-name">Near Cache</div>
+        <div class="primitive-use">Local query acceleration</div>
+      </div>
+      <div class="hz-feature-chip">
+        <div class="primitive-name">FlakeIdGenerator</div>
+        <div class="primitive-use">Distributed sequence IDs</div>
+      </div>
+      <div class="hz-feature-chip">
+        <div class="primitive-name">VectorCollection</div>
+        <div class="primitive-use">AI similarity search (EE)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard Preview -->
+  <div class="dashboard-preview">
+    <div class="section-title">Live Dashboards &mdash; Demo-Ready Out of the Box</div>
+    <div class="dashboard-grid-small">
+      <div class="dashboard-thumb">
+        <img src="../perf/screenshots/final-business-overview.png" alt="Business Overview Dashboard">
+        <div class="dashboard-thumb-caption">Business Overview &mdash; Orders, Revenue, Customers</div>
+      </div>
+      <div class="dashboard-thumb">
+        <img src="../perf/screenshots/final-saga-dashboard.png" alt="Saga Coordination Dashboard">
+        <div class="dashboard-thumb-caption">Saga Coordination &mdash; Distributed Transactions</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Hazelcast Microservices Framework &mdash; Product Marketing Brief</span>
+    <span>Page 1 of 4</span>
+  </div>
+</div>
+
+<!-- ==================== PAGE 2 ==================== -->
+<div class="page">
+
+  <div class="page-header">
+    <h2>Proven Performance &amp; AI-Ready</h2>
+    <span class="page-num">Page 2 of 4</span>
+  </div>
+
+  <!-- Selling Points: Traditional Strengths -->
+  <div class="selling-points">
+    <div class="section-title">Traditional Hazelcast Strengths &mdash; Demonstrated End-to-End</div>
+    <div class="sp-grid">
+
+      <div class="sp-card">
+        <h3><span class="sp-dot" style="background:#22c55e"></span> High Throughput</h3>
+        <p>
+          Materialized views deliver <span class="stat">100,000+ operations/sec</span> with
+          sub-millisecond latency. Customers see these numbers live in the Grafana dashboard,
+          not in a slide deck.
+        </p>
+      </div>
+
+      <div class="sp-card">
+        <h3><span class="sp-dot" style="background:#1a6dca"></span> Low Latency at Scale</h3>
+        <p>
+          End-to-end event processing (HTTP &rarr; pipeline &rarr; view update &rarr; publish)
+          completes in <span class="stat">&lt;13ms at P50</span>. The Jet pipeline runs entirely
+          in-memory with no external message broker.
+        </p>
+      </div>
+
+      <div class="sp-card">
+        <h3><span class="sp-dot" style="background:#ef4444"></span> Resilience &amp; Reliability</h3>
+        <p>
+          Circuit breakers, transactional outbox, dead letter queues, and idempotency guards
+          demonstrate that Hazelcast applications handle <span class="stat">partial failure gracefully</span>
+          &mdash; not just when everything works.
+        </p>
+      </div>
+
+      <div class="sp-card">
+        <h3><span class="sp-dot" style="background:#8b5cf6"></span> Distributed Coordination</h3>
+        <p>
+          Two saga patterns (choreographed + orchestrated) show Hazelcast ITopic and IMap
+          coordinating <span class="stat">multi-service transactions</span> with automatic
+          compensation &mdash; replacing the need for XA or external workflow engines.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- AI Transition -->
+  <div class="transition-callout">
+    <strong>The AI story builds on the performance story.</strong>
+    Hazelcast's sub-millisecond latency and in-memory processing aren't just fast for
+    traditional workloads &mdash; they're what AI applications need for real-time inference,
+    similarity search, and agentic tool execution. This framework shows the transition path.
+  </div>
+
+  <!-- AI Selling Points -->
+  <div class="selling-points">
+    <div class="section-title">New: AI-Ready Capabilities</div>
+    <div class="sp-grid">
+
+      <div class="sp-card highlight">
+        <h3><span class="sp-dot" style="background:#8b5cf6"></span> Vector Similarity Search</h3>
+        <p>
+          Product recommendations via <span class="stat">VectorCollection with HNSW indexing</span>
+          (Enterprise) or IMap-based cosine similarity (Community). One API endpoint, automatic
+          edition detection, zero code changes between editions.
+        </p>
+      </div>
+
+      <div class="sp-card highlight">
+        <h3><span class="sp-dot" style="background:#d97706"></span> AI Agent Integration (MCP)</h3>
+        <p>
+          <span class="stat">10 MCP tools</span> let AI assistants (Claude, GPT, etc.) query
+          views, submit events, inspect sagas, manage DLQ entries, and run demo scenarios.
+          Supports API key RBAC with three roles.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Content Enablement -->
+  <div class="enablement">
+    <div class="section-title">Content &amp; Enablement Assets</div>
+    <div class="enablement-grid">
+      <div class="enablement-card">
+        <div class="e-number">13</div>
+        <div class="e-label">Blog Posts</div>
+        <div class="e-desc">From event sourcing fundamentals through performance engineering. Each maps to a code milestone.</div>
+      </div>
+      <div class="enablement-card">
+        <div class="e-number">7</div>
+        <div class="e-label">Grafana Dashboards</div>
+        <div class="e-desc">Business metrics, system health, event flow, sagas, views, persistence, performance.</div>
+      </div>
+      <div class="enablement-card">
+        <div class="e-number">5 min</div>
+        <div class="e-label">Time to Demo</div>
+        <div class="e-desc">Clone, build, docker compose up. Sample data, demo scripts, and dashboards auto-provision.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deployment -->
+  <div class="deployment-callout">
+    <strong>Deployment flexibility:</strong> Runs on a developer laptop via Docker Compose,
+    deploys to AWS EKS with provided Helm charts and Terraform, or targets GCP GKE / Azure AKS.
+    Suitable for live demos, trade show booths, and customer PoCs.
+  </div>
+
+  <div class="page-footer">
+    <span>Hazelcast Microservices Framework &mdash; Product Marketing Brief</span>
+    <span>Page 2 of 4</span>
+  </div>
+</div>
+
+<!-- ==================== PAGE 3 ==================== -->
+<div class="page">
+
+  <div class="page-header">
+    <h2>Live Dashboards &mdash; See It Running</h2>
+    <span class="page-num">Page 3 of 4</span>
+  </div>
+
+  <div class="dashboard-showcase">
+    <p class="dashboard-intro">
+      Every claim on the previous page has a dashboard to back it up. Seven pre-provisioned
+      Grafana dashboards auto-deploy with the application &mdash; no manual setup, no configuration.
+      Walk a prospect from business outcomes to technical implementation in a single demo session.
+    </p>
+
+    <div class="dashboard-grid-large">
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-system-overview.png" alt="System Overview Dashboard">
+        <div class="dashboard-card-caption">
+          System Overview
+          <div class="dashboard-card-desc">Service health, JVM metrics, throughput, latency percentiles, error rates</div>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-performance-testing.png" alt="Performance Testing Dashboard">
+        <div class="dashboard-card-caption">
+          Performance Testing
+          <div class="dashboard-card-desc">Live TPS, pipeline throughput, saga completion rates, resource utilization</div>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-event-flow.png" alt="Event Flow Dashboard">
+        <div class="dashboard-card-caption">
+          Event Flow
+          <div class="dashboard-card-desc">Event throughput by type, latency percentiles, pipeline stage timing</div>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-saga-dashboard.png" alt="Saga Dashboard">
+        <div class="dashboard-card-caption">
+          Saga Coordination
+          <div class="dashboard-card-desc">Saga outcomes, compensation tracking, step duration, timeout detection</div>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-materialized-views.png" alt="Materialized Views Dashboard">
+        <div class="dashboard-card-caption">
+          Materialized Views
+          <div class="dashboard-card-desc">View rebuild latency, cache hit rates, entry counts, near cache performance</div>
+        </div>
+      </div>
+
+      <div class="dashboard-card">
+        <img src="../perf/screenshots/final-persistence-layer.png" alt="Persistence Layer Dashboard">
+        <div class="dashboard-card-caption">
+          Persistence Layer
+          <div class="dashboard-card-desc">Write-behind queue depth, batch sizes, PostgreSQL latency, eviction metrics</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Hazelcast Microservices Framework &mdash; Product Marketing Brief</span>
+    <span>Page 3 of 4</span>
+  </div>
+</div>
+
+<!-- ==================== PAGE 4 ==================== -->
+<div class="page">
+
+  <div class="page-header">
+    <h2>Use Cases &amp; Resources</h2>
+    <span class="page-num">Page 4 of 4</span>
+  </div>
+
+  <!-- Use Cases -->
+  <div class="use-cases">
+    <div class="section-title">How Product Marketing Can Use This</div>
+    <div class="use-case-grid">
+
+      <div class="use-case-card">
+        <h4>Customer Demos &amp; PoCs</h4>
+        <p>
+          Run the full four-service eCommerce demo live. Show real throughput numbers,
+          trigger saga failures, watch circuit breakers trip &mdash; all visible in Grafana.
+          Customize for specific verticals by extending the domain.
+        </p>
+      </div>
+
+      <div class="use-case-card">
+        <h4>Blog &amp; Content Marketing</h4>
+        <p>
+          13 ready-to-publish blog posts covering event sourcing, stream processing,
+          distributed transactions, resilience, persistence, observability, AI integration,
+          and performance engineering. Each post maps to working code.
+        </p>
+      </div>
+
+      <div class="use-case-card">
+        <h4>Trade Shows &amp; Booth Demos</h4>
+        <p>
+          Configurable for long-running demos (8+ hours at low TPS). Dashboards show live
+          business metrics (orders, revenue, customers) alongside technical telemetry.
+          AI assistant interaction via MCP makes an engaging live demo.
+        </p>
+      </div>
+
+      <div class="use-case-card">
+        <h4>SA &amp; Partner Enablement</h4>
+        <p>
+          Architectural decision records (ADRs), guides for every pattern, and a modular
+          codebase that SAs can fork and extend. The blog series doubles as a self-paced
+          technical curriculum.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Compact Tech Stack -->
+  <div class="tech-compact">
+    <div class="section-title">Technology Stack</div>
+    <table class="tech-table">
+      <tr><th>Component</th><th>Technology</th><th>Component</th><th>Technology</th></tr>
+      <tr><td>Runtime</td><td>Java 17+</td><td>AI / ML</td><td>Spring AI MCP 1.0, VectorCollection</td></tr>
+      <tr><td>Framework</td><td>Spring Boot 3.2</td><td>Metrics</td><td>Micrometer / Prometheus</td></tr>
+      <tr><td>Data Grid</td><td>Hazelcast 5.6</td><td>Dashboards</td><td>Grafana 10.3</td></tr>
+      <tr><td>Streaming</td><td>Hazelcast Jet</td><td>Tracing</td><td>Jaeger (OTLP)</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 16+</td><td>Containers</td><td>Docker / K8s Helm</td></tr>
+    </table>
+  </div>
+
+  <!-- Blog Callout -->
+  <div class="blog-callout">
+    <strong>Accompanying Blog Series (13 Parts):</strong> From event sourcing fundamentals through
+    saga patterns, vector search, AI integration, resilience, persistence, observability, and
+    performance engineering. Each post walks through architectural decisions with working code
+    &mdash; ready for theyawns.com, the Hazelcast corporate blog, or partner publications.
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <div class="cta-content">
+      <div>
+        <h3>Ready to Demo</h3>
+        <div class="cta-text">
+          Five minutes from clone to running demo. Docker Compose brings up all four services,
+          a 3-node Hazelcast cluster, PostgreSQL, Prometheus, Grafana, and Jaeger. Sample data
+          and demo scripts are included. The MCP server auto-registers with Claude Code.
+        </div>
+      </div>
+      <div class="cta-links">
+        <div><strong>Repository:</strong> Available upon request</div>
+        <div><strong>Blog:</strong> theyawns.com</div>
+        <div><strong>Quick Start:</strong> ./scripts/docker/start.sh</div>
+        <div><strong>Contact:</strong> mike.yawn@hazelcast.com</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Hazelcast Microservices Framework &mdash; Product Marketing Brief</span>
+    <span>Page 4 of 4</span>
+  </div>
+</div>
+
+</body>
+</html>

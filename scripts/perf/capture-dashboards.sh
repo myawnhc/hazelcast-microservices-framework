@@ -2,7 +2,7 @@
 #
 # capture-dashboards.sh - Capture Grafana dashboard screenshots as PNGs
 #
-# Uses the Grafana Image Renderer plugin (server-side) to render all 6
+# Uses the Grafana Image Renderer plugin (server-side) to render all 7
 # dashboards to PNG files. Requires docker-compose-renderer.yml overlay.
 #
 # Compatible with macOS bash 3.2 (no bash 4+ features).
@@ -37,7 +37,7 @@ GRAFANA_USER="admin"
 GRAFANA_PASS="admin"
 
 # Dashboard UIDs and slugs (space-separated uid:slug pairs, bash 3.2 compatible)
-DASHBOARDS="performance-testing:performance-testing system-overview:system-overview event-flow:event-flow materialized-views:materialized-views saga-dashboard:saga-dashboard persistence-layer:persistence-layer"
+DASHBOARDS="business-overview:business-overview performance-testing:performance-testing system-overview:system-overview event-flow:event-flow materialized-views:materialized-views saga-dashboard:saga-dashboard persistence-layer:persistence-layer"
 
 # Colors
 RED='\033[0;31m'
@@ -53,7 +53,7 @@ NC='\033[0m'
 print_usage() {
     echo "Usage: $0 [options]"
     echo ""
-    echo "Captures all 6 Grafana dashboards as PNG screenshots."
+    echo "Captures all 7 Grafana dashboards as PNG screenshots."
     echo ""
     echo "Options:"
     echo "  --output-dir DIR   Directory for PNGs (default: ./screenshots)"
