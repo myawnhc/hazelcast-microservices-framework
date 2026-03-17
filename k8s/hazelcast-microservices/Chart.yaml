@@ -6,8 +6,8 @@ version: 0.1.0
 appVersion: "1.0.0"
 
 maintainers:
-  - name: theyawns
-    url: https://github.com/theyawns
+  - name: Mike Yawn
+    url: https://github.com/myawnhc
 
 dependencies:
   - name: hazelcast-cluster

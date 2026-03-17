@@ -55,7 +55,7 @@ public class SagaOrchestratorAutoConfiguration {
      *
      * @param stateStore the saga state store
      * @param listeners all registered saga orchestrator listeners
-     * @param scheduler the scheduler for timeouts
+     * @param sagaOrchestratorScheduler the scheduler for timeouts
      * @param sagaMetrics optional metrics collector (null if no MeterRegistry is available)
      * @return the saga orchestrator
      */
