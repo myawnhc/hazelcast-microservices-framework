@@ -202,14 +202,18 @@ cd hazelcast-microservices-framework
 # Build the project
 mvn clean package -DskipTests
 
-# Start all services
-./scripts/docker/start.sh
+# One command — starts services, loads data, runs ambient traffic
+./scripts/docker/start-demo.sh
+```
 
-# Load sample data
-./scripts/load-sample-data.sh
+This starts all services in demo mode (no PostgreSQL or Jaeger), loads sample customers and products, and runs a k6 load generator at 30 TPS for 10 minutes. For longer sessions (e.g., trade show booths), use `--tps 3 --duration 8h`.
 
-# Run demo scenarios
-./scripts/demo-scenarios.sh
+For more control, you can run each step separately:
+
+```bash
+./scripts/docker/start.sh              # Start services only
+./scripts/load-sample-data.sh          # Load sample data
+./scripts/demo-scenarios.sh            # Run interactive demo scenarios
 ```
 
 ### Verify Services

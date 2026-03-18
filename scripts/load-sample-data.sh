@@ -280,6 +280,24 @@ echo -e "${YELLOW}Step 4: Saving data IDs for demo scenarios...${NC}"
 } > "$OUTPUT_DIR/sample-data-ids.sh"
 
 echo -e "  Saved to ${GREEN}$OUTPUT_DIR/sample-data-ids.sh${NC}"
+
+# Also update k6 data files so the load generator uses current IDs
+K6_DATA_DIR="$SCRIPT_DIR/perf/data"
+if [ -d "$K6_DATA_DIR" ]; then
+    python3 -c "
+import json, sys
+ids = sys.argv[1:]
+print(json.dumps(ids, indent=2))
+" "${CUSTOMER_IDS[@]}" > "$K6_DATA_DIR/customer-ids.json"
+
+    python3 -c "
+import json, sys
+ids = sys.argv[1:]
+print(json.dumps(ids, indent=2))
+" "${PRODUCT_IDS[@]}" > "$K6_DATA_DIR/product-ids.json"
+
+    echo -e "  Updated k6 data files in ${GREEN}${K6_DATA_DIR}${NC}"
+fi
 echo ""
 
 # -----------------------------------------------

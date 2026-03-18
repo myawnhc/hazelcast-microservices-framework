@@ -127,7 +127,7 @@ function createSuccessOrder() {
 
     const payload = JSON.stringify({
         customerId: customerId,
-        items: [{
+        lineItems: [{
             productId: productId,
             quantity: quantity,
             unitPrice: randomInt(10, 100) + 0.99,
@@ -150,7 +150,7 @@ function createFailOrder() {
 
     const payload = JSON.stringify({
         customerId: customerId,
-        items: [{
+        lineItems: [{
             productId: productId,
             quantity: quantity,
             unitPrice: 9.99,

@@ -1,8 +1,9 @@
 #!/bin/bash
 # One-command demo setup:
-#   1. Start services in demo mode (no PostgreSQL, no Jaeger)
-#   2. Load sample data (customers, products)
-#   3. Run demo load generator
+#   1. Reset PostgreSQL data (clean slate each demo)
+#   2. Start services in demo mode (no Jaeger)
+#   3. Load sample data (customers, products)
+#   4. Run demo load generator
 #
 # Default: 30 TPS for 10 minutes — impressive for a quick customer demo.
 # For trade shows / all-day booths: ./scripts/docker/start-demo.sh --tps 3 --duration 8h
@@ -48,14 +49,22 @@ echo "  Duration: ${DURATION}"
 echo "============================================"
 echo ""
 
-# Step 1: Start services in demo mode
-echo "[1/3] Starting services in demo mode..."
+# Step 1: Stop any running services and reset PostgreSQL data
+echo "[1/4] Cleaning up previous demo data..."
+cd "$PROJECT_ROOT/docker"
+COMPOSE_FILES="-f docker-compose.yml -f docker-compose-demo.yml"
+docker compose $COMPOSE_FILES down -v 2>/dev/null || true
+echo "  Done — containers stopped, PostgreSQL volume removed."
+echo ""
+
+# Step 2: Start services in demo mode
+echo "[2/4] Starting services in demo mode..."
 "$SCRIPT_DIR/start.sh" --mode demo
 
 echo ""
 
-# Step 2: Load sample data
-echo "[2/3] Loading sample data..."
+# Step 3: Load sample data
+echo "[3/4] Loading sample data..."
 if [ -f "$PROJECT_ROOT/scripts/load-sample-data.sh" ]; then
     "$PROJECT_ROOT/scripts/load-sample-data.sh"
 else
@@ -65,16 +74,16 @@ fi
 
 echo ""
 
-# Step 3: Check for k6
+# Step 4: Check for k6
 if ! command -v k6 > /dev/null 2>&1; then
-    echo "[3/3] k6 not installed. Install with: brew install k6"
+    echo "[4/4] k6 not installed. Install with: brew install k6"
     echo "  Then run manually:"
     echo "  k6 run -e TPS=${TPS} -e DURATION=${DURATION} scripts/perf/k6-scenarios/demo-ambient.js"
     exit 0
 fi
 
-# Step 3: Run ambient load generator
-echo "[3/3] Starting ambient load generator..."
+# Step 4: Run ambient load generator
+echo "[4/4] Starting ambient load generator..."
 echo "  Press Ctrl+C to stop the load generator (services keep running)"
 echo ""
 k6 run \
