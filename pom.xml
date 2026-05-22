@@ -35,12 +35,12 @@
         <java.version>17</java.version>
         <hazelcast.version>5.7.0</hazelcast.version>
         <testcontainers.version>1.21.3</testcontainers.version>
-        <logstash-logback.version>7.4</logstash-logback.version>
+        <logstash-logback.version>8.0</logstash-logback.version>
         <springdoc.version>2.3.0</springdoc.version>
         <micrometer-tracing.version>1.2.2</micrometer-tracing.version>
-        <opentelemetry.version>1.34.1</opentelemetry.version>
+        <opentelemetry.version>1.45.0</opentelemetry.version>
         <spring-ai.version>1.0.0</spring-ai.version>
-        <resilience4j.version>2.2.0</resilience4j.version>
+        <resilience4j.version>2.3.0</resilience4j.version>
         <spring-cloud.version>2023.0.0</spring-cloud.version>
     </properties>
 
