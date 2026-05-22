@@ -47,8 +47,7 @@ import static org.junit.jupiter.api.Assertions.*;
                         + "com.theyawns.framework.security.SecurityAutoConfiguration,"
                         + "com.theyawns.framework.security.PermitAllSecurityAutoConfiguration,"
                         + "com.theyawns.framework.security.identity.ServiceIdentityAutoConfiguration,"
-                        + "org.springframework.boot.autoconfigure.hazelcast.HazelcastAutoConfiguration,"
-                        + "com.hazelcast.spring.HazelcastObjectExtractionConfiguration"
+                        + "org.springframework.boot.autoconfigure.hazelcast.HazelcastAutoConfiguration"
         }
 )
 @Testcontainers
