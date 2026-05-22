@@ -33,8 +33,8 @@
 
     <properties>
         <java.version>17</java.version>
-        <hazelcast.version>5.6.0</hazelcast.version>
-        <testcontainers.version>1.19.3</testcontainers.version>
+        <hazelcast.version>5.7.0</hazelcast.version>
+        <testcontainers.version>1.21.3</testcontainers.version>
         <logstash-logback.version>7.4</logstash-logback.version>
         <springdoc.version>2.3.0</springdoc.version>
         <micrometer-tracing.version>1.2.2</micrometer-tracing.version>
@@ -263,7 +263,7 @@
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
-                    <version>0.8.11</version>
+                    <version>0.8.13</version>
                 </plugin>
             </plugins>
         </pluginManagement>
