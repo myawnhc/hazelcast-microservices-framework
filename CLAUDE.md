@@ -18,7 +18,7 @@ This is a **Hazelcast-based event sourcing microservices framework** with a clea
 ### Required Versions
 - **Java**: 17 or higher
 - **Spring Boot**: 3.2.x (latest stable)
-- **Hazelcast**: 5.6.0 (Community Edition default, Enterprise Edition optional)
+- **Hazelcast**: 5.7.0 (Community Edition default, Enterprise Edition optional)
 - **Maven**: 3.8+
 
 ### Hazelcast Edition Strategy
@@ -232,7 +232,7 @@ When `hazelcast.embedded.clustering.enabled=true`, replicas of the **same** serv
   class ServiceIntegrationTest {
       @Container
       static GenericContainer<?> hazelcast = 
-          new GenericContainer<>("hazelcast/hazelcast:5.6.0")
+          new GenericContainer<>("hazelcast/hazelcast:5.7.0")
               .withExposedPorts(5701);
   }
   ```
@@ -532,10 +532,10 @@ If uncertain about:
 - **Architecture decisions**: Refer to `docs/architecture/adr/`
 - **Requirements**: Refer to `docs/requirements/`
 - **Design patterns**: Refer to `docs/design/`
-- **Hazelcast APIs**: Check Hazelcast 5.6 documentation
+- **Hazelcast APIs**: Check Hazelcast 5.7 documentation
 - **Spring Boot**: Check Spring Boot 3.2 documentation
 
 ---
 
-Last updated: 2026-02-15
-Version: 1.4
+Last updated: 2026-05-22
+Version: 1.5
